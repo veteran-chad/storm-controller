@@ -1,0 +1,556 @@
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  name: stormclusters.storm.apache.org
+spec:
+  group: storm.apache.org
+  scope: Namespaced
+  names:
+    kind: StormCluster
+    listKind: StormClusterList
+    plural: stormclusters
+    singular: stormcluster
+    shortNames:
+    - sc
+  versions:
+  - name: v1beta1
+    served: true
+    storage: true
+    subresources:
+      status: {}
+    additionalPrinterColumns:
+    - name: Phase
+      type: string
+      jsonPath: .status.phase
+    - name: Nimbus
+      type: integer
+      jsonPath: .status.nimbus
+    - name: Supervisors
+      type: integer
+      jsonPath: .status.supervisors
+    - name: Age
+      type: date
+      jsonPath: .metadata.creationTimestamp
+    schema:
+      openAPIV3Schema:
+        type: object
+        properties:
+          spec:
+            type: object
+            properties:
+              image:
+                type: object
+                properties:
+                  repository:
+                    type: string
+                    default: apache/storm
+                  tag:
+                    type: string
+                    default: "2.6.0"
+                  pullPolicy:
+                    type: string
+                    default: IfNotPresent
+              nimbus:
+                type: object
+                properties:
+                  replicas:
+                    type: integer
+                    minimum: 1
+                    default: 1
+                  resources:
+                    type: object
+                    properties:
+                      requests:
+                        type: object
+                      limits:
+                        type: object
+              supervisor:
+                type: object
+                properties:
+                  replicas:
+                    type: integer
+                    minimum: 1
+                    default: 3
+                  slotsPerSupervisor:
+                    type: integer
+                    minimum: 1
+                    default: 4
+                  deploymentMode:
+                    type: string
+                    enum: ["deployment", "daemonset"]
+                    default: deployment
+                  resources:
+                    type: object
+                    properties:
+                      requests:
+                        type: object
+                      limits:
+                        type: object
+              ui:
+                type: object
+                properties:
+                  enabled:
+                    type: boolean
+                    default: true
+                  resources:
+                    type: object
+                    properties:
+                      requests:
+                        type: object
+                      limits:
+                        type: object
+              zookeeper:
+                type: object
+                properties:
+                  enabled:
+                    type: boolean
+                    default: true
+                  replicas:
+                    type: integer
+                    minimum: 1
+                    default: 1
+                  persistence:
+                    type: object
+                    properties:
+                      enabled:
+                        type: boolean
+                        default: true
+                      size:
+                        type: string
+                        default: 8Gi
+              config:
+                type: object
+                additionalProperties:
+                  type: string
+              metrics:
+                type: object
+                properties:
+                  enabled:
+                    type: boolean
+                    default: true
+                  serviceMonitor:
+                    type: object
+                    properties:
+                      enabled:
+                        type: boolean
+                        default: false
+          status:
+            type: object
+            properties:
+              phase:
+                type: string
+                enum: ["Pending", "Creating", "Running", "Failed", "Terminating"]
+              nimbus:
+                type: integer
+              supervisors:
+                type: integer
+              supervisorReady:
+                type: integer
+              totalSlots:
+                type: integer
+              usedSlots:
+                type: integer
+              nimbusService:
+                type: string
+              uiService:
+                type: string
+              message:
+                type: string
+              lastUpdateTime:
+                type: string
+              conditions:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    type:
+                      type: string
+                    status:
+                      type: string
+                    message:
+                      type: string
+                    reason:
+                      type: string
+                    lastTransitionTime:
+                      type: string
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  name: stormtopologies.storm.apache.org
+spec:
+  group: storm.apache.org
+  scope: Namespaced
+  names:
+    kind: StormTopology
+    listKind: StormTopologyList
+    plural: stormtopologies
+    singular: stormtopology
+    shortNames:
+    - st
+  versions:
+  - name: v1beta1
+    served: true
+    storage: true
+    subresources:
+      status: {}
+    additionalPrinterColumns:
+    - name: Cluster
+      type: string
+      jsonPath: .spec.clusterRef
+    - name: Phase
+      type: string
+      jsonPath: .status.phase
+    - name: Workers
+      type: integer
+      jsonPath: .status.workers
+    - name: Uptime
+      type: string
+      jsonPath: .status.uptime
+    - name: Age
+      type: date
+      jsonPath: .metadata.creationTimestamp
+    schema:
+      openAPIV3Schema:
+        type: object
+        properties:
+          spec:
+            type: object
+            required:
+            - clusterRef
+            - topology
+            properties:
+              clusterRef:
+                type: string
+              topology:
+                type: object
+                required:
+                - name
+                - jar
+                properties:
+                  name:
+                    type: string
+                  jar:
+                    type: object
+                    properties:
+                      url:
+                        type: string
+                      configMap:
+                        type: string
+                      secret:
+                        type: string
+                      s3:
+                        type: object
+                        properties:
+                          bucket:
+                            type: string
+                          key:
+                            type: string
+                          region:
+                            type: string
+                          endpoint:
+                            type: string
+                          credentialsSecret:
+                            type: string
+                      container:
+                        type: object
+                        required:
+                        - image
+                        properties:
+                          image:
+                            type: string
+                          path:
+                            type: string
+                            default: "/app/topology.jar"
+                          pullPolicy:
+                            type: string
+                            enum: ["Always", "Never", "IfNotPresent"]
+                            default: IfNotPresent
+                          pullSecrets:
+                            type: array
+                            items:
+                              type: object
+                              properties:
+                                name:
+                                  type: string
+                          resources:
+                            type: object
+                            properties:
+                              requests:
+                                type: object
+                              limits:
+                                type: object
+                          securityContext:
+                            type: object
+                          env:
+                            type: array
+                            items:
+                              type: object
+                              properties:
+                                name:
+                                  type: string
+                                value:
+                                  type: string
+                          volumeMounts:
+                            type: array
+                            items:
+                              type: object
+                          extractionMode:
+                            type: string
+                            enum: ["job", "initContainer", "sidecar"]
+                            default: job
+                          extractionTimeoutSeconds:
+                            type: integer
+                            minimum: 60
+                            maximum: 3600
+                            default: 300
+                          checksum:
+                            type: object
+                            properties:
+                              algorithm:
+                                type: string
+                                enum: ["sha256", "sha512", "md5"]
+                                default: sha256
+                              value:
+                                type: string
+                              file:
+                                type: string
+                  mainClass:
+                    type: string
+                  args:
+                    type: array
+                    items:
+                      type: string
+                  config:
+                    type: object
+                    x-kubernetes-preserve-unknown-fields: true
+              workers:
+                type: object
+                properties:
+                  replicas:
+                    type: integer
+                    minimum: 1
+                    default: 2
+                  resources:
+                    type: object
+                    properties:
+                      requests:
+                        type: object
+                      limits:
+                        type: object
+                  jvmOpts:
+                    type: array
+                    items:
+                      type: string
+                  autoscaling:
+                    type: object
+                    properties:
+                      enabled:
+                        type: boolean
+                        default: false
+                      minReplicas:
+                        type: integer
+                        minimum: 1
+                        default: 1
+                      maxReplicas:
+                        type: integer
+                        minimum: 1
+                        default: 10
+                      metrics:
+                        type: array
+                        items:
+                          type: object
+                          properties:
+                            type:
+                              type: string
+                              enum: ["cpu", "memory", "pending-tuples", "capacity", "latency"]
+                            target:
+                              type: object
+                              properties:
+                                averageUtilization:
+                                  type: integer
+                                averageValue:
+                                  type: string
+                                value:
+                                  type: string
+              lifecycle:
+                type: object
+                properties:
+                  killWaitSeconds:
+                    type: integer
+                    minimum: 0
+                    default: 30
+                  updateStrategy:
+                    type: string
+                    enum: ["recreate", "rolling"]
+                    default: recreate
+              suspend:
+                type: boolean
+                default: false
+          status:
+            type: object
+            properties:
+              phase:
+                type: string
+                enum: ["Pending", "Submitting", "Running", "Suspended", "Failed", "Terminating"]
+              topologyId:
+                type: string
+              topologyName:
+                type: string
+              workers:
+                type: integer
+              executors:
+                type: integer
+              tasks:
+                type: integer
+              uptime:
+                type: string
+              metrics:
+                type: object
+                properties:
+                  emitted:
+                    type: integer
+                  transferred:
+                    type: integer
+                  acked:
+                    type: integer
+                  failed:
+                    type: integer
+                  completeLatencyMs:
+                    type: number
+                  pendingTuples:
+                    type: integer
+                  capacity:
+                    type: number
+              lastError:
+                type: string
+              lastUpdateTime:
+                type: string
+              conditions:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    type:
+                      type: string
+                    status:
+                      type: string
+                    message:
+                      type: string
+                    reason:
+                      type: string
+                    lastTransitionTime:
+                      type: string
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  name: stormworkerpools.storm.apache.org
+spec:
+  group: storm.apache.org
+  scope: Namespaced
+  names:
+    kind: StormWorkerPool
+    listKind: StormWorkerPoolList
+    plural: stormworkerpools
+    singular: stormworkerpool
+    shortNames:
+    - swp
+  versions:
+  - name: v1beta1
+    served: true
+    storage: true
+    subresources:
+      status: {}
+      scale:
+        specReplicasPath: .spec.replicas
+        statusReplicasPath: .status.replicas
+    additionalPrinterColumns:
+    - name: Topology
+      type: string
+      jsonPath: .spec.topologyRef
+    - name: Replicas
+      type: integer
+      jsonPath: .spec.replicas
+    - name: Ready
+      type: integer
+      jsonPath: .status.ready
+    - name: Phase
+      type: string
+      jsonPath: .status.phase
+    - name: Age
+      type: date
+      jsonPath: .metadata.creationTimestamp
+    schema:
+      openAPIV3Schema:
+        type: object
+        properties:
+          spec:
+            type: object
+            required:
+            - topologyRef
+            - clusterRef
+            properties:
+              topologyRef:
+                type: string
+              clusterRef:
+                type: string
+              replicas:
+                type: integer
+                minimum: 1
+                default: 1
+              template:
+                type: object
+                properties:
+                  metadata:
+                    type: object
+                  spec:
+                    type: object
+              updateStrategy:
+                type: object
+                properties:
+                  type:
+                    type: string
+                    enum: ["RollingUpdate", "Recreate"]
+                    default: RollingUpdate
+                  rollingUpdate:
+                    type: object
+                    properties:
+                      maxUnavailable:
+                        x-kubernetes-int-or-string: true
+                      maxSurge:
+                        x-kubernetes-int-or-string: true
+          status:
+            type: object
+            properties:
+              phase:
+                type: string
+                enum: ["Pending", "Creating", "Running", "Scaling", "Failed", "Terminating"]
+              replicas:
+                type: integer
+              ready:
+                type: integer
+              deployment:
+                type: string
+              hpa:
+                type: string
+              message:
+                type: string
+              lastUpdateTime:
+                type: string
+              conditions:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    type:
+                      type: string
+                    status:
+                      type: string
+                    message:
+                      type: string
+                    reason:
+                      type: string
+                    lastTransitionTime:
+                      type: string

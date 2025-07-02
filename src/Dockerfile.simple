@@ -1,0 +1,31 @@
+# Use storm image as base to have storm CLI available
+FROM storm:latest
+
+# Install necessary packages
+USER root
+RUN apt-get update && apt-get install -y \
+    ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /
+
+# For now, we'll create a mock manager that logs and sleeps
+# In production, you would copy the built Go binary here
+RUN echo '#!/bin/bash' > /manager && \
+    echo 'echo "Storm Controller starting..."' >> /manager && \
+    echo 'echo "Cluster: ${STORM_CLUSTER:-storm-cluster}"' >> /manager && \
+    echo 'echo "Namespace: ${STORM_NAMESPACE:-default}"' >> /manager && \
+    echo 'echo "Mock controller running. In production, this would be the Go binary."' >> /manager && \
+    echo 'while true; do' >> /manager && \
+    echo '  echo "Controller is running... $(date)"' >> /manager && \
+    echo '  sleep 30' >> /manager && \
+    echo 'done' >> /manager && \
+    chmod +x /manager
+
+# Create directory for JAR cache
+RUN mkdir -p /tmp/storm-jars && chmod 777 /tmp/storm-jars
+
+# Switch back to storm user
+USER 1000
+
+ENTRYPOINT ["/manager"]
