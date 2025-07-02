@@ -1,0 +1,90 @@
+{{- if and .Values.ui.enabled .Values.ui.ingress.enabled }}
+{{- $apiVersion := include "storm.ingress.apiVersion" . -}}
+{{- if and .Values.ui.ingress.className (not (semverCompare ">=1.18-0" .Capabilities.KubeVersion.GitVersion)) }}
+  {{- if not (hasKey .Values.ui.ingress.annotations "kubernetes.io/ingress.class") }}
+  {{- $_ := set .Values.ui.ingress.annotations "kubernetes.io/ingress.class" .Values.ui.ingress.className }}
+  {{- end }}
+{{- end }}
+{{- if semverCompare ">=1.19-0" .Capabilities.KubeVersion.GitVersion -}}
+apiVersion: {{ $apiVersion }}
+{{- else if semverCompare ">=1.14-0" .Capabilities.KubeVersion.GitVersion -}}
+apiVersion: {{ $apiVersion }}
+{{- else -}}
+apiVersion: extensions/v1beta1
+{{- end }}
+kind: Ingress
+metadata:
+  name: {{ include "storm.ui.fullname" . }}
+  namespace: {{ .Release.Namespace | quote }}
+  labels: {{- include "storm.labels" . | nindent 4 }}
+    app.kubernetes.io/component: ui
+  {{- if or .Values.ui.ingress.annotations .Values.commonAnnotations }}
+  annotations:
+    {{- if .Values.ui.ingress.annotations }}
+    {{- toYaml .Values.ui.ingress.annotations | nindent 4 }}
+    {{- end }}
+    {{- if .Values.commonAnnotations }}
+    {{- include "storm.commonAnnotations" . | nindent 4 }}
+    {{- end }}
+  {{- end }}
+spec:
+  {{- if and .Values.ui.ingress.className (semverCompare ">=1.18-0" .Capabilities.KubeVersion.GitVersion) }}
+  ingressClassName: {{ .Values.ui.ingress.className | quote }}
+  {{- end }}
+  rules:
+    {{- if .Values.ui.ingress.hostname }}
+    - host: {{ .Values.ui.ingress.hostname | quote }}
+      http:
+        paths:
+          {{- if .Values.ui.ingress.extraPaths }}
+          {{- toYaml .Values.ui.ingress.extraPaths | nindent 10 }}
+          {{- end }}
+          - path: {{ .Values.ui.ingress.path }}
+            {{- if semverCompare ">=1.18-0" .Capabilities.KubeVersion.GitVersion }}
+            pathType: {{ .Values.ui.ingress.pathType }}
+            {{- end }}
+            backend:
+              {{- if semverCompare ">=1.19-0" .Capabilities.KubeVersion.GitVersion }}
+              service:
+                name: {{ include "storm.ui.serviceName" . }}
+                port:
+                  number: {{ .Values.ui.service.ports.http }}
+              {{- else }}
+              serviceName: {{ include "storm.ui.serviceName" . }}
+              servicePort: http
+              {{- end }}
+    {{- end }}
+    {{- range .Values.ui.ingress.extraHosts }}
+    - host: {{ .name | quote }}
+      http:
+        paths:
+          - path: {{ default "/" .path }}
+            {{- if semverCompare ">=1.18-0" $.Capabilities.KubeVersion.GitVersion }}
+            pathType: {{ default "ImplementationSpecific" .pathType }}
+            {{- end }}
+            backend:
+              {{- if semverCompare ">=1.19-0" $.Capabilities.KubeVersion.GitVersion }}
+              service:
+                name: {{ include "storm.ui.serviceName" $ }}
+                port:
+                  number: {{ $.Values.ui.service.ports.http }}
+              {{- else }}
+              serviceName: {{ include "storm.ui.serviceName" $ }}
+              servicePort: http
+              {{- end }}
+    {{- end }}
+    {{- if .Values.ui.ingress.extraRules }}
+    {{- toYaml .Values.ui.ingress.extraRules | nindent 4 }}
+    {{- end }}
+  {{- if or (and .Values.ui.ingress.tls (or (include "storm.ui.ingress.certManagerRequest" .Values.ui.ingress.annotations) .Values.ui.ingress.selfSigned)) .Values.ui.ingress.extraTls }}
+  tls:
+    {{- if and .Values.ui.ingress.tls (or (include "storm.ui.ingress.certManagerRequest" .Values.ui.ingress.annotations) .Values.ui.ingress.selfSigned) }}
+    - hosts:
+        - {{ .Values.ui.ingress.hostname | quote }}
+      secretName: {{ printf "%s-tls" .Values.ui.ingress.hostname }}
+    {{- end }}
+    {{- if .Values.ui.ingress.extraTls }}
+    {{- toYaml .Values.ui.ingress.extraTls | nindent 4 }}
+    {{- end }}
+  {{- end }}
+{{- end }}

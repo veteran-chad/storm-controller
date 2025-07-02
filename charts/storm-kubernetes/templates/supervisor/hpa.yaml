@@ -1,0 +1,36 @@
+{{- if and .Values.supervisor.autoscaling.enabled (eq .Values.supervisor.deploymentMode "deployment") }}
+apiVersion: {{ include "storm.hpa.apiVersion" . }}
+kind: HorizontalPodAutoscaler
+metadata:
+  name: {{ include "storm.supervisor.fullname" . }}
+  namespace: {{ .Release.Namespace | quote }}
+  labels: {{- include "storm.labels" . | nindent 4 }}
+    app.kubernetes.io/component: supervisor
+  {{- if .Values.commonAnnotations }}
+  annotations: {{- include "storm.commonAnnotations" . | nindent 4 }}
+  {{- end }}
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: {{ include "storm.supervisor.fullname" . }}
+  minReplicas: {{ .Values.supervisor.autoscaling.minReplicas }}
+  maxReplicas: {{ .Values.supervisor.autoscaling.maxReplicas }}
+  metrics:
+    {{- if .Values.supervisor.autoscaling.targetCPU }}
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: {{ .Values.supervisor.autoscaling.targetCPU }}
+    {{- end }}
+    {{- if .Values.supervisor.autoscaling.targetMemory }}
+    - type: Resource
+      resource:
+        name: memory
+        target:
+          type: Utilization
+          averageUtilization: {{ .Values.supervisor.autoscaling.targetMemory }}
+    {{- end }}
+{{- end }}

@@ -1,0 +1,75 @@
+{{- if not .Values.nimbus.existingConfigmap -}}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "storm.configmapName" . }}
+  namespace: {{ .Release.Namespace | quote }}
+  labels: {{- include "storm.labels" . | nindent 4 }}
+  {{- if .Values.commonAnnotations }}
+  annotations: {{- include "storm.commonAnnotations" . | nindent 4 }}
+  {{- end }}
+data:
+  storm.yaml: |
+    # Storm configuration
+    storm.zookeeper.servers:
+    {{- if .Values.zookeeper.enabled }}
+    - "{{ include "storm.zookeeper.connect" . }}"
+    {{- else }}
+    {{- range .Values.externalZookeeper.servers }}
+    - {{ . | quote }}
+    {{- end }}
+    {{- end }}
+    
+    nimbus.seeds:
+    - "{{ include "storm.nimbus.fullname" . }}"
+    
+    nimbus.thrift.port: 6627
+    
+    storm.local.dir: "/storm/data"
+    storm.log.dir: "/logs"
+    
+    supervisor.slots.ports:
+    {{- range $i := until (int .Values.supervisor.slotsPerSupervisor) }}
+    - {{ add 6700 $i }}
+    {{- end }}
+    
+    ui.port: 8080
+    
+    # Metrics
+    storm.cluster.metrics.consumer.register:
+    - class: "org.apache.storm.metric.LoggingMetricsConsumer"
+    
+    # Additional Storm configuration
+    {{- if .Values.stormConf }}
+    {{- toYaml .Values.stormConf | nindent 4 }}
+    {{- end }}
+    
+  log4j2.xml: |
+    <?xml version="1.0" encoding="UTF-8"?>
+    <Configuration>
+      <Appenders>
+        <Console name="Console" target="SYSTEM_OUT">
+          <PatternLayout pattern="%d{ISO8601} %p %c{1}: %m%n"/>
+        </Console>
+        <RollingFile name="File" fileName="${sys:storm.log.dir}/${sys:logfile.name}"
+                     filePattern="${sys:storm.log.dir}/${sys:logfile.name}-%d{yyyy-MM-dd}-%i.log.gz">
+          <PatternLayout pattern="%d{ISO8601} %p %c{1}: %m%n"/>
+          <Policies>
+            <TimeBasedTriggeringPolicy />
+            <SizeBasedTriggeringPolicy size="100MB"/>
+          </Policies>
+          <DefaultRolloverStrategy max="9"/>
+        </RollingFile>
+      </Appenders>
+      <Loggers>
+        <Root level="INFO">
+          <AppenderRef ref="Console"/>
+          <AppenderRef ref="File"/>
+        </Root>
+        <Logger name="org.apache.storm" level="INFO" additivity="false">
+          <AppenderRef ref="Console"/>
+          <AppenderRef ref="File"/>
+        </Logger>
+      </Loggers>
+    </Configuration>
+{{- end }}

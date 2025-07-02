@@ -1,0 +1,87 @@
+# WordCount topology with autoscaling worker pool
+apiVersion: storm.apache.org/v1alpha1
+kind: StormTopology
+metadata:
+  name: wordcount-autoscale
+  namespace: storm-system
+spec:
+  jarUrl: https://repo1.maven.org/maven2/org/apache/storm/storm-starter/2.4.0/storm-starter-2.4.0.jar
+  mainClass: org.apache.storm.starter.WordCountTopology
+  args:
+    - wordcount-autoscale
+  config:
+    topology.workers: "3"
+    topology.debug: "false"
+---
+# Separate WorkerPool with HPA configuration
+apiVersion: storm.apache.org/v1alpha1
+kind: StormWorkerPool
+metadata:
+  name: wordcount-autoscale-pool
+  namespace: storm-system
+spec:
+  topologyName: wordcount-autoscale
+  
+  # Autoscaling configuration
+  minReplicas: 2
+  maxReplicas: 10
+  
+  # CPU-based autoscaling
+  targetCPUUtilizationPercentage: 70
+  
+  # Custom metrics (requires Prometheus adapter)
+  metrics:
+    - type: Pods
+      pods:
+        metric:
+          name: storm_topology_pending_messages
+        target:
+          type: AverageValue
+          averageValue: "1000"
+  
+  # Scaling behavior
+  behavior:
+    scaleUp:
+      stabilizationWindowSeconds: 60
+      policies:
+      - type: Percent
+        value: 100
+        periodSeconds: 60
+    scaleDown:
+      stabilizationWindowSeconds: 300
+      policies:
+      - type: Percent
+        value: 10
+        periodSeconds: 60
+  
+  # Resources per worker
+  resources:
+    requests:
+      memory: "1Gi"
+      cpu: "500m"
+    limits:
+      memory: "2Gi"
+      cpu: "1000m"
+  
+  # Pod configuration
+  nodeSelector:
+    workload: storm
+  
+  tolerations:
+    - key: storm
+      operator: Equal
+      value: "true"
+      effect: NoSchedule
+  
+  affinity:
+    podAntiAffinity:
+      preferredDuringSchedulingIgnoredDuringExecution:
+      - weight: 100
+        podAffinityTerm:
+          labelSelector:
+            matchExpressions:
+            - key: storm.apache.org/topology
+              operator: In
+              values:
+              - wordcount-autoscale
+          topologyKey: kubernetes.io/hostname

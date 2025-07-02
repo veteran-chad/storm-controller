@@ -1,0 +1,129 @@
+CHART NAME: {{ .Chart.Name }}
+CHART VERSION: {{ .Chart.Version }}
+APP VERSION: {{ .Chart.AppVersion }}
+
+** Please be patient while the chart is being deployed **
+
+
+Apache Storm has been deployed successfully!
+
+{{- if not .Values.zookeeper.enabled }}
+
+WARNING: You have disabled the embedded Zookeeper deployment.
+Make sure you have configured the external Zookeeper servers correctly:
+  externalZookeeper.servers: {{ .Values.externalZookeeper.servers }}
+
+{{- end }}
+
+To access Storm UI:
+
+{{- if .Values.ui.enabled }}
+
+{{- if .Values.ui.ingress.enabled }}
+
+1. Get the Storm UI URL:
+
+{{- if .Values.ui.ingress.hostname }}
+   http{{ if .Values.ui.ingress.tls }}s{{ end }}://{{ .Values.ui.ingress.hostname }}{{ .Values.ui.ingress.path }}
+{{- else }}
+   kubectl get ingress --namespace {{ .Release.Namespace }} {{ include "storm.ui.fullname" . }}
+{{- end }}
+
+{{- else if contains "NodePort" .Values.ui.service.type }}
+
+1. Get the Storm UI URL by running these commands:
+
+   export NODE_PORT=$(kubectl get --namespace {{ .Release.Namespace }} -o jsonpath="{.spec.ports[0].nodePort}" services {{ include "storm.ui.serviceName" . }})
+   export NODE_IP=$(kubectl get nodes --namespace {{ .Release.Namespace }} -o jsonpath="{.items[0].status.addresses[0].address}")
+   echo "Storm UI URL: http://$NODE_IP:$NODE_PORT"
+
+{{- else if contains "LoadBalancer" .Values.ui.service.type }}
+
+1. Get the Storm UI URL by running these commands:
+
+   NOTE: It may take a few minutes for the LoadBalancer IP to be available.
+         Watch the status with: 'kubectl get svc --namespace {{ .Release.Namespace }} -w {{ include "storm.ui.serviceName" . }}'
+
+   export SERVICE_IP=$(kubectl get svc --namespace {{ .Release.Namespace }} {{ include "storm.ui.serviceName" . }} --template "{{ "{{ range (index .status.loadBalancer.ingress 0) }}{{ . }}{{ end }}" }}")
+   echo "Storm UI URL: http://$SERVICE_IP:{{ .Values.ui.service.ports.http }}"
+
+{{- else if contains "ClusterIP" .Values.ui.service.type }}
+
+1. Get the Storm UI URL by running these commands:
+
+   kubectl port-forward --namespace {{ .Release.Namespace }} svc/{{ include "storm.ui.serviceName" . }} 8080:{{ .Values.ui.service.ports.http }} &
+   echo "Storm UI URL: http://127.0.0.1:8080"
+
+{{- end }}
+
+{{- if .Values.ui.auth.enabled }}
+
+2. Login credentials:
+{{- if eq .Values.ui.auth.type "simple" }}
+{{- range .Values.ui.auth.users }}
+   Username: {{ .username }}
+   Password: {{ .password }}
+{{- end }}
+{{- end }}
+{{- end }}
+
+{{- else }}
+
+Storm UI has been disabled. You can enable it by setting ui.enabled=true
+
+{{- end }}
+
+To deploy a Storm topology:
+
+{{- if .Values.controller.enabled }}
+
+1. Create a StormTopology resource:
+
+   cat <<EOF | kubectl apply -f -
+   apiVersion: storm.apache.org/v1beta1
+   kind: StormTopology
+   metadata:
+     name: my-topology
+     namespace: {{ .Release.Namespace }}
+   spec:
+     clusterRef: {{ .Release.Name }}
+     topology:
+       name: my-topology
+       jar:
+         url: "https://example.com/path/to/topology.jar"
+       mainClass: "com.example.MyTopology"
+     workers:
+       replicas: 2
+       resources:
+         requests:
+           cpu: "1"
+           memory: "2Gi"
+   EOF
+
+2. Check topology status:
+
+   kubectl get stormtopologies --namespace {{ .Release.Namespace }}
+   kubectl describe stormtopology my-topology --namespace {{ .Release.Namespace }}
+
+{{- else }}
+
+Storm Controller has been disabled. To use CRD-based topology deployment, enable the controller:
+  controller.enabled=true
+
+You can still submit topologies using the Storm CLI by connecting to Nimbus at:
+  {{ include "storm.nimbus.fullname" . }}.{{ .Release.Namespace }}.svc.{{ .Values.clusterDomain }}:{{ .Values.nimbus.service.ports.thrift }}
+
+{{- end }}
+
+{{- if .Values.metrics.enabled }}
+
+Metrics are exposed for Prometheus scraping.
+{{- if .Values.metrics.serviceMonitor.enabled }}
+A ServiceMonitor resource has been created for automatic discovery by Prometheus Operator.
+{{- else }}
+To enable automatic discovery by Prometheus Operator, set metrics.serviceMonitor.enabled=true
+{{- end }}
+
+{{- end }}
+
+{{- include "storm.validateValues" . -}}

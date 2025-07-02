@@ -1,0 +1,213 @@
+{{- if .Values.ui.enabled }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "storm.ui.fullname" . }}
+  namespace: {{ .Release.Namespace | quote }}
+  labels: {{- include "storm.labels" . | nindent 4 }}
+    app.kubernetes.io/component: ui
+  {{- if .Values.commonAnnotations }}
+  annotations: {{- include "storm.commonAnnotations" . | nindent 4 }}
+  {{- end }}
+spec:
+  replicas: {{ .Values.ui.replicaCount }}
+  selector:
+    matchLabels: {{- include "storm.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: ui
+  {{- if .Values.ui.updateStrategy }}
+  strategy: {{- toYaml .Values.ui.updateStrategy | nindent 4 }}
+  {{- end }}
+  template:
+    metadata:
+      labels: {{- include "storm.labels" . | nindent 8 }}
+        app.kubernetes.io/component: ui
+        {{- if .Values.ui.podLabels }}
+        {{- toYaml .Values.ui.podLabels | nindent 8 }}
+        {{- end }}
+      annotations:
+        checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}
+        {{- if and .Values.ui.auth.enabled (include "storm.ui.auth.createSecret" .) }}
+        checksum/auth: {{ include (print $.Template.BasePath "/ui/auth-secret.yaml") . | sha256sum }}
+        {{- end }}
+        {{- if .Values.ui.podAnnotations }}
+        {{- toYaml .Values.ui.podAnnotations | nindent 8 }}
+        {{- end }}
+    spec:
+      {{- include "storm.imagePullSecrets" . | nindent 6 }}
+      serviceAccountName: {{ include "storm.serviceAccountName" . }}
+      {{- if .Values.ui.hostAliases }}
+      hostAliases: {{- toYaml .Values.ui.hostAliases | nindent 8 }}
+      {{- end }}
+      {{- if .Values.ui.podSecurityContext.enabled }}
+      securityContext: {{- omit .Values.ui.podSecurityContext "enabled" | toYaml | nindent 8 }}
+      {{- end }}
+      {{- if .Values.ui.priorityClassName }}
+      priorityClassName: {{ .Values.ui.priorityClassName | quote }}
+      {{- end }}
+      {{- if .Values.ui.schedulerName }}
+      schedulerName: {{ .Values.ui.schedulerName | quote }}
+      {{- end }}
+      {{- if .Values.ui.topologySpreadConstraints }}
+      topologySpreadConstraints: {{- toYaml .Values.ui.topologySpreadConstraints | nindent 8 }}
+      {{- end }}
+      {{- if .Values.ui.nodeSelector }}
+      nodeSelector: {{- toYaml .Values.ui.nodeSelector | nindent 8 }}
+      {{- end }}
+      {{- if .Values.ui.tolerations }}
+      tolerations: {{- toYaml .Values.ui.tolerations | nindent 8 }}
+      {{- end }}
+      {{- if .Values.ui.affinity }}
+      affinity: {{- toYaml .Values.ui.affinity | nindent 8 }}
+      {{- else }}
+      affinity:
+        {{- if .Values.ui.podAffinityPreset }}
+        podAffinity: {{- toYaml .Values.ui.podAffinityPreset | nindent 10 }}
+        {{- end }}
+        {{- if .Values.ui.podAntiAffinityPreset }}
+        podAntiAffinity:
+          {{- include "storm.podAntiAffinityPreset" (dict "component" "ui" "context" $ "preset" .Values.ui.podAntiAffinityPreset) | nindent 10 }}
+        {{- end }}
+        {{- if .Values.ui.nodeAffinityPreset.type }}
+        nodeAffinity:
+          {{- include "storm.nodeAffinityPreset" .Values.ui.nodeAffinityPreset | nindent 10 }}
+        {{- end }}
+      {{- end }}
+      {{- if .Values.ui.terminationGracePeriodSeconds }}
+      terminationGracePeriodSeconds: {{ .Values.ui.terminationGracePeriodSeconds }}
+      {{- end }}
+      initContainers:
+        - name: wait-for-nimbus
+          image: busybox:1.36
+          imagePullPolicy: IfNotPresent
+          command:
+            - sh
+            - -c
+            - |
+              until nc -z {{ include "storm.nimbus.fullname" . }} 6627; do
+                echo "Waiting for Nimbus to be ready..."
+                sleep 5
+              done
+              echo "Nimbus is ready!"
+        {{- if .Values.ui.initContainers }}
+        {{- toYaml .Values.ui.initContainers | nindent 8 }}
+        {{- end }}
+      containers:
+        - name: ui
+          image: {{ include "storm.image" . }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          {{- if .Values.ui.containerSecurityContext.enabled }}
+          securityContext: {{- omit .Values.ui.containerSecurityContext "enabled" | toYaml | nindent 12 }}
+          {{- end }}
+          {{- if .Values.ui.command }}
+          command: {{- toYaml .Values.ui.command | nindent 12 }}
+          {{- else }}
+          command:
+            - storm
+            - ui
+          {{- end }}
+          {{- if .Values.ui.args }}
+          args: {{- toYaml .Values.ui.args | nindent 12 }}
+          {{- end }}
+          env:
+            {{- include "storm.commonEnv" . | nindent 12 }}
+            - name: STORM_CONF_DIR
+              value: "/conf"
+            {{- if .Values.ui.auth.enabled }}
+            - name: UI_FILTER
+              value: "org.apache.storm.security.auth.SimpleWhitelistAuthorizer"
+            - name: UI_USERS_FILE
+              value: "/auth/users"
+            {{- end }}
+            {{- if .Values.ui.extraEnvVars }}
+            {{- toYaml .Values.ui.extraEnvVars | nindent 12 }}
+            {{- end }}
+          {{- if or .Values.ui.extraEnvVarsCM .Values.ui.extraEnvVarsSecret }}
+          envFrom:
+            {{- if .Values.ui.extraEnvVarsCM }}
+            - configMapRef:
+                name: {{ .Values.ui.extraEnvVarsCM }}
+            {{- end }}
+            {{- if .Values.ui.extraEnvVarsSecret }}
+            - secretRef:
+                name: {{ .Values.ui.extraEnvVarsSecret }}
+            {{- end }}
+          {{- end }}
+          ports:
+            {{- include "storm.containerPorts" "ui" | nindent 12 }}
+          {{- if .Values.ui.livenessProbe.enabled }}
+          livenessProbe:
+            httpGet:
+              path: /
+              port: http
+            initialDelaySeconds: {{ .Values.ui.livenessProbe.initialDelaySeconds }}
+            periodSeconds: {{ .Values.ui.livenessProbe.periodSeconds }}
+            timeoutSeconds: {{ .Values.ui.livenessProbe.timeoutSeconds }}
+            failureThreshold: {{ .Values.ui.livenessProbe.failureThreshold }}
+            successThreshold: {{ .Values.ui.livenessProbe.successThreshold }}
+          {{- else if .Values.ui.customLivenessProbe }}
+          livenessProbe: {{- toYaml .Values.ui.customLivenessProbe | nindent 12 }}
+          {{- end }}
+          {{- if .Values.ui.readinessProbe.enabled }}
+          readinessProbe:
+            httpGet:
+              path: /
+              port: http
+            initialDelaySeconds: {{ .Values.ui.readinessProbe.initialDelaySeconds }}
+            periodSeconds: {{ .Values.ui.readinessProbe.periodSeconds }}
+            timeoutSeconds: {{ .Values.ui.readinessProbe.timeoutSeconds }}
+            failureThreshold: {{ .Values.ui.readinessProbe.failureThreshold }}
+            successThreshold: {{ .Values.ui.readinessProbe.successThreshold }}
+          {{- else if .Values.ui.customReadinessProbe }}
+          readinessProbe: {{- toYaml .Values.ui.customReadinessProbe | nindent 12 }}
+          {{- end }}
+          {{- if .Values.ui.startupProbe.enabled }}
+          startupProbe:
+            httpGet:
+              path: /
+              port: http
+            initialDelaySeconds: {{ .Values.ui.startupProbe.initialDelaySeconds }}
+            periodSeconds: {{ .Values.ui.startupProbe.periodSeconds }}
+            timeoutSeconds: {{ .Values.ui.startupProbe.timeoutSeconds }}
+            failureThreshold: {{ .Values.ui.startupProbe.failureThreshold }}
+            successThreshold: {{ .Values.ui.startupProbe.successThreshold }}
+          {{- else if .Values.ui.customStartupProbe }}
+          startupProbe: {{- toYaml .Values.ui.customStartupProbe | nindent 12 }}
+          {{- end }}
+          {{- if .Values.ui.lifecycleHooks }}
+          lifecycle: {{- toYaml .Values.ui.lifecycleHooks | nindent 12 }}
+          {{- end }}
+          {{- if .Values.ui.resources }}
+          resources: {{- toYaml .Values.ui.resources | nindent 12 }}
+          {{- end }}
+          volumeMounts:
+            - name: storm-config
+              mountPath: /conf
+            - name: storm-logs
+              mountPath: /logs
+            {{- if .Values.ui.auth.enabled }}
+            - name: auth
+              mountPath: /auth
+              readOnly: true
+            {{- end }}
+            {{- if .Values.ui.extraVolumeMounts }}
+            {{- toYaml .Values.ui.extraVolumeMounts | nindent 12 }}
+            {{- end }}
+        {{- if .Values.ui.sidecars }}
+        {{- toYaml .Values.ui.sidecars | nindent 8 }}
+        {{- end }}
+      volumes:
+        - name: storm-config
+          configMap:
+            name: {{ include "storm.configmapName" . }}
+        - name: storm-logs
+          emptyDir: {}
+        {{- if .Values.ui.auth.enabled }}
+        - name: auth
+          secret:
+            secretName: {{ include "storm.ui.auth.secretName" . }}
+            defaultMode: 0400
+        {{- end }}
+        {{- if .Values.ui.extraVolumes }}
+        {{- toYaml .Values.ui.extraVolumes | nindent 8 }}
+        {{- end }}
+{{- end }}

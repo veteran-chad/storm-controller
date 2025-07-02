@@ -1,0 +1,543 @@
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  name: stormtopologies.storm.apache.org
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.13.0
+    "helm.sh/resource-policy": keep
+spec:
+  group: storm.apache.org
+  names:
+    kind: StormTopology
+    listKind: StormTopologyList
+    plural: stormtopologies
+    singular: stormtopology
+    shortNames:
+    - st
+  scope: Namespaced
+  versions:
+  - name: v1beta1
+    served: true
+    storage: true
+    subresources:
+      status: {}
+      scale:
+        specReplicasPath: .spec.workers.replicas
+        statusReplicasPath: .status.workers
+    schema:
+      openAPIV3Schema:
+        description: StormTopology is the Schema for the stormtopologies API
+        type: object
+        properties:
+          apiVersion:
+            description: 'APIVersion defines the versioned schema of this representation of an object.'
+            type: string
+          kind:
+            description: 'Kind is a string value representing the REST resource this object represents.'
+            type: string
+          metadata:
+            type: object
+          spec:
+            description: StormTopologySpec defines the desired state of StormTopology
+            type: object
+            required:
+            - clusterRef
+            - topology
+            properties:
+              clusterRef:
+                description: Reference to the StormCluster resource
+                type: string
+              topology:
+                description: Topology configuration
+                type: object
+                required:
+                - name
+                - jar
+                properties:
+                  name:
+                    description: Name of the topology
+                    type: string
+                    minLength: 1
+                    maxLength: 253
+                    pattern: '^[a-z0-9]([-a-z0-9]*[a-z0-9])?$'
+                  jar:
+                    description: JAR file configuration
+                    type: object
+                    properties:
+                      url:
+                        description: URL to download JAR from
+                        type: string
+                        pattern: '^https?://.+'
+                      configMap:
+                        description: ConfigMap containing JAR file
+                        type: string
+                      secret:
+                        description: Secret containing JAR file
+                        type: string
+                      s3:
+                        description: S3 location for JAR file
+                        type: object
+                        properties:
+                          bucket:
+                            description: S3 bucket name
+                            type: string
+                          key:
+                            description: S3 object key
+                            type: string
+                          region:
+                            description: AWS region
+                            type: string
+                          endpoint:
+                            description: S3 endpoint (for S3-compatible storage)
+                            type: string
+                          credentialsSecret:
+                            description: Secret containing AWS credentials
+                            type: string
+                      container:
+                        description: Container image containing JAR file
+                        type: object
+                        required:
+                        - image
+                        properties:
+                          image:
+                            description: Container image containing the JAR file
+                            type: string
+                          path:
+                            description: Path to JAR file inside container
+                            type: string
+                            default: "/app/topology.jar"
+                          pullPolicy:
+                            description: Image pull policy
+                            type: string
+                            default: IfNotPresent
+                            enum:
+                            - Always
+                            - Never
+                            - IfNotPresent
+                          pullSecrets:
+                            description: Secrets for pulling images from private registries
+                            type: array
+                            items:
+                              type: object
+                              properties:
+                                name:
+                                  type: string
+                          resources:
+                            description: Resource requirements for the JAR extraction container
+                            type: object
+                            properties:
+                              requests:
+                                type: object
+                                additionalProperties:
+                                  anyOf:
+                                  - type: integer
+                                  - type: string
+                                  pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                                  x-kubernetes-int-or-string: true
+                              limits:
+                                type: object
+                                additionalProperties:
+                                  anyOf:
+                                  - type: integer
+                                  - type: string
+                                  pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                                  x-kubernetes-int-or-string: true
+                          securityContext:
+                            description: Security context for the JAR extraction container
+                            type: object
+                          env:
+                            description: Environment variables for the JAR extraction container
+                            type: array
+                            items:
+                              type: object
+                              properties:
+                                name:
+                                  type: string
+                                value:
+                                  type: string
+                                valueFrom:
+                                  type: object
+                          volumeMounts:
+                            description: Volume mounts for the JAR extraction container
+                            type: array
+                            items:
+                              type: object
+                              properties:
+                                name:
+                                  type: string
+                                mountPath:
+                                  type: string
+                                subPath:
+                                  type: string
+                                readOnly:
+                                  type: boolean
+                          extractionMode:
+                            description: JAR extraction strategy
+                            type: string
+                            default: initContainer
+                            enum:
+                            - initContainer
+                            - job
+                            - sidecar
+                          extractionTimeoutSeconds:
+                            description: Timeout for JAR extraction process
+                            type: integer
+                            default: 300
+                          checksum:
+                            description: Checksum verification for JAR file
+                            type: object
+                            required:
+                            - algorithm
+                            - value
+                            properties:
+                              algorithm:
+                                description: Algorithm used for checksum
+                                type: string
+                                default: sha256
+                                enum:
+                                - sha256
+                                - sha512
+                                - md5
+                              value:
+                                description: Expected checksum value
+                                type: string
+                              file:
+                                description: Path to checksum file inside container
+                                type: string
+                    oneOf:
+                    - required: ["url"]
+                    - required: ["configMap"]
+                    - required: ["secret"]
+                    - required: ["s3"]
+                    - required: ["container"]
+                  mainClass:
+                    description: Main class to execute
+                    type: string
+                  args:
+                    description: Arguments to pass to the topology
+                    type: array
+                    items:
+                      type: string
+                  config:
+                    description: Topology-specific configuration
+                    type: object
+                    additionalProperties: true
+              workers:
+                description: Worker configuration
+                type: object
+                properties:
+                  replicas:
+                    description: Number of worker replicas
+                    type: integer
+                    minimum: 1
+                    default: 2
+                  resources:
+                    description: Resource requirements for worker pods
+                    type: object
+                    properties:
+                      requests:
+                        type: object
+                        additionalProperties:
+                          anyOf:
+                          - type: integer
+                          - type: string
+                          pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                          x-kubernetes-int-or-string: true
+                      limits:
+                        type: object
+                        additionalProperties:
+                          anyOf:
+                          - type: integer
+                          - type: string
+                          pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                          x-kubernetes-int-or-string: true
+                  jvmOpts:
+                    description: JVM options for workers
+                    type: array
+                    items:
+                      type: string
+                  autoscaling:
+                    description: Autoscaling configuration
+                    type: object
+                    properties:
+                      enabled:
+                        description: Enable autoscaling
+                        type: boolean
+                        default: true
+                      minReplicas:
+                        description: Minimum number of replicas
+                        type: integer
+                        minimum: 1
+                        default: 1
+                      maxReplicas:
+                        description: Maximum number of replicas
+                        type: integer
+                        minimum: 1
+                        default: 10
+                      metrics:
+                        description: Metrics for autoscaling
+                        type: array
+                        items:
+                          type: object
+                          properties:
+                            type:
+                              description: Type of metric
+                              type: string
+                              enum:
+                              - cpu
+                              - memory
+                              - pending-tuples
+                              - capacity
+                              - latency
+                            target:
+                              description: Target value for the metric
+                              type: object
+                              properties:
+                                averageUtilization:
+                                  description: Target average utilization (for cpu/memory)
+                                  type: integer
+                                  minimum: 1
+                                  maximum: 100
+                                averageValue:
+                                  description: Target average value
+                                  type: string
+                                value:
+                                  description: Target value
+                                  type: string
+                          required:
+                          - type
+                          - target
+                      behavior:
+                        description: Scaling behavior configuration
+                        type: object
+                        properties:
+                          scaleDown:
+                            description: Scale down behavior
+                            type: object
+                            properties:
+                              stabilizationWindowSeconds:
+                                description: Stabilization window in seconds
+                                type: integer
+                                minimum: 0
+                                default: 300
+                              policies:
+                                description: Scaling policies
+                                type: array
+                                items:
+                                  type: object
+                                  properties:
+                                    type:
+                                      type: string
+                                      enum:
+                                      - Percent
+                                      - Pods
+                                    value:
+                                      type: integer
+                                      minimum: 1
+                                    periodSeconds:
+                                      type: integer
+                                      minimum: 1
+                                  required:
+                                  - type
+                                  - value
+                                  - periodSeconds
+                          scaleUp:
+                            description: Scale up behavior
+                            type: object
+                            properties:
+                              stabilizationWindowSeconds:
+                                description: Stabilization window in seconds
+                                type: integer
+                                minimum: 0
+                                default: 60
+                              policies:
+                                description: Scaling policies
+                                type: array
+                                items:
+                                  type: object
+                                  properties:
+                                    type:
+                                      type: string
+                                      enum:
+                                      - Percent
+                                      - Pods
+                                    value:
+                                      type: integer
+                                      minimum: 1
+                                    periodSeconds:
+                                      type: integer
+                                      minimum: 1
+                                  required:
+                                  - type
+                                  - value
+                                  - periodSeconds
+                  nodeSelector:
+                    description: Node selector for worker pods
+                    type: object
+                    additionalProperties:
+                      type: string
+                  tolerations:
+                    description: Tolerations for worker pods
+                    type: array
+                    items:
+                      type: object
+                  affinity:
+                    description: Affinity rules for worker pods
+                    type: object
+                  podAnnotations:
+                    description: Annotations for worker pods
+                    type: object
+                    additionalProperties:
+                      type: string
+                  podLabels:
+                    description: Labels for worker pods
+                    type: object
+                    additionalProperties:
+                      type: string
+              lifecycle:
+                description: Lifecycle configuration
+                type: object
+                properties:
+                  killTimeout:
+                    description: Timeout in seconds for killing topology
+                    type: integer
+                    minimum: 0
+                    default: 30
+                  updateStrategy:
+                    description: Update strategy for topology
+                    type: string
+                    default: "rolling"
+                    enum:
+                    - recreate
+                    - rolling
+                  preStop:
+                    description: PreStop hook configuration
+                    type: object
+                    properties:
+                      exec:
+                        description: Exec action
+                        type: object
+                        properties:
+                          command:
+                            type: array
+                            items:
+                              type: string
+                  postStart:
+                    description: PostStart hook configuration
+                    type: object
+                    properties:
+                      exec:
+                        description: Exec action
+                        type: object
+                        properties:
+                          command:
+                            type: array
+                            items:
+                              type: string
+              suspend:
+                description: Suspend the topology (kill but keep configuration)
+                type: boolean
+                default: false
+          status:
+            description: StormTopologyStatus defines the observed state of StormTopology
+            type: object
+            properties:
+              phase:
+                description: Current phase of the topology
+                type: string
+                enum:
+                - Pending
+                - Submitted
+                - Running
+                - Failed
+                - Killed
+                - Suspended
+                - Updating
+              topologyId:
+                description: Storm-assigned topology ID
+                type: string
+              workers:
+                description: Current number of workers
+                type: integer
+              targetWorkers:
+                description: Target number of workers (from autoscaling)
+                type: integer
+              lastUpdated:
+                description: Last time the topology was updated
+                type: string
+                format: date-time
+              message:
+                description: Human-readable message about current status
+                type: string
+              deployedVersion:
+                description: Deployed topology version
+                type: string
+              conditions:
+                description: Current service state of topology
+                type: array
+                items:
+                  type: object
+                  properties:
+                    type:
+                      description: Type of topology condition
+                      type: string
+                    status:
+                      description: Status of the condition, one of True, False, Unknown
+                      type: string
+                    lastTransitionTime:
+                      description: Last time the condition transitioned from one status to another
+                      type: string
+                      format: date-time
+                    reason:
+                      description: The reason for the condition's last transition
+                      type: string
+                    message:
+                      description: A human readable message indicating details about the transition
+                      type: string
+                  required:
+                  - type
+                  - status
+              metrics:
+                description: Current topology metrics
+                type: object
+                properties:
+                  uptimeSeconds:
+                    description: Uptime in seconds
+                    type: integer
+                  executors:
+                    description: Number of executors
+                    type: integer
+                  tasks:
+                    description: Number of tasks
+                    type: integer
+                  emitted:
+                    description: Total tuples emitted
+                    type: integer
+                  transferred:
+                    description: Total tuples transferred
+                    type: integer
+                  acked:
+                    description: Total tuples acked
+                    type: integer
+                  failed:
+                    description: Total tuples failed
+                    type: integer
+                  completeLatency:
+                    description: Complete latency in ms
+                    type: string
+    additionalPrinterColumns:
+    - name: Cluster
+      type: string
+      jsonPath: .spec.clusterRef
+    - name: Phase
+      type: string
+      jsonPath: .status.phase
+    - name: Workers
+      type: integer
+      jsonPath: .status.workers
+    - name: Uptime
+      type: integer
+      jsonPath: .status.metrics.uptimeSeconds
+    - name: Age
+      type: date
+      jsonPath: .metadata.creationTimestamp

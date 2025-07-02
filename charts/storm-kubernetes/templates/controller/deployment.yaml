@@ -1,0 +1,195 @@
+{{- if .Values.controller.enabled }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "storm.controller.fullname" . }}
+  namespace: {{ .Release.Namespace | quote }}
+  labels: {{- include "storm.labels" . | nindent 4 }}
+    app.kubernetes.io/component: controller
+  {{- if .Values.commonAnnotations }}
+  annotations: {{- include "storm.commonAnnotations" . | nindent 4 }}
+  {{- end }}
+spec:
+  replicas: {{ .Values.controller.replicaCount }}
+  selector:
+    matchLabels: {{- include "storm.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: controller
+  {{- if .Values.controller.updateStrategy }}
+  strategy: {{- toYaml .Values.controller.updateStrategy | nindent 4 }}
+  {{- end }}
+  template:
+    metadata:
+      labels: {{- include "storm.labels" . | nindent 8 }}
+        app.kubernetes.io/component: controller
+        {{- if .Values.controller.podLabels }}
+        {{- toYaml .Values.controller.podLabels | nindent 8 }}
+        {{- end }}
+      annotations:
+        checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}
+        {{- if .Values.controller.podAnnotations }}
+        {{- toYaml .Values.controller.podAnnotations | nindent 8 }}
+        {{- end }}
+    spec:
+      {{- include "storm.imagePullSecrets" . | nindent 6 }}
+      serviceAccountName: {{ include "storm.serviceAccountName" . }}
+      {{- if .Values.controller.hostAliases }}
+      hostAliases: {{- toYaml .Values.controller.hostAliases | nindent 8 }}
+      {{- end }}
+      {{- if .Values.controller.podSecurityContext.enabled }}
+      securityContext: {{- omit .Values.controller.podSecurityContext "enabled" | toYaml | nindent 8 }}
+      {{- end }}
+      {{- if .Values.controller.priorityClassName }}
+      priorityClassName: {{ .Values.controller.priorityClassName | quote }}
+      {{- end }}
+      {{- if .Values.controller.schedulerName }}
+      schedulerName: {{ .Values.controller.schedulerName | quote }}
+      {{- end }}
+      {{- if .Values.controller.topologySpreadConstraints }}
+      topologySpreadConstraints: {{- toYaml .Values.controller.topologySpreadConstraints | nindent 8 }}
+      {{- end }}
+      {{- if .Values.controller.nodeSelector }}
+      nodeSelector: {{- toYaml .Values.controller.nodeSelector | nindent 8 }}
+      {{- end }}
+      {{- if .Values.controller.tolerations }}
+      tolerations: {{- toYaml .Values.controller.tolerations | nindent 8 }}
+      {{- end }}
+      {{- if .Values.controller.affinity }}
+      affinity: {{- toYaml .Values.controller.affinity | nindent 8 }}
+      {{- else }}
+      affinity:
+        {{- if .Values.controller.podAffinityPreset }}
+        podAffinity: {{- toYaml .Values.controller.podAffinityPreset | nindent 10 }}
+        {{- end }}
+        {{- if .Values.controller.podAntiAffinityPreset }}
+        podAntiAffinity:
+          {{- include "storm.podAntiAffinityPreset" (dict "component" "controller" "context" $ "preset" .Values.controller.podAntiAffinityPreset) | nindent 10 }}
+        {{- end }}
+        {{- if .Values.controller.nodeAffinityPreset.type }}
+        nodeAffinity:
+          {{- include "storm.nodeAffinityPreset" .Values.controller.nodeAffinityPreset | nindent 10 }}
+        {{- end }}
+      {{- end }}
+      {{- if .Values.controller.terminationGracePeriodSeconds }}
+      terminationGracePeriodSeconds: {{ .Values.controller.terminationGracePeriodSeconds }}
+      {{- end }}
+      initContainers:
+        {{- if .Values.controller.initContainers }}
+        {{- toYaml .Values.controller.initContainers | nindent 8 }}
+        {{- end }}
+      containers:
+        - name: controller
+          image: {{ include "storm.controller.image" . }}
+          imagePullPolicy: {{ .Values.controller.image.pullPolicy }}
+          {{- if .Values.controller.containerSecurityContext.enabled }}
+          securityContext: {{- omit .Values.controller.containerSecurityContext "enabled" | toYaml | nindent 12 }}
+          {{- end }}
+          {{- if .Values.controller.command }}
+          command: {{- toYaml .Values.controller.command | nindent 12 }}
+          {{- else }}
+          command:
+            - /manager
+          {{- end }}
+          {{- if .Values.controller.args }}
+          args: {{- toYaml .Values.controller.args | nindent 12 }}
+          {{- else }}
+          args:
+            - --leader-elect
+            - --health-probe-bind-address=:8081
+            - --metrics-bind-address=:8080
+            - --storm-cluster={{ include "storm.fullname" . }}
+            - --storm-namespace={{ .Release.Namespace }}
+          {{- end }}
+          env:
+            - name: STORM_CONTROLLER_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+            - name: STORM_CONTROLLER_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+            - name: RECONCILE_INTERVAL
+              value: {{ .Values.controller.config.reconcileInterval | quote }}
+            - name: WORKER_LAUNCH_TIMEOUT
+              value: {{ .Values.controller.config.workerLaunchTimeout | quote }}
+            - name: TOPOLOGY_SUBMIT_TIMEOUT
+              value: {{ .Values.controller.config.topologySubmitTimeout | quote }}
+            {{- if .Values.controller.extraEnvVars }}
+            {{- toYaml .Values.controller.extraEnvVars | nindent 12 }}
+            {{- end }}
+          {{- if or .Values.controller.extraEnvVarsCM .Values.controller.extraEnvVarsSecret }}
+          envFrom:
+            {{- if .Values.controller.extraEnvVarsCM }}
+            - configMapRef:
+                name: {{ .Values.controller.extraEnvVarsCM }}
+            {{- end }}
+            {{- if .Values.controller.extraEnvVarsSecret }}
+            - secretRef:
+                name: {{ .Values.controller.extraEnvVarsSecret }}
+            {{- end }}
+          {{- end }}
+          ports:
+            {{- include "storm.containerPorts" "controller" | nindent 12 }}
+          {{- if .Values.controller.livenessProbe.enabled }}
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: metrics
+            initialDelaySeconds: {{ .Values.controller.livenessProbe.initialDelaySeconds }}
+            periodSeconds: {{ .Values.controller.livenessProbe.periodSeconds }}
+            timeoutSeconds: {{ .Values.controller.livenessProbe.timeoutSeconds }}
+            failureThreshold: {{ .Values.controller.livenessProbe.failureThreshold }}
+            successThreshold: {{ .Values.controller.livenessProbe.successThreshold }}
+          {{- else if .Values.controller.customLivenessProbe }}
+          livenessProbe: {{- toYaml .Values.controller.customLivenessProbe | nindent 12 }}
+          {{- end }}
+          {{- if .Values.controller.readinessProbe.enabled }}
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: metrics
+            initialDelaySeconds: {{ .Values.controller.readinessProbe.initialDelaySeconds }}
+            periodSeconds: {{ .Values.controller.readinessProbe.periodSeconds }}
+            timeoutSeconds: {{ .Values.controller.readinessProbe.timeoutSeconds }}
+            failureThreshold: {{ .Values.controller.readinessProbe.failureThreshold }}
+            successThreshold: {{ .Values.controller.readinessProbe.successThreshold }}
+          {{- else if .Values.controller.customReadinessProbe }}
+          readinessProbe: {{- toYaml .Values.controller.customReadinessProbe | nindent 12 }}
+          {{- end }}
+          {{- if .Values.controller.startupProbe.enabled }}
+          startupProbe:
+            httpGet:
+              path: /readyz
+              port: metrics
+            initialDelaySeconds: {{ .Values.controller.startupProbe.initialDelaySeconds }}
+            periodSeconds: {{ .Values.controller.startupProbe.periodSeconds }}
+            timeoutSeconds: {{ .Values.controller.startupProbe.timeoutSeconds }}
+            failureThreshold: {{ .Values.controller.startupProbe.failureThreshold }}
+            successThreshold: {{ .Values.controller.startupProbe.successThreshold }}
+          {{- else if .Values.controller.customStartupProbe }}
+          startupProbe: {{- toYaml .Values.controller.customStartupProbe | nindent 12 }}
+          {{- end }}
+          {{- if .Values.controller.lifecycleHooks }}
+          lifecycle: {{- toYaml .Values.controller.lifecycleHooks | nindent 12 }}
+          {{- end }}
+          {{- if .Values.controller.resources }}
+          resources: {{- toYaml .Values.controller.resources | nindent 12 }}
+          {{- end }}
+          volumeMounts:
+            - name: storm-config
+              mountPath: /conf
+              readOnly: true
+            {{- if .Values.controller.extraVolumeMounts }}
+            {{- toYaml .Values.controller.extraVolumeMounts | nindent 12 }}
+            {{- end }}
+        {{- if .Values.controller.sidecars }}
+        {{- toYaml .Values.controller.sidecars | nindent 8 }}
+        {{- end }}
+      volumes:
+        - name: storm-config
+          configMap:
+            name: {{ include "storm.configmapName" . }}
+        {{- if .Values.controller.extraVolumes }}
+        {{- toYaml .Values.controller.extraVolumes | nindent 8 }}
+        {{- end }}
+{{- end }}

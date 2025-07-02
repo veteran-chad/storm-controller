@@ -1,0 +1,98 @@
+{{- if and .Values.metrics.enabled .Values.metrics.prometheusRule.enabled }}
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: {{ include "storm.fullname" . }}
+  namespace: {{ default .Release.Namespace .Values.metrics.prometheusRule.namespace | quote }}
+  labels: {{- include "storm.labels" . | nindent 4 }}
+    {{- if .Values.metrics.prometheusRule.additionalLabels }}
+    {{- toYaml .Values.metrics.prometheusRule.additionalLabels | nindent 4 }}
+    {{- end }}
+  {{- if .Values.commonAnnotations }}
+  annotations: {{- include "storm.commonAnnotations" . | nindent 4 }}
+  {{- end }}
+spec:
+  {{- if .Values.metrics.prometheusRule.rules }}
+  groups:
+    - name: {{ include "storm.fullname" . }}
+      rules: {{- toYaml .Values.metrics.prometheusRule.rules | nindent 8 }}
+  {{- else }}
+  groups:
+    - name: {{ include "storm.fullname" . }}
+      interval: 30s
+      rules:
+        # Nimbus alerts
+        - alert: StormNimbusDown
+          expr: up{job="{{ include "storm.fullname" . }}", storm_component="nimbus"} == 0
+          for: 5m
+          labels:
+            severity: critical
+            component: nimbus
+          annotations:
+            summary: "Storm Nimbus instance is down"
+            description: "Storm Nimbus instance {{ "{{ $labels.pod }}" }} has been down for more than 5 minutes."
+        
+        # Supervisor alerts
+        - alert: StormSupervisorDown
+          expr: up{job="{{ include "storm.fullname" . }}", storm_component="supervisor"} == 0
+          for: 5m
+          labels:
+            severity: warning
+            component: supervisor
+          annotations:
+            summary: "Storm Supervisor instance is down"
+            description: "Storm Supervisor instance {{ "{{ $labels.pod }}" }} has been down for more than 5 minutes."
+        
+        - alert: StormSupervisorLowAvailableSlots
+          expr: storm_supervisor_available_slots < 1
+          for: 10m
+          labels:
+            severity: warning
+            component: supervisor
+          annotations:
+            summary: "Storm Supervisor has low available slots"
+            description: "Storm Supervisor {{ "{{ $labels.pod }}" }} has less than 1 available slot for more than 10 minutes."
+        
+        # Topology alerts
+        - alert: StormTopologyHighLatency
+          expr: storm_topology_complete_latency_ms > 1000
+          for: 5m
+          labels:
+            severity: warning
+            component: topology
+          annotations:
+            summary: "Storm topology has high latency"
+            description: "Storm topology {{ "{{ $labels.topology }}" }} has complete latency above 1000ms for more than 5 minutes."
+        
+        - alert: StormTopologyHighFailureRate
+          expr: rate(storm_topology_failed_count[5m]) > 0.1
+          for: 5m
+          labels:
+            severity: warning
+            component: topology
+          annotations:
+            summary: "Storm topology has high failure rate"
+            description: "Storm topology {{ "{{ $labels.topology }}" }} has failure rate above 10% for more than 5 minutes."
+        
+        # Worker alerts
+        - alert: StormWorkerHighMemoryUsage
+          expr: (container_memory_working_set_bytes{pod=~".*-worker-.*"} / container_spec_memory_limit_bytes{pod=~".*-worker-.*"}) > 0.9
+          for: 5m
+          labels:
+            severity: warning
+            component: worker
+          annotations:
+            summary: "Storm worker has high memory usage"
+            description: "Storm worker {{ "{{ $labels.pod }}" }} is using more than 90% of its memory limit."
+        
+        - alert: StormWorkerHighCPUUsage
+          expr: rate(container_cpu_usage_seconds_total{pod=~".*-worker-.*"}[5m]) > 0.9
+          for: 5m
+          labels:
+            severity: warning
+            component: worker
+          annotations:
+            summary: "Storm worker has high CPU usage"
+            description: "Storm worker {{ "{{ $labels.pod }}" }} is using more than 90% CPU for more than 5 minutes."
+  {{- end }}
+{{- end }}

@@ -1,0 +1,16 @@
+# Enable controller with local image
+controller:
+  enabled: true
+  image:
+    repository: storm-controller
+    tag: latest
+    pullPolicy: Never  # Use local image
+  
+  # Reduce resources for testing
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 500m
+      memory: 256Mi

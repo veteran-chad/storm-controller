@@ -1,0 +1,218 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ include "storm.nimbus.fullname" . }}
+  namespace: {{ .Release.Namespace | quote }}
+  labels: {{- include "storm.labels" . | nindent 4 }}
+    app.kubernetes.io/component: nimbus
+  {{- if .Values.commonAnnotations }}
+  annotations: {{- include "storm.commonAnnotations" . | nindent 4 }}
+  {{- end }}
+spec:
+  serviceName: {{ include "storm.nimbus.headless.serviceName" . }}
+  replicas: {{ .Values.nimbus.replicaCount }}
+  podManagementPolicy: "Parallel"
+  selector:
+    matchLabels: {{- include "storm.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: nimbus
+  updateStrategy:
+    type: {{ .Values.nimbus.updateStrategy.type }}
+    {{- if (eq "RollingUpdate" .Values.nimbus.updateStrategy.type) }}
+    rollingUpdate: {{- toYaml .Values.nimbus.updateStrategy.rollingUpdate | nindent 6 }}
+    {{- end }}
+  template:
+    metadata:
+      labels: {{- include "storm.labels" . | nindent 8 }}
+        app.kubernetes.io/component: nimbus
+        {{- if .Values.nimbus.podLabels }}
+        {{- toYaml .Values.nimbus.podLabels | nindent 8 }}
+        {{- end }}
+      annotations:
+        checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}
+        {{- if .Values.nimbus.podAnnotations }}
+        {{- toYaml .Values.nimbus.podAnnotations | nindent 8 }}
+        {{- end }}
+    spec:
+      {{- include "storm.imagePullSecrets" . | nindent 6 }}
+      serviceAccountName: {{ include "storm.serviceAccountName" . }}
+      {{- if .Values.nimbus.hostAliases }}
+      hostAliases: {{- toYaml .Values.nimbus.hostAliases | nindent 8 }}
+      {{- end }}
+      {{- if .Values.nimbus.podSecurityContext.enabled }}
+      securityContext: {{- omit .Values.nimbus.podSecurityContext "enabled" | toYaml | nindent 8 }}
+      {{- end }}
+      {{- if .Values.nimbus.priorityClassName }}
+      priorityClassName: {{ .Values.nimbus.priorityClassName | quote }}
+      {{- end }}
+      {{- if .Values.nimbus.schedulerName }}
+      schedulerName: {{ .Values.nimbus.schedulerName | quote }}
+      {{- end }}
+      {{- if .Values.nimbus.topologySpreadConstraints }}
+      topologySpreadConstraints: {{- toYaml .Values.nimbus.topologySpreadConstraints | nindent 8 }}
+      {{- end }}
+      {{- if .Values.nimbus.nodeSelector }}
+      nodeSelector: {{- toYaml .Values.nimbus.nodeSelector | nindent 8 }}
+      {{- end }}
+      {{- if .Values.nimbus.tolerations }}
+      tolerations: {{- toYaml .Values.nimbus.tolerations | nindent 8 }}
+      {{- end }}
+      {{- if .Values.nimbus.affinity }}
+      affinity: {{- toYaml .Values.nimbus.affinity | nindent 8 }}
+      {{- else }}
+      affinity:
+        {{- if .Values.nimbus.podAffinityPreset }}
+        podAffinity: {{- toYaml .Values.nimbus.podAffinityPreset | nindent 10 }}
+        {{- end }}
+        {{- if .Values.nimbus.podAntiAffinityPreset }}
+        podAntiAffinity:
+          {{- include "storm.podAntiAffinityPreset" (dict "component" "nimbus" "context" $ "preset" .Values.nimbus.podAntiAffinityPreset) | nindent 10 }}
+        {{- end }}
+        {{- if .Values.nimbus.nodeAffinityPreset.type }}
+        nodeAffinity:
+          {{- include "storm.nodeAffinityPreset" .Values.nimbus.nodeAffinityPreset | nindent 10 }}
+        {{- end }}
+      {{- end }}
+      {{- if .Values.nimbus.terminationGracePeriodSeconds }}
+      terminationGracePeriodSeconds: {{ .Values.nimbus.terminationGracePeriodSeconds }}
+      {{- end }}
+      initContainers:
+        - name: wait-for-zookeeper
+          image: busybox:1.36
+          imagePullPolicy: IfNotPresent
+          command:
+            - sh
+            - -c
+            - |
+              until nc -z {{ include "storm.zookeeper.connect" . }} 2181; do
+                echo "Waiting for Zookeeper to be ready..."
+                sleep 5
+              done
+              echo "Zookeeper is ready!"
+      containers:
+        - name: nimbus
+          image: {{ include "storm.image" . }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          {{- if .Values.nimbus.containerSecurityContext.enabled }}
+          securityContext: {{- omit .Values.nimbus.containerSecurityContext "enabled" | toYaml | nindent 12 }}
+          {{- end }}
+          {{- if .Values.nimbus.command }}
+          command: {{- toYaml .Values.nimbus.command | nindent 12 }}
+          {{- else }}
+          command:
+            - storm
+            - nimbus
+          {{- end }}
+          {{- if .Values.nimbus.args }}
+          args: {{- toYaml .Values.nimbus.args | nindent 12 }}
+          {{- end }}
+          env:
+            {{- include "storm.commonEnv" . | nindent 12 }}
+            - name: STORM_CONF_DIR
+              value: "/conf"
+            {{- if .Values.nimbus.extraEnvVars }}
+            {{- toYaml .Values.nimbus.extraEnvVars | nindent 12 }}
+            {{- end }}
+          {{- if or .Values.nimbus.extraEnvVarsCM .Values.nimbus.extraEnvVarsSecret }}
+          envFrom:
+            {{- if .Values.nimbus.extraEnvVarsCM }}
+            - configMapRef:
+                name: {{ .Values.nimbus.extraEnvVarsCM }}
+            {{- end }}
+            {{- if .Values.nimbus.extraEnvVarsSecret }}
+            - secretRef:
+                name: {{ .Values.nimbus.extraEnvVarsSecret }}
+            {{- end }}
+          {{- end }}
+          ports:
+            {{- include "storm.containerPorts" "nimbus" | nindent 12 }}
+          {{- if .Values.nimbus.livenessProbe.enabled }}
+          livenessProbe:
+            tcpSocket:
+              port: thrift
+            initialDelaySeconds: {{ .Values.nimbus.livenessProbe.initialDelaySeconds }}
+            periodSeconds: {{ .Values.nimbus.livenessProbe.periodSeconds }}
+            timeoutSeconds: {{ .Values.nimbus.livenessProbe.timeoutSeconds }}
+            failureThreshold: {{ .Values.nimbus.livenessProbe.failureThreshold }}
+            successThreshold: {{ .Values.nimbus.livenessProbe.successThreshold }}
+          {{- else if .Values.nimbus.customLivenessProbe }}
+          livenessProbe: {{- toYaml .Values.nimbus.customLivenessProbe | nindent 12 }}
+          {{- end }}
+          {{- if .Values.nimbus.readinessProbe.enabled }}
+          readinessProbe:
+            tcpSocket:
+              port: thrift
+            initialDelaySeconds: {{ .Values.nimbus.readinessProbe.initialDelaySeconds }}
+            periodSeconds: {{ .Values.nimbus.readinessProbe.periodSeconds }}
+            timeoutSeconds: {{ .Values.nimbus.readinessProbe.timeoutSeconds }}
+            failureThreshold: {{ .Values.nimbus.readinessProbe.failureThreshold }}
+            successThreshold: {{ .Values.nimbus.readinessProbe.successThreshold }}
+          {{- else if .Values.nimbus.customReadinessProbe }}
+          readinessProbe: {{- toYaml .Values.nimbus.customReadinessProbe | nindent 12 }}
+          {{- end }}
+          {{- if .Values.nimbus.startupProbe.enabled }}
+          startupProbe:
+            tcpSocket:
+              port: thrift
+            initialDelaySeconds: {{ .Values.nimbus.startupProbe.initialDelaySeconds }}
+            periodSeconds: {{ .Values.nimbus.startupProbe.periodSeconds }}
+            timeoutSeconds: {{ .Values.nimbus.startupProbe.timeoutSeconds }}
+            failureThreshold: {{ .Values.nimbus.startupProbe.failureThreshold }}
+            successThreshold: {{ .Values.nimbus.startupProbe.successThreshold }}
+          {{- else if .Values.nimbus.customStartupProbe }}
+          startupProbe: {{- toYaml .Values.nimbus.customStartupProbe | nindent 12 }}
+          {{- end }}
+          {{- if .Values.nimbus.lifecycleHooks }}
+          lifecycle: {{- toYaml .Values.nimbus.lifecycleHooks | nindent 12 }}
+          {{- end }}
+          {{- if .Values.nimbus.resources }}
+          resources: {{- toYaml .Values.nimbus.resources | nindent 12 }}
+          {{- end }}
+          volumeMounts:
+            - name: storm-config
+              mountPath: /conf
+            - name: storm-logs
+              mountPath: /logs
+            - name: data
+              mountPath: /storm/data
+            {{- if .Values.nimbus.extraVolumeMounts }}
+            {{- toYaml .Values.nimbus.extraVolumeMounts | nindent 12 }}
+            {{- end }}
+      volumes:
+        - name: storm-config
+          configMap:
+            name: {{ include "storm.configmapName" . }}
+        - name: storm-logs
+          emptyDir: {}
+        {{- if not .Values.nimbus.persistence.enabled }}
+        - name: data
+          emptyDir: {}
+        {{- end }}
+        {{- if .Values.nimbus.extraVolumes }}
+        {{- toYaml .Values.nimbus.extraVolumes | nindent 8 }}
+        {{- end }}
+  {{- if .Values.nimbus.persistence.enabled }}
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+        {{- if .Values.nimbus.persistence.annotations }}
+        annotations: {{- toYaml .Values.nimbus.persistence.annotations | nindent 10 }}
+        {{- end }}
+      spec:
+        accessModes: {{- toYaml .Values.nimbus.persistence.accessModes | nindent 10 }}
+        {{- if .Values.nimbus.persistence.storageClass }}
+        {{- if (eq "-" .Values.nimbus.persistence.storageClass) }}
+        storageClassName: ""
+        {{- else }}
+        storageClassName: {{ .Values.nimbus.persistence.storageClass | quote }}
+        {{- end }}
+        {{- end }}
+        resources:
+          requests:
+            storage: {{ .Values.nimbus.persistence.size | quote }}
+        {{- if .Values.nimbus.persistence.selector }}
+        selector: {{- toYaml .Values.nimbus.persistence.selector | nindent 10 }}
+        {{- end }}
+        {{- if .Values.nimbus.persistence.dataSource }}
+        dataSource: {{- toYaml .Values.nimbus.persistence.dataSource | nindent 10 }}
+        {{- end }}
+  {{- end }}

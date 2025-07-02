@@ -1,0 +1,51 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "storm.supervisor.serviceName" . }}
+  namespace: {{ .Release.Namespace | quote }}
+  labels: {{- include "storm.labels" . | nindent 4 }}
+    app.kubernetes.io/component: supervisor
+  {{- if or .Values.supervisor.service.annotations .Values.commonAnnotations }}
+  annotations:
+    {{- if .Values.supervisor.service.annotations }}
+    {{- toYaml .Values.supervisor.service.annotations | nindent 4 }}
+    {{- end }}
+    {{- if .Values.commonAnnotations }}
+    {{- include "storm.commonAnnotations" . | nindent 4 }}
+    {{- end }}
+  {{- end }}
+spec:
+  type: {{ .Values.supervisor.service.type }}
+  {{- if and .Values.supervisor.service.clusterIP (eq .Values.supervisor.service.type "ClusterIP") }}
+  clusterIP: {{ .Values.supervisor.service.clusterIP }}
+  {{- end }}
+  {{- if and .Values.supervisor.service.loadBalancerIP (eq .Values.supervisor.service.type "LoadBalancer") }}
+  loadBalancerIP: {{ .Values.supervisor.service.loadBalancerIP }}
+  {{- end }}
+  {{- if and (eq .Values.supervisor.service.type "LoadBalancer") .Values.supervisor.service.loadBalancerSourceRanges }}
+  loadBalancerSourceRanges: {{- toYaml .Values.supervisor.service.loadBalancerSourceRanges | nindent 4 }}
+  {{- end }}
+  {{- if or (eq .Values.supervisor.service.type "LoadBalancer") (eq .Values.supervisor.service.type "NodePort") }}
+  externalTrafficPolicy: {{ .Values.supervisor.service.externalTrafficPolicy | quote }}
+  {{- end }}
+  {{- if .Values.supervisor.service.sessionAffinity }}
+  sessionAffinity: {{ .Values.supervisor.service.sessionAffinity }}
+  {{- end }}
+  {{- if .Values.supervisor.service.sessionAffinityConfig }}
+  sessionAffinityConfig: {{- toYaml .Values.supervisor.service.sessionAffinityConfig | nindent 4 }}
+  {{- end }}
+  ports:
+    - name: http
+      port: {{ .Values.supervisor.service.ports.http }}
+      targetPort: http
+      protocol: TCP
+      {{- if and (or (eq .Values.supervisor.service.type "NodePort") (eq .Values.supervisor.service.type "LoadBalancer")) .Values.supervisor.service.nodePorts.http }}
+      nodePort: {{ .Values.supervisor.service.nodePorts.http }}
+      {{- else if eq .Values.supervisor.service.type "ClusterIP" }}
+      nodePort: null
+      {{- end }}
+    {{- if .Values.supervisor.service.extraPorts }}
+    {{- toYaml .Values.supervisor.service.extraPorts | nindent 4 }}
+    {{- end }}
+  selector: {{- include "storm.selectorLabels" . | nindent 4 }}
+    app.kubernetes.io/component: supervisor

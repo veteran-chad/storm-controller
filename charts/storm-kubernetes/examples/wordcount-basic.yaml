@@ -1,0 +1,38 @@
+# Basic WordCount topology example
+apiVersion: storm.apache.org/v1alpha1
+kind: StormTopology
+metadata:
+  name: wordcount-basic
+  namespace: storm-system
+spec:
+  # URL to the Storm examples JAR
+  # Note: You'll need to replace this with an actual URL to a Storm examples JAR
+  jarUrl: https://repo1.maven.org/maven2/org/apache/storm/storm-starter/2.4.0/storm-starter-2.4.0.jar
+  
+  # Main class for the WordCount topology
+  mainClass: org.apache.storm.starter.WordCountTopology
+  
+  # Arguments to pass to the topology
+  args:
+    - wordcount
+  
+  # Storm configuration
+  config:
+    topology.workers: "2"
+    topology.debug: "false"
+    topology.max.spout.pending: "1000"
+  
+  # Update strategy (rebalance or kill-restart)
+  updateStrategy: rebalance
+  
+  # Worker pool configuration (optional)
+  # If not specified, workers will be scheduled on supervisor nodes
+  workerPool:
+    replicas: 2
+    resources:
+      requests:
+        memory: "1Gi"
+        cpu: "500m"
+      limits:
+        memory: "2Gi"
+        cpu: "1000m"

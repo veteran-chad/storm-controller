@@ -1,0 +1,12 @@
+# Adjust health checks
+supervisor:
+  livenessProbe:
+    enabled: false
+  readinessProbe:
+    enabled: false
+    
+ui:
+  livenessProbe:
+    initialDelaySeconds: 120
+  readinessProbe:
+    initialDelaySeconds: 120

@@ -1,0 +1,15 @@
+# Debug values - keep container running
+nimbus:
+  command:
+    - /bin/bash
+    - -c
+    - |
+      echo "Checking configuration..."
+      ls -la /conf/
+      echo "Checking storm data directory..."
+      ls -la /storm/
+      echo "Setting STORM_CONF_DIR..."
+      export STORM_CONF_DIR=/conf
+      echo "Storm conf dir: $STORM_CONF_DIR"
+      echo "Starting Nimbus with config dir..."
+      exec storm nimbus

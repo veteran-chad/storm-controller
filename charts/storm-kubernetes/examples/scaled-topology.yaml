@@ -1,0 +1,149 @@
+# Advanced Scaled Storm Topology Example
+apiVersion: storm.apache.org/v1beta1
+kind: StormTopology
+metadata:
+  name: streaming-analytics-topology
+  namespace: storm-apps
+  labels:
+    app: streaming-analytics
+    team: data-engineering
+spec:
+  # Reference to the StormCluster resource
+  clusterRef: production-storm
+  
+  # Topology configuration
+  topology:
+    name: streaming-analytics
+    # JAR from S3
+    jar:
+      s3:
+        bucket: my-topology-jars
+        key: streaming-analytics/v1.2.0/topology.jar
+        region: us-east-1
+        credentialsSecret: aws-credentials
+    mainClass: "com.example.StreamingAnalyticsTopology"
+    args:
+      - "--config=/topology/config.yaml"
+      - "--environment=production"
+    # Advanced topology configuration
+    config:
+      topology.workers: 10
+      topology.acker.executors: 5
+      topology.max.spout.pending: 5000
+      topology.message.timeout.secs: 60
+      topology.max.task.parallelism: 100
+      topology.executor.receive.buffer.size: 16384
+      topology.executor.send.buffer.size: 16384
+      topology.transfer.buffer.size: 32
+      topology.worker.childopts: "-Xmx2048m -XX:+UseG1GC"
+  
+  # Worker configuration with advanced settings
+  workers:
+    replicas: 10
+    resources:
+      requests:
+        cpu: "2"
+        memory: "4Gi"
+      limits:
+        cpu: "4"
+        memory: "8Gi"
+    # JVM options for workers
+    jvmOpts:
+      - "-Xmx6g"
+      - "-Xms6g"
+      - "-XX:+UseG1GC"
+      - "-XX:MaxGCPauseMillis=200"
+      - "-XX:InitiatingHeapOccupancyPercent=45"
+      - "-XX:+PrintGCDetails"
+      - "-XX:+PrintGCDateStamps"
+      - "-Xloggc:/logs/gc.log"
+    
+    # Advanced autoscaling configuration
+    autoscaling:
+      enabled: true
+      minReplicas: 5
+      maxReplicas: 20
+      metrics:
+      - type: cpu
+        target:
+          averageUtilization: 60
+      - type: memory
+        target:
+          averageUtilization: 70
+      - type: pending-tuples
+        target:
+          value: "50000"
+      - type: capacity
+        target:
+          averageValue: "0.8"
+      - type: latency
+        target:
+          averageValue: "100ms"
+      behavior:
+        scaleDown:
+          stabilizationWindowSeconds: 300
+          policies:
+          - type: Percent
+            value: 10
+            periodSeconds: 60
+          - type: Pods
+            value: 1
+            periodSeconds: 120
+        scaleUp:
+          stabilizationWindowSeconds: 60
+          policies:
+          - type: Percent
+            value: 50
+            periodSeconds: 60
+          - type: Pods
+            value: 3
+            periodSeconds: 60
+    
+    # Pod placement preferences
+    nodeSelector:
+      workload-type: storm
+      instance-type: compute-optimized
+    
+    tolerations:
+    - key: storm-workload
+      operator: Equal
+      value: "true"
+      effect: NoSchedule
+    
+    affinity:
+      podAntiAffinity:
+        preferredDuringSchedulingIgnoredDuringExecution:
+        - weight: 100
+          podAffinityTerm:
+            labelSelector:
+              matchExpressions:
+              - key: topology
+                operator: In
+                values:
+                - streaming-analytics
+            topologyKey: kubernetes.io/hostname
+    
+    # Additional pod configuration
+    podAnnotations:
+      prometheus.io/scrape: "true"
+      prometheus.io/port: "8080"
+      prometheus.io/path: "/metrics"
+    
+    podLabels:
+      topology: streaming-analytics
+      tier: production
+      monitoring: enabled
+  
+  # Lifecycle management
+  lifecycle:
+    killTimeout: 60
+    updateStrategy: rolling
+    preStop:
+      exec:
+        command:
+        - /bin/sh
+        - -c
+        - |
+          # Gracefully drain the worker
+          storm drain-worker $WORKER_ID
+          sleep 30
