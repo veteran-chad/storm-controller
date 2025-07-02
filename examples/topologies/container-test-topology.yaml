@@ -1,0 +1,33 @@
+apiVersion: storm.apache.org/v1beta1
+kind: StormTopology
+metadata:
+  name: wordcount-container-test
+  namespace: storm-system
+spec:
+  clusterRef: test-storm
+  topology:
+    name: wordcount-container
+    jar:
+      container:
+        # Using a generic busybox image for testing - in real usage this would be your topology image
+        image: "busybox:1.35"
+        path: "/app/topology.jar"
+        pullPolicy: IfNotPresent
+        extractionMode: "job"
+        extractionTimeoutSeconds: 300
+        resources:
+          requests:
+            cpu: 50m
+            memory: 64Mi
+          limits:
+            cpu: 200m
+            memory: 128Mi
+        securityContext:
+          runAsNonRoot: true
+          runAsUser: 1000
+          allowPrivilegeEscalation: false
+    mainClass: org.apache.storm.starter.WordCountTopology
+    config:
+      topology.workers: "2"
+  workers:
+    replicas: 2

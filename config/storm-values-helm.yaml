@@ -1,0 +1,7 @@
+supervisor:
+  replicaCount: 2
+  # Disable readiness probe as supervisor doesn't have HTTP endpoint
+  readinessProbe:
+    enabled: false
+  livenessProbe:
+    enabled: false

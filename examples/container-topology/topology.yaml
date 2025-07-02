@@ -1,0 +1,133 @@
+apiVersion: storm.apache.org/v1beta1
+kind: StormTopology
+metadata:
+  name: wordcount-container
+  namespace: storm-apps
+spec:
+  clusterRef: storm-cluster
+  topology:
+    name: wordcount-from-container
+    jar:
+      container:
+        # Container image containing the JAR file
+        image: "myregistry.com/storm-topologies/wordcount:v1.0.0"
+        # Path to JAR inside the container
+        path: "/app/topology.jar"
+        # Image pull policy
+        pullPolicy: IfNotPresent
+        # Secrets for private registries
+        pullSecrets:
+        - name: registry-secret
+        # JAR extraction strategy
+        extractionMode: "job"  # job, initContainer, or sidecar
+        # Timeout for extraction
+        extractionTimeoutSeconds: 300
+        # Resource requirements for extraction
+        resources:
+          requests:
+            cpu: 100m
+            memory: 128Mi
+          limits:
+            cpu: 500m
+            memory: 256Mi
+        # Security context for extraction container
+        securityContext:
+          runAsNonRoot: true
+          runAsUser: 1000
+          allowPrivilegeEscalation: false
+        # Environment variables for extraction
+        env:
+        - name: JAVA_OPTS
+          value: "-Xmx128m"
+        # Optional checksum verification
+        checksum:
+          algorithm: sha256
+          value: "abc123def456789..."
+    mainClass: com.example.WordCountTopology
+    args:
+    - "10"  # Number of words to generate
+    config:
+      topology.workers: "3"
+      topology.max.spout.pending: "1000"
+      topology.message.timeout.secs: "30"
+  workers:
+    replicas: 3
+    resources:
+      requests:
+        cpu: 500m
+        memory: 1Gi
+      limits:
+        cpu: 1000m
+        memory: 2Gi
+    autoscaling:
+      enabled: true
+      minReplicas: 2
+      maxReplicas: 10
+      metrics:
+      - type: cpu
+        target:
+          averageUtilization: 70
+      - type: pending-tuples
+        target:
+          averageValue: "100"
+  lifecycle:
+    updateStrategy: rolling
+    killWaitSeconds: 30
+---
+apiVersion: storm.apache.org/v1beta1
+kind: StormTopology
+metadata:
+  name: analytics-container
+  namespace: storm-apps
+spec:
+  clusterRef: storm-cluster
+  topology:
+    name: analytics-pipeline
+    jar:
+      container:
+        # Example with sidecar extraction mode
+        image: "myregistry.com/storm-topologies/analytics:v2.1.0"
+        path: "/opt/storm/topology.jar"
+        pullPolicy: Always
+        extractionMode: "sidecar"
+        # Example with volume mounts for shared libraries
+        volumeMounts:
+        - name: shared-libs
+          mountPath: /opt/storm/lib-ext
+        env:
+        - name: TOPOLOGY_VERSION
+          value: "v2.1.0"
+        - name: ENABLE_METRICS
+          value: "true"
+    mainClass: com.company.analytics.AnalyticsTopology
+    config:
+      topology.workers: "5"
+      topology.acker.executors: "2"
+      topology.max.spout.pending: "2000"
+      # Custom topology configuration
+      analytics.window.size: "300"
+      analytics.output.format: "json"
+  workers:
+    replicas: 5
+    resources:
+      requests:
+        cpu: 1000m
+        memory: 2Gi
+      limits:
+        cpu: 2000m
+        memory: 4Gi
+    # Node selector for high-performance nodes
+    nodeSelector:
+      workload-type: "analytics"
+    # Pod anti-affinity for high availability
+    affinity:
+      podAntiAffinity:
+        preferredDuringSchedulingIgnoredDuringExecution:
+        - weight: 100
+          podAffinityTerm:
+            labelSelector:
+              matchExpressions:
+              - key: storm.apache.org/topology
+                operator: In
+                values: ["analytics-pipeline"]
+            topologyKey: kubernetes.io/hostname

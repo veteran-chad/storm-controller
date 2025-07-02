@@ -1,0 +1,12 @@
+# Deploy the controller separately to test it
+image:
+  repository: apache/storm-controller
+  tag: latest
+  pullPolicy: Never
+
+# Point to the Helm-deployed Storm cluster
+env:
+  - name: STORM_CLUSTER_NAME
+    value: "storm-cluster-storm-kubernetes"
+  - name: STORM_NAMESPACE
+    value: "storm-system"

@@ -1,0 +1,11 @@
+apiVersion: storm.apache.org/v1beta1
+kind: StormCluster
+metadata:
+  name: storm-cluster-storm-kubernetes
+  namespace: storm-system
+spec:
+  nimbusService: storm-cluster-storm-kubernetes-nimbus
+  nimbusPort: 6627
+  uiService: storm-cluster-storm-kubernetes-ui
+  uiPort: 8080
+  restApiEnabled: true

@@ -1,0 +1,20 @@
+apiVersion: storm.apache.org/v1beta1
+kind: StormTopology
+metadata:
+  name: wordcount-container-simple
+  namespace: storm-system
+spec:
+  clusterRef: storm-cluster-storm-kubernetes
+  topology:
+    name: wordcount-container-simple
+    jar:
+      container:
+        image: "busybox:1.35"
+        path: "/app/topology.jar"
+        pullPolicy: IfNotPresent
+        extractionMode: "job"
+    mainClass: org.apache.storm.starter.WordCountTopology
+    config:
+      topology.workers: "2"
+  workers:
+    replicas: 2

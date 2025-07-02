@@ -1,0 +1,175 @@
+# GitHub Actions CI/CD Pipeline for Container-Based Storm Topologies
+name: Build and Deploy Storm Topology
+
+on:
+  push:
+    branches: [main, develop]
+    paths: 
+    - 'src/topologies/**'
+    - 'examples/container-topology/**'
+  pull_request:
+    branches: [main]
+    paths:
+    - 'src/topologies/**'
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: storm-topologies
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        topology: [wordcount, analytics, streaming-etl]
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+    
+    - name: Set up JDK 11
+      uses: actions/setup-java@v4
+      with:
+        java-version: '11'
+        distribution: 'temurin'
+        cache: maven
+    
+    - name: Build topology JAR
+      run: |
+        cd src/topologies/${{ matrix.topology }}
+        mvn clean package -DskipTests=false
+        ls -la target/
+    
+    - name: Run unit tests
+      run: |
+        cd src/topologies/${{ matrix.topology }}
+        mvn test
+    
+    - name: Generate JAR checksum
+      id: checksum
+      run: |
+        cd src/topologies/${{ matrix.topology }}/target
+        JAR_FILE=$(ls *.jar | head -1)
+        CHECKSUM=$(sha256sum $JAR_FILE | cut -d' ' -f1)
+        echo "jar-checksum=$CHECKSUM" >> $GITHUB_OUTPUT
+        echo "jar-file=$JAR_FILE" >> $GITHUB_OUTPUT
+    
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v3
+    
+    - name: Log in to Container Registry
+      uses: docker/login-action@v3
+      with:
+        registry: ${{ env.REGISTRY }}
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+    
+    - name: Extract metadata
+      id: meta
+      uses: docker/metadata-action@v5
+      with:
+        images: ${{ env.REGISTRY }}/${{ github.repository }}/${{ env.IMAGE_NAME }}/${{ matrix.topology }}
+        tags: |
+          type=ref,event=branch
+          type=ref,event=pr
+          type=sha,prefix={{branch}}-
+          type=raw,value=latest,enable={{is_default_branch}}
+    
+    - name: Build and push Docker image
+      uses: docker/build-push-action@v5
+      with:
+        context: src/topologies/${{ matrix.topology }}
+        file: examples/container-topology/Dockerfile
+        push: true
+        tags: ${{ steps.meta.outputs.tags }}
+        labels: ${{ steps.meta.outputs.labels }}
+        cache-from: type=gha
+        cache-to: type=gha,mode=max
+        build-args: |
+          JAR_FILE=${{ steps.checksum.outputs.jar-file }}
+          BUILD_VERSION=${{ github.sha }}
+    
+    - name: Update topology YAML with new image
+      if: github.ref == 'refs/heads/main'
+      run: |
+        IMAGE_TAG="${{ env.REGISTRY }}/${{ github.repository }}/${{ env.IMAGE_NAME }}/${{ matrix.topology }}:${{ github.sha }}"
+        sed -i "s|image: .*|image: \"$IMAGE_TAG\"|g" examples/container-topology/${{ matrix.topology }}-topology.yaml
+        sed -i "s|value: \".*\"|value: \"${{ steps.checksum.outputs.jar-checksum }}\"|g" examples/container-topology/${{ matrix.topology }}-topology.yaml
+    
+    - name: Upload topology artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: topology-${{ matrix.topology }}
+        path: |
+          src/topologies/${{ matrix.topology }}/target/*.jar
+          examples/container-topology/${{ matrix.topology }}-topology.yaml
+
+  deploy-to-staging:
+    needs: build-and-test
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/develop'
+    environment: staging
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+    
+    - name: Configure kubectl
+      uses: azure/k8s-set-context@v3
+      with:
+        method: kubeconfig
+        kubeconfig: ${{ secrets.KUBE_CONFIG_STAGING }}
+    
+    - name: Download topology artifacts
+      uses: actions/download-artifact@v4
+      with:
+        pattern: topology-*
+        merge-multiple: true
+    
+    - name: Deploy to staging
+      run: |
+        kubectl apply -f examples/container-topology/ -n storm-staging
+        kubectl wait --for=condition=Ready stormtopology --all -n storm-staging --timeout=300s
+
+  deploy-to-production:
+    needs: build-and-test
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main'
+    environment: production
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+    
+    - name: Configure kubectl
+      uses: azure/k8s-set-context@v3
+      with:
+        method: kubeconfig
+        kubeconfig: ${{ secrets.KUBE_CONFIG_PRODUCTION }}
+    
+    - name: Download topology artifacts
+      uses: actions/download-artifact@v4
+      with:
+        pattern: topology-*
+        merge-multiple: true
+    
+    - name: Deploy to production
+      run: |
+        # Apply topology updates with rolling deployment
+        kubectl apply -f examples/container-topology/ -n storm-production
+        
+        # Wait for deployment to complete
+        for topology in wordcount analytics streaming-etl; do
+          echo "Waiting for $topology to be ready..."
+          kubectl wait --for=condition=Ready stormtopology $topology-container -n storm-production --timeout=600s
+        done
+    
+    - name: Verify deployment
+      run: |
+        kubectl get stormtopology -n storm-production
+        kubectl get stormworkerpool -n storm-production
+        
+        # Check metrics endpoint
+        kubectl port-forward svc/storm-controller-metrics 8080:8080 -n storm-system &
+        sleep 5
+        curl -s http://localhost:8080/metrics | grep storm_topology_info
