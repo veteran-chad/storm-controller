@@ -1,0 +1,18 @@
+# Ignore vulnerabilities in Apache Storm base image dependencies
+# These are inherited from the official storm:* Docker images and cannot be fixed by us
+
+# protobuf-java vulnerabilities in Storm dependencies
+CVE-2021-22569
+CVE-2022-3509
+CVE-2022-3510
+CVE-2024-7254
+
+# commons-beanutils vulnerability in Storm dependencies
+CVE-2025-48734
+
+# netty-handler vulnerability in Storm dependencies
+CVE-2025-24970
+
+# Apache Calcite vulnerabilities in Storm dependencies
+CVE-2022-36364
+CVE-2022-39135
