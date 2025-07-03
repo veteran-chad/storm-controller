@@ -88,6 +88,15 @@ jobs:
         with:
           version: 'latest'
           
+      - name: Add Helm repositories
+        run: |
+          helm repo add bitnami https://charts.bitnami.com/bitnami
+          helm repo update
+          
+      - name: Build Helm dependencies
+        run: |
+          helm dependency build charts/storm-kubernetes
+          
       - name: Lint Helm charts
         run: |
           helm lint charts/storm-kubernetes

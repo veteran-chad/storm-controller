@@ -83,8 +83,12 @@ jar-image-push: ## Push JAR container images
 
 ##@ Helm
 
+.PHONY: helm-deps
+helm-deps: ## Build Helm chart dependencies
+	helm dependency build charts/storm-kubernetes
+
 .PHONY: helm-lint
-helm-lint: ## Lint Helm chart
+helm-lint: helm-deps ## Lint Helm chart
 	helm lint charts/storm-kubernetes
 
 .PHONY: helm-package
