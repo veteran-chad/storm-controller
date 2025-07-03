@@ -1,4 +1,4 @@
-module github.com/apache/storm/storm-controller
+module github.com/veteran-chad/storm-controller
 
 go 1.21
 

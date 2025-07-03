@@ -25,8 +25,8 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
-	stormv1beta1 "github.com/apache/storm/storm-controller/api/v1beta1"
-	"github.com/apache/storm/storm-controller/pkg/metrics"
+	stormv1beta1 "github.com/veteran-chad/storm-controller/api/v1beta1"
+	"github.com/veteran-chad/storm-controller/pkg/metrics"
 )
 
 // StormWorkerPoolReconciler reconciles a StormWorkerPool object
@@ -54,8 +54,8 @@ func (r *StormWorkerPoolReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 	}
 
 	// For now, just update status to indicate we're managing it
-	log.Info("Managing StormWorkerPool", 
-		"name", workerPool.Name, 
+	log.Info("Managing StormWorkerPool",
+		"name", workerPool.Name,
 		"topologyRef", workerPool.Spec.TopologyRef,
 		"replicas", workerPool.Spec.Replicas)
 
@@ -63,7 +63,7 @@ func (r *StormWorkerPoolReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 	workerPool.Status.Phase = "Running"
 	workerPool.Status.ReadyReplicas = workerPool.Spec.Replicas
 	workerPool.Status.Replicas = workerPool.Spec.Replicas
-	
+
 	// Update metrics
 	metrics.StormWorkerPoolReplicas.With(map[string]string{
 		"pool":      workerPool.Name,
@@ -71,19 +71,19 @@ func (r *StormWorkerPoolReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 		"topology":  workerPool.Spec.TopologyRef,
 		"state":     "desired",
 	}).Set(float64(workerPool.Spec.Replicas))
-	
+
 	metrics.StormWorkerPoolReplicas.With(map[string]string{
 		"pool":      workerPool.Name,
 		"namespace": workerPool.Namespace,
 		"topology":  workerPool.Spec.TopologyRef,
 		"state":     "ready",
 	}).Set(float64(workerPool.Status.ReadyReplicas))
-	
+
 	if err := r.Status().Update(ctx, workerPool); err != nil {
 		log.Error(err, "Failed to update worker pool status")
 		return ctrl.Result{}, err
 	}
-	
+
 	return ctrl.Result{RequeueAfter: 60 * time.Second}, nil
 }
 

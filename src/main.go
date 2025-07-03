@@ -33,11 +33,11 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 
-	stormv1beta1 "github.com/apache/storm/storm-controller/api/v1beta1"
-	"github.com/apache/storm/storm-controller/controllers"
-	"github.com/apache/storm/storm-controller/pkg/jarextractor"
-	_ "github.com/apache/storm/storm-controller/pkg/metrics" // Register metrics
-	"github.com/apache/storm/storm-controller/pkg/storm"
+	stormv1beta1 "github.com/veteran-chad/storm-controller/api/v1beta1"
+	"github.com/veteran-chad/storm-controller/controllers"
+	"github.com/veteran-chad/storm-controller/pkg/jarextractor"
+	_ "github.com/veteran-chad/storm-controller/pkg/metrics" // Register metrics
+	"github.com/veteran-chad/storm-controller/pkg/storm"
 	//+kubebuilder:scaffold:imports
 )
 

@@ -32,6 +32,9 @@ Thumbs.db
 # Build artifacts
 /src/manager
 /src/bin/
+/manager
+/bin/
+manager
 
 # Temporary files
 *.tmp

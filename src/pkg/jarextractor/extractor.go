@@ -32,7 +32,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
-	stormv1beta1 "github.com/apache/storm/storm-controller/api/v1beta1"
+	stormv1beta1 "github.com/veteran-chad/storm-controller/api/v1beta1"
 )
 
 // Extractor handles JAR extraction from container images
@@ -62,9 +62,9 @@ type ExtractResult struct {
 // ExtractJAR extracts a JAR file from a container image
 func (e *Extractor) ExtractJAR(ctx context.Context, topology *stormv1beta1.StormTopology, jarSpec *stormv1beta1.ContainerJarSource) (*ExtractResult, error) {
 	log := log.FromContext(ctx)
-	
-	log.Info("Extracting JAR from container", 
-		"image", jarSpec.Image, 
+
+	log.Info("Extracting JAR from container",
+		"image", jarSpec.Image,
 		"path", jarSpec.Path,
 		"mode", jarSpec.ExtractionMode)
 
@@ -83,7 +83,7 @@ func (e *Extractor) ExtractJAR(ctx context.Context, topology *stormv1beta1.Storm
 // extractViaJob extracts JAR using a Kubernetes Job
 func (e *Extractor) extractViaJob(ctx context.Context, topology *stormv1beta1.StormTopology, jarSpec *stormv1beta1.ContainerJarSource) (*ExtractResult, error) {
 	log := log.FromContext(ctx)
-	
+
 	// Check if job already exists
 	jobName := fmt.Sprintf("%s-jar-extractor", topology.Name)
 	job := &batchv1.Job{}
@@ -95,8 +95,8 @@ func (e *Extractor) extractViaJob(ctx context.Context, topology *stormv1beta1.St
 				// Job already completed successfully
 				log.Info("JAR extraction job already completed", "job", jobName)
 				return &ExtractResult{
-					JarPath: fmt.Sprintf("/tmp/storm-jars/%s.jar", topology.Name),
-					Size: 181889053, // Hardcoded for now
+					JarPath:  fmt.Sprintf("/tmp/storm-jars/%s.jar", topology.Name),
+					Size:     181889053, // Hardcoded for now
 					Checksum: "extracted",
 				}, nil
 			}
@@ -108,36 +108,36 @@ func (e *Extractor) extractViaJob(ctx context.Context, topology *stormv1beta1.St
 	} else {
 		// Job doesn't exist, create it
 		job = e.buildExtractionJob(topology, jarSpec)
-		
+
 		// Create the job
 		if err := e.Create(ctx, job); err != nil {
 			return nil, fmt.Errorf("failed to create extraction job: %w", err)
 		}
-		
+
 		log.Info("Created JAR extraction job", "job", job.Name)
 	}
-	
+
 	// Wait for job completion
 	timeout := time.Duration(300) // Default 5 minutes
 	if jarSpec.ExtractionTimeoutSeconds != nil {
 		timeout = time.Duration(*jarSpec.ExtractionTimeoutSeconds) * time.Second
 	}
-	
+
 	if err := e.waitForJobCompletion(ctx, job, timeout); err != nil {
 		return nil, fmt.Errorf("JAR extraction job failed: %w", err)
 	}
-	
+
 	// Get extraction results
 	result, err := e.getExtractionResults(ctx, topology, jarSpec)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get extraction results: %w", err)
 	}
-	
-	log.Info("JAR extraction completed", 
-		"path", result.JarPath, 
+
+	log.Info("JAR extraction completed",
+		"path", result.JarPath,
 		"size", result.Size,
 		"checksum", result.Checksum)
-	
+
 	return result, nil
 }
 
@@ -165,7 +165,7 @@ func (e *Extractor) buildExtractionJob(topology *stormv1beta1.StormTopology, jar
 	if jarPath == "" {
 		jarPath = "/app/topology.jar"
 	}
-	
+
 	// Build extraction script
 	extractScript := fmt.Sprintf(`
 set -e
@@ -222,7 +222,7 @@ echo "JAR extraction completed successfully"
 								ImagePullPolicy: jarSpec.PullPolicy,
 								Command:         []string{"sh", "-c", extractScript},
 								SecurityContext: jarSpec.SecurityContext,
-								Env:            jarSpec.Env,
+								Env:             jarSpec.Env,
 								VolumeMounts: append(jarSpec.VolumeMounts, corev1.VolumeMount{
 									Name:      "jar-output",
 									MountPath: "/output",
@@ -273,7 +273,7 @@ func (e *Extractor) waitForJobCompletion(ctx context.Context, job *batchv1.Job, 
 		if err := e.Get(ctx, client.ObjectKeyFromObject(job), &currentJob); err != nil {
 			return false, err
 		}
-		
+
 		// Check if job completed successfully
 		for _, condition := range currentJob.Status.Conditions {
 			if condition.Type == batchv1.JobComplete && condition.Status == corev1.ConditionTrue {
@@ -283,7 +283,7 @@ func (e *Extractor) waitForJobCompletion(ctx context.Context, job *batchv1.Job, 
 				return false, fmt.Errorf("job failed: %s", condition.Message)
 			}
 		}
-		
+
 		return false, nil // Still running
 	})
 }
@@ -291,19 +291,19 @@ func (e *Extractor) waitForJobCompletion(ctx context.Context, job *batchv1.Job, 
 // getExtractionResults retrieves the results of JAR extraction
 func (e *Extractor) getExtractionResults(ctx context.Context, topology *stormv1beta1.StormTopology, jarSpec *stormv1beta1.ContainerJarSource) (*ExtractResult, error) {
 	log := log.FromContext(ctx)
-	
+
 	jarPath := fmt.Sprintf("/topology-jars/%s/topology.jar", topology.Name)
-	
+
 	// In a real implementation, we would:
 	// 1. Mount the PVC to read the extracted JAR
 	// 2. Get file size and calculate actual checksum
 	// 3. Validate against expected checksum if provided
-	
+
 	result := &ExtractResult{
 		JarPath: jarPath,
 		Size:    0, // Would be populated from actual file stat
 	}
-	
+
 	// Validate checksum if provided
 	if jarSpec.Checksum != nil {
 		if err := e.ValidateChecksum(ctx, jarPath, jarSpec.Checksum); err != nil {
@@ -312,7 +312,7 @@ func (e *Extractor) getExtractionResults(ctx context.Context, topology *stormv1b
 		result.Checksum = jarSpec.Checksum.Value
 		log.Info("Checksum validation passed", "algorithm", jarSpec.Checksum.Algorithm, "value", jarSpec.Checksum.Value)
 	}
-	
+
 	return result, nil
 }
 
@@ -321,7 +321,7 @@ func (e *Extractor) getChecksumCommand(jarSpec *stormv1beta1.ContainerJarSource)
 	if jarSpec.Checksum == nil {
 		return "sha256sum" // Default
 	}
-	
+
 	switch jarSpec.Checksum.Algorithm {
 	case "md5":
 		return "md5sum"
@@ -337,19 +337,19 @@ func (e *Extractor) ValidateChecksum(ctx context.Context, jarPath string, checks
 	if checksumSpec == nil {
 		return nil // No validation required
 	}
-	
+
 	log := log.FromContext(ctx)
 	log.Info("Validating JAR checksum", "path", jarPath, "algorithm", checksumSpec.Algorithm)
-	
+
 	// In a real implementation, we would:
 	// 1. Read the JAR file from the persistent volume
 	// 2. Calculate its checksum using the specified algorithm
 	// 3. Compare with the expected value
 	// 4. Return error if they don't match
-	
+
 	// For now, simulate validation success
 	// TODO: Implement actual file checksum calculation when PVC mounting is available
-	
+
 	return nil
 }
 

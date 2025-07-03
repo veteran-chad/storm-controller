@@ -28,9 +28,9 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
-	stormv1beta1 "github.com/apache/storm/storm-controller/api/v1beta1"
-	"github.com/apache/storm/storm-controller/pkg/metrics"
-	"github.com/apache/storm/storm-controller/pkg/storm"
+	stormv1beta1 "github.com/veteran-chad/storm-controller/api/v1beta1"
+	"github.com/veteran-chad/storm-controller/pkg/metrics"
+	"github.com/veteran-chad/storm-controller/pkg/storm"
 )
 
 // StormClusterReconciler reconciles a StormCluster object
@@ -63,7 +63,7 @@ func (r *StormClusterReconciler) Reconcile(ctx context.Context, req ctrl.Request
 		log.Error(err, "Failed to get cluster info from Storm")
 		cluster.Status.Phase = "Failed"
 		cluster.Status.LastUpdateTime = &metav1.Time{Time: time.Now()}
-		
+
 		meta.SetStatusCondition(&cluster.Status.Conditions, metav1.Condition{
 			Type:               "Available",
 			Status:             metav1.ConditionFalse,
@@ -71,11 +71,11 @@ func (r *StormClusterReconciler) Reconcile(ctx context.Context, req ctrl.Request
 			Reason:             "ConnectionFailed",
 			Message:            err.Error(),
 		})
-		
+
 		if err := r.Status().Update(ctx, cluster); err != nil {
 			return ctrl.Result{}, err
 		}
-		
+
 		// Retry after 30 seconds
 		return ctrl.Result{RequeueAfter: 30 * time.Second}, nil
 	}
@@ -96,29 +96,29 @@ func (r *StormClusterReconciler) Reconcile(ctx context.Context, req ctrl.Request
 		"cluster":   cluster.Name,
 		"namespace": cluster.Namespace,
 	}
-	
+
 	// Cluster info metric (version would come from cluster spec or detected version)
 	metrics.StormClusterInfo.With(map[string]string{
 		"cluster":   cluster.Name,
 		"namespace": cluster.Namespace,
 		"version":   "2.6.0", // TODO: Get from cluster
 	}).Set(1)
-	
+
 	metrics.StormClusterSupervisors.With(labels).Set(float64(clusterInfo.Supervisors))
-	
+
 	// Slot metrics by state
 	metrics.StormClusterSlots.With(map[string]string{
 		"cluster":   cluster.Name,
 		"namespace": cluster.Namespace,
 		"state":     "total",
 	}).Set(float64(clusterInfo.TotalSlots))
-	
+
 	metrics.StormClusterSlots.With(map[string]string{
 		"cluster":   cluster.Name,
 		"namespace": cluster.Namespace,
 		"state":     "used",
 	}).Set(float64(clusterInfo.UsedSlots))
-	
+
 	metrics.StormClusterSlots.With(map[string]string{
 		"cluster":   cluster.Name,
 		"namespace": cluster.Namespace,

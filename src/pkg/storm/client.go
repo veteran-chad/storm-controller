@@ -72,24 +72,24 @@ func NewClient(nimbusHost string, nimbusPort int, uiHost string, uiPort int) Cli
 
 // RebalanceOptions contains options for rebalancing a topology
 type RebalanceOptions struct {
-	WaitSecs        int               `json:"wait_secs,omitempty"`
-	NumWorkers      int               `json:"num_workers,omitempty"`
-	NumExecutors    map[string]int    `json:"num_executors,omitempty"`
-	Configuration   map[string]string `json:"configuration,omitempty"`
+	WaitSecs      int               `json:"wait_secs,omitempty"`
+	NumWorkers    int               `json:"num_workers,omitempty"`
+	NumExecutors  map[string]int    `json:"num_executors,omitempty"`
+	Configuration map[string]string `json:"configuration,omitempty"`
 }
 
 // TopologyInfo contains detailed information about a topology
 type TopologyInfo struct {
-	ID              string                 `json:"id"`
-	Name            string                 `json:"name"`
-	Status          string                 `json:"status"`
-	UptimeSeconds   int                    `json:"uptime_secs"`
-	Workers         int                    `json:"workers_total"`
-	Executors       int                    `json:"executors_total"`
-	Tasks           int                    `json:"tasks_total"`
-	ReplicationCount int                   `json:"replication_count"`
-	Configuration   map[string]interface{} `json:"configuration"`
-	Stats           map[string]interface{} `json:"stats"`
+	ID               string                 `json:"id"`
+	Name             string                 `json:"name"`
+	Status           string                 `json:"status"`
+	UptimeSeconds    int                    `json:"uptime_secs"`
+	Workers          int                    `json:"workers_total"`
+	Executors        int                    `json:"executors_total"`
+	Tasks            int                    `json:"tasks_total"`
+	ReplicationCount int                    `json:"replication_count"`
+	Configuration    map[string]interface{} `json:"configuration"`
+	Stats            map[string]interface{} `json:"stats"`
 }
 
 // TopologySummary contains summary information about a topology
@@ -105,15 +105,15 @@ type TopologySummary struct {
 
 // ClusterSummary contains information about the Storm cluster
 type ClusterSummary struct {
-	Supervisors      int                    `json:"supervisors"`
-	UsedSlots        int                    `json:"slots_used"`
-	TotalSlots       int                    `json:"slots_total"`
-	FreeSlots        int                    `json:"slots_free"`
-	NimbusUptime     int                    `json:"nimbus_uptime_secs"`
-	Topologies       int                    `json:"topologies"`
-	NimbusLeader     string                 `json:"nimbus_leader"`
-	NimbusHosts      []string               `json:"nimbus_hosts"`
-	Configuration    map[string]interface{} `json:"configuration"`
+	Supervisors   int                    `json:"supervisors"`
+	UsedSlots     int                    `json:"slots_used"`
+	TotalSlots    int                    `json:"slots_total"`
+	FreeSlots     int                    `json:"slots_free"`
+	NimbusUptime  int                    `json:"nimbus_uptime_secs"`
+	Topologies    int                    `json:"topologies"`
+	NimbusLeader  string                 `json:"nimbus_leader"`
+	NimbusHosts   []string               `json:"nimbus_hosts"`
+	Configuration map[string]interface{} `json:"configuration"`
 }
 
 // REST API implementation
@@ -207,7 +207,7 @@ func (c *client) GetTopology(ctx context.Context, name string) (*TopologyInfo, e
 		if listErr != nil {
 			return nil, err // Return original error
 		}
-		
+
 		for _, t := range topologies {
 			if t.Name == name {
 				// Try again with ID
@@ -219,7 +219,7 @@ func (c *client) GetTopology(ctx context.Context, name string) (*TopologyInfo, e
 				break
 			}
 		}
-		
+
 		if err != nil {
 			return nil, fmt.Errorf("topology '%s' not found", name)
 		}
