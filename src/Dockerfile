@@ -28,6 +28,7 @@ COPY pkg/ pkg/
 RUN CGO_ENABLED=0 GOOS=${TARGETOS:-linux} GOARCH=${TARGETARCH} go build -a -o manager main.go
 
 # Use storm image as base to have storm CLI available
+ARG STORM_VERSION
 FROM storm:${STORM_VERSION}
 
 # Install necessary packages
