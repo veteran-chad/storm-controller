@@ -13,6 +13,7 @@ jobs:
       - uses: actions/setup-go@v5
         with:
           go-version: '1.23'
+          cache-dependency-path: src/go.sum
           
       - name: Run go fmt check
         working-directory: src
@@ -35,6 +36,7 @@ jobs:
       - uses: actions/setup-go@v5
         with:
           go-version: '1.23'
+          cache-dependency-path: src/go.sum
           
       - name: Run tests
         working-directory: src
@@ -54,6 +56,7 @@ jobs:
       - uses: actions/setup-go@v5
         with:
           go-version: '1.23'
+          cache-dependency-path: src/go.sum
           
       # Go vulnerability scanning
       - name: Run govulncheck
@@ -87,6 +90,7 @@ jobs:
       - uses: azure/setup-helm@v3
         with:
           version: 'latest'
+          token: ${{ secrets.GITHUB_TOKEN }}
           
       - name: Add Helm repositories
         run: |
@@ -114,6 +118,7 @@ jobs:
       - uses: actions/setup-go@v5
         with:
           go-version: '1.23'
+          cache-dependency-path: src/go.sum
           
       - name: Validate generated manifests are up to date
         working-directory: src
