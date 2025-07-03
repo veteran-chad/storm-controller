@@ -1,0 +1,15 @@
+apiVersion: storm.apache.org/v1beta1
+kind: StormTopology
+metadata:
+  name: test-topology
+  namespace: default
+spec:
+  clusterRef: test-storm-cluster
+  topology:
+    name: test-topology
+    jar:
+      url: "https://github.com/apache/storm/releases/download/v2.8.0/storm-starter-2.8.0.jar"
+    mainClass: "org.apache.storm.starter.ExclamationTopology"
+    config:
+      "topology.workers": "1"
+      "topology.version": "1.0.0"

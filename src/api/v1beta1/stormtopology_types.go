@@ -67,7 +67,7 @@ type TopologySpec struct {
 
 	// Topology-specific configuration
 	// +optional
-	Config map[string]interface{} `json:"config,omitempty"`
+	Config map[string]string `json:"config,omitempty"`
 }
 
 // JarSpec defines JAR file configuration
@@ -418,13 +418,13 @@ type TopologyMetrics struct {
 	Failed int64 `json:"failed,omitempty"`
 
 	// Average complete latency in milliseconds
-	CompleteLatencyMs float64 `json:"completeLatencyMs,omitempty"`
+	CompleteLatencyMs int64 `json:"completeLatencyMs,omitempty"`
 
 	// Number of pending tuples
 	PendingTuples int64 `json:"pendingTuples,omitempty"`
 
 	// Capacity percentage (0-100)
-	Capacity float64 `json:"capacity,omitempty"`
+	CapacityPercent int32 `json:"capacityPercent,omitempty"`
 }
 
 // +kubebuilder:object:root=true

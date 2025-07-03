@@ -124,7 +124,7 @@ jobs:
       - name: Validate generated manifests are up to date
         working-directory: src
         run: |
-          make manifests || true  # Allow to fail due to controller-gen issues
+          make manifests
           # Check if CRDs are valid YAML
           for f in deploy/*.yaml; do
             echo "Validating $f"

@@ -451,10 +451,8 @@ func (r *StormTopologyReconcilerSimple) updateStatus(ctx context.Context, topolo
 // getTopologyVersion extracts the topology version from the config
 func (r *StormTopologyReconcilerSimple) getTopologyVersion(topology *stormv1beta1.StormTopology) string {
 	if topology.Spec.Topology.Config != nil {
-		if versionIface, ok := topology.Spec.Topology.Config["topology.version"]; ok {
-			if version, ok := versionIface.(string); ok && version != "" {
-				return version
-			}
+		if version, ok := topology.Spec.Topology.Config["topology.version"]; ok && version != "" {
+			return version
 		}
 	}
 	// Return a default version for unversioned topologies

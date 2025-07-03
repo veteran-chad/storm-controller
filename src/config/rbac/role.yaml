@@ -32,57 +32,7 @@ rules:
   - storm.apache.org
   resources:
   - stormclusters
-  verbs:
-  - create
-  - delete
-  - get
-  - list
-  - patch
-  - update
-  - watch
-- apiGroups:
-  - storm.apache.org
-  resources:
-  - stormclusters/finalizers
-  verbs:
-  - update
-- apiGroups:
-  - storm.apache.org
-  resources:
-  - stormclusters/status
-  verbs:
-  - get
-  - patch
-  - update
-- apiGroups:
-  - storm.apache.org
-  resources:
   - stormtopologies
-  verbs:
-  - create
-  - delete
-  - get
-  - list
-  - patch
-  - update
-  - watch
-- apiGroups:
-  - storm.apache.org
-  resources:
-  - stormtopologies/finalizers
-  verbs:
-  - update
-- apiGroups:
-  - storm.apache.org
-  resources:
-  - stormtopologies/status
-  verbs:
-  - get
-  - patch
-  - update
-- apiGroups:
-  - storm.apache.org
-  resources:
   - stormworkerpools
   verbs:
   - create
@@ -95,12 +45,16 @@ rules:
 - apiGroups:
   - storm.apache.org
   resources:
+  - stormclusters/finalizers
+  - stormtopologies/finalizers
   - stormworkerpools/finalizers
   verbs:
   - update
 - apiGroups:
   - storm.apache.org
   resources:
+  - stormclusters/status
+  - stormtopologies/status
   - stormworkerpools/status
   verbs:
   - get

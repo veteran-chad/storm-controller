@@ -1,0 +1,10 @@
+apiVersion: storm.apache.org/v1beta1
+kind: StormCluster
+metadata:
+  name: storm-cluster
+  namespace: storm-system
+spec:
+  nimbus:
+    replicas: 1
+  supervisor:
+    replicas: 2

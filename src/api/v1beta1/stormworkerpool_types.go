@@ -47,7 +47,7 @@ type StormWorkerPoolSpec struct {
 
 	// Worker-specific Storm configuration
 	// +optional
-	WorkerConfig map[string]interface{} `json:"workerConfig,omitempty"`
+	WorkerConfig map[string]string `json:"workerConfig,omitempty"`
 
 	// JVM options for workers
 	// +optional
