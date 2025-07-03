@@ -1,3 +1,6 @@
+# Storm version to use
+ARG STORM_VERSION=2.8.1
+
 # Build the manager binary
 FROM golang:1.21 as builder
 ARG TARGETOS
@@ -25,7 +28,7 @@ COPY pkg/ pkg/
 RUN CGO_ENABLED=0 GOOS=${TARGETOS:-linux} GOARCH=${TARGETARCH} go build -a -o manager main.go
 
 # Use storm image as base to have storm CLI available
-FROM storm:latest
+FROM storm:${STORM_VERSION}
 
 # Install necessary packages
 USER root
