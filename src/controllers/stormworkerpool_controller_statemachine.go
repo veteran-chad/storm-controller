@@ -753,6 +753,12 @@ func (r *StormWorkerPoolReconcilerStateMachine) buildWorkerContainer(workerPool 
 
 // buildWorkerPodSpec builds the worker pod specification
 func (r *StormWorkerPoolReconcilerStateMachine) buildWorkerPodSpec(workerPool *stormv1beta1.StormWorkerPool, cluster *stormv1beta1.StormCluster, container corev1.Container) *corev1.PodSpec {
+	// Determine configmap name based on cluster's management mode
+	configMapName := stormConfigName
+	if cluster.Spec.ManagementMode == "reference" && cluster.Spec.ResourceNames != nil && cluster.Spec.ResourceNames.ConfigMap != "" {
+		configMapName = cluster.Spec.ResourceNames.ConfigMap
+	}
+	
 	return &corev1.PodSpec{
 		Containers:       []corev1.Container{container},
 		ImagePullSecrets: r.getImagePullSecrets(cluster),
@@ -762,7 +768,7 @@ func (r *StormWorkerPoolReconcilerStateMachine) buildWorkerPodSpec(workerPool *s
 				VolumeSource: corev1.VolumeSource{
 					ConfigMap: &corev1.ConfigMapVolumeSource{
 						LocalObjectReference: corev1.LocalObjectReference{
-							Name: stormConfigName,
+							Name: configMapName,
 						},
 					},
 				},
