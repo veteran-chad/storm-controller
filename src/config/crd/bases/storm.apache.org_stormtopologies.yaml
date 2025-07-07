@@ -1897,6 +1897,9 @@ spec:
               deployedVersion:
                 description: Deployed topology version
                 type: string
+              downloadedJarPath:
+                description: Downloaded JAR file path (used internally between states)
+                type: string
               executors:
                 description: Number of executors
                 format: int32

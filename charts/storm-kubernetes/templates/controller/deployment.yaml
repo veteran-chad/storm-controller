@@ -179,6 +179,8 @@ spec:
             - name: storm-config
               mountPath: /conf
               readOnly: true
+            - name: jar-cache
+              mountPath: /tmp/storm-jars
             {{- if .Values.controller.extraVolumeMounts }}
             {{- toYaml .Values.controller.extraVolumeMounts | nindent 12 }}
             {{- end }}
@@ -189,6 +191,8 @@ spec:
         - name: storm-config
           configMap:
             name: {{ include "storm.configmapName" . }}
+        - name: jar-cache
+          emptyDir: {}
         {{- if .Values.controller.extraVolumes }}
         {{- toYaml .Values.controller.extraVolumes | nindent 8 }}
         {{- end }}

@@ -437,6 +437,10 @@ type StormTopologyStatus struct {
 	// +optional
 	DeployedVersion string `json:"deployedVersion,omitempty"`
 
+	// Downloaded JAR file path (used internally between states)
+	// +optional
+	DownloadedJarPath string `json:"downloadedJarPath,omitempty"`
+
 	// Conditions
 	// +patchMergeKey=type
 	// +patchStrategy=merge

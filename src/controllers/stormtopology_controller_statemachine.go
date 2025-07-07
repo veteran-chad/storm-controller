@@ -137,6 +137,7 @@ func (r *StormTopologyReconcilerStateMachine) Reconcile(ctx context.Context, req
 		Topology:    topology,
 		Cluster:     cluster,
 		StormClient: stormClient,
+		JarPath:     topology.Status.DownloadedJarPath, // Restore JAR path from previous state
 	}
 
 	// Initialize state machine based on current status
@@ -332,6 +333,8 @@ func (r *StormTopologyReconcilerStateMachine) determineNextEvent(ctx context.Con
 			return state.EventDownloadFailed, nil
 		}
 		topologyCtx.JarPath = jarPath
+		// Save JAR path in status for next reconciliation
+		topology.Status.DownloadedJarPath = jarPath
 		return state.EventDownloadComplete, nil
 
 	case state.TopologyStateSubmitting:
@@ -763,9 +766,7 @@ func (r *StormTopologyReconcilerStateMachine) extractContainerJAR(ctx context.Co
 		"size", result.Size,
 		"checksum", result.Checksum)
 
-	// For now, download from example URL as workaround
-	jarURL := "https://repo1.maven.org/maven2/org/apache/storm/storm-starter/2.4.0/storm-starter-2.4.0.jar"
-	return r.downloadJARFromURL(ctx, jarURL)
+	return result.JarPath, nil
 }
 
 // buildSubmitCommand builds the storm submit command
@@ -783,7 +784,7 @@ func (r *StormTopologyReconcilerStateMachine) buildSubmitCommand(topology *storm
 	}
 
 	// Add nimbus host
-	nimbusHost := fmt.Sprintf("%s-nimbus.%s.svc.cluster.local", cluster.Name, cluster.Namespace)
+	nimbusHost := fmt.Sprintf("%s-storm-kubernetes-nimbus.%s.svc.cluster.local", cluster.Name, cluster.Namespace)
 	cmd = append(cmd, "-c", fmt.Sprintf("nimbus.seeds=[%q]", nimbusHost))
 
 	// Add configuration
