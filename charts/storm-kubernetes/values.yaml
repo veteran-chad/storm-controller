@@ -486,12 +486,14 @@ supervisor:
   ## @param supervisor.livenessProbe.failureThreshold Failure threshold for livenessProbe
   ## @param supervisor.livenessProbe.successThreshold Success threshold for livenessProbe
   ##
+  ## Liveness probe checks if the supervisor process is running
+  ##
   livenessProbe:
     enabled: true
-    initialDelaySeconds: 30
-    periodSeconds: 10
+    initialDelaySeconds: 60
+    periodSeconds: 30
     timeoutSeconds: 5
-    failureThreshold: 6
+    failureThreshold: 3
     successThreshold: 1
   ## @param supervisor.readinessProbe.enabled Enable readinessProbe on Supervisor containers
   ## @param supervisor.readinessProbe.initialDelaySeconds Initial delay seconds for readinessProbe
@@ -500,12 +502,14 @@ supervisor:
   ## @param supervisor.readinessProbe.failureThreshold Failure threshold for readinessProbe
   ## @param supervisor.readinessProbe.successThreshold Success threshold for readinessProbe
   ##
+  ## Readiness probe checks if supervisor can communicate with Nimbus
+  ##
   readinessProbe:
     enabled: true
-    initialDelaySeconds: 30
-    periodSeconds: 10
-    timeoutSeconds: 5
-    failureThreshold: 6
+    initialDelaySeconds: 45
+    periodSeconds: 15
+    timeoutSeconds: 10
+    failureThreshold: 3
     successThreshold: 1
   ## @param supervisor.startupProbe.enabled Enable startupProbe on Supervisor containers
   ## @param supervisor.startupProbe.initialDelaySeconds Initial delay seconds for startupProbe

@@ -132,9 +132,11 @@ spec:
             {{- end }}
           {{- if .Values.supervisor.livenessProbe.enabled }}
           livenessProbe:
-            httpGet:
-              path: /
-              port: http
+            exec:
+              command:
+              - sh
+              - -c
+              - "pgrep -f 'storm.daemon.supervisor.Supervisor' > /dev/null"
             initialDelaySeconds: {{ .Values.supervisor.livenessProbe.initialDelaySeconds }}
             periodSeconds: {{ .Values.supervisor.livenessProbe.periodSeconds }}
             timeoutSeconds: {{ .Values.supervisor.livenessProbe.timeoutSeconds }}
@@ -145,9 +147,10 @@ spec:
           {{- end }}
           {{- if .Values.supervisor.readinessProbe.enabled }}
           readinessProbe:
-            httpGet:
-              path: /
-              port: http
+            exec:
+              command:
+              - storm
+              - list
             initialDelaySeconds: {{ .Values.supervisor.readinessProbe.initialDelaySeconds }}
             periodSeconds: {{ .Values.supervisor.readinessProbe.periodSeconds }}
             timeoutSeconds: {{ .Values.supervisor.readinessProbe.timeoutSeconds }}
