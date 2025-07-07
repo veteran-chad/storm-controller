@@ -1,0 +1,36 @@
+# Git files
+.git
+.gitignore
+
+# Documentation
+README.md
+*.md
+
+# Build artifacts
+*.jar
+target/
+build/
+
+# IDE files
+.idea/
+*.iml
+.vscode/
+.project
+.classpath
+.settings/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Test files
+*_test.go
+*.test
+
+# Temporary files
+*.tmp
+*.temp
+*.log
+
+# Makefile
+Makefile
