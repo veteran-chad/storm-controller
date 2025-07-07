@@ -57,6 +57,179 @@ spec:
           spec:
             description: StormWorkerPoolSpec defines the desired state of StormWorkerPool
             properties:
+              autoscaling:
+                description: Autoscaling configuration
+                properties:
+                  behavior:
+                    description: Scaling behavior configuration
+                    properties:
+                      scaleDown:
+                        description: Scale down behavior
+                        properties:
+                          policies:
+                            description: Scaling policies
+                            items:
+                              description: ScalingPolicyRule defines a scaling policy
+                                rule
+                              properties:
+                                periodSeconds:
+                                  description: Period in seconds
+                                  format: int32
+                                  minimum: 1
+                                  type: integer
+                                type:
+                                  description: Type of scaling
+                                  enum:
+                                  - Percent
+                                  - Pods
+                                  type: string
+                                value:
+                                  description: Value for scaling
+                                  format: int32
+                                  minimum: 1
+                                  type: integer
+                              required:
+                              - periodSeconds
+                              - type
+                              - value
+                              type: object
+                            type: array
+                          stabilizationWindowSeconds:
+                            description: Stabilization window in seconds
+                            format: int32
+                            minimum: 0
+                            type: integer
+                        type: object
+                      scaleUp:
+                        description: Scale up behavior
+                        properties:
+                          policies:
+                            description: Scaling policies
+                            items:
+                              description: ScalingPolicyRule defines a scaling policy
+                                rule
+                              properties:
+                                periodSeconds:
+                                  description: Period in seconds
+                                  format: int32
+                                  minimum: 1
+                                  type: integer
+                                type:
+                                  description: Type of scaling
+                                  enum:
+                                  - Percent
+                                  - Pods
+                                  type: string
+                                value:
+                                  description: Value for scaling
+                                  format: int32
+                                  minimum: 1
+                                  type: integer
+                              required:
+                              - periodSeconds
+                              - type
+                              - value
+                              type: object
+                            type: array
+                          stabilizationWindowSeconds:
+                            description: Stabilization window in seconds
+                            format: int32
+                            minimum: 0
+                            type: integer
+                        type: object
+                    type: object
+                  customMetrics:
+                    description: Custom metrics for autoscaling
+                    items:
+                      description: CustomMetric defines a custom metric for autoscaling
+                      properties:
+                        name:
+                          description: Name of the metric
+                          type: string
+                        targetAverageValue:
+                          description: Target average value for the metric
+                          type: string
+                        targetValue:
+                          description: Target value for the metric
+                          type: string
+                        type:
+                          default: pods
+                          description: Type of the metric (pods, resource, external)
+                          enum:
+                          - pods
+                          - resource
+                          - external
+                          type: string
+                      required:
+                      - name
+                      - targetValue
+                      type: object
+                    type: array
+                  enabled:
+                    default: true
+                    description: Enable autoscaling
+                    type: boolean
+                  maxReplicas:
+                    default: 10
+                    description: Maximum number of replicas
+                    format: int32
+                    minimum: 1
+                    type: integer
+                  metrics:
+                    description: Metrics for autoscaling (deprecated, use CustomMetrics)
+                    items:
+                      description: MetricSpec defines a metric for autoscaling
+                      properties:
+                        target:
+                          description: Target value for the metric
+                          properties:
+                            averageUtilization:
+                              description: Target average utilization (for cpu/memory)
+                              format: int32
+                              maximum: 100
+                              minimum: 1
+                              type: integer
+                            averageValue:
+                              description: Target average value
+                              type: string
+                            value:
+                              description: Target value
+                              type: string
+                          type: object
+                        type:
+                          description: Type of metric
+                          enum:
+                          - cpu
+                          - memory
+                          - pending-tuples
+                          - capacity
+                          - latency
+                          type: string
+                      required:
+                      - target
+                      - type
+                      type: object
+                    type: array
+                  minReplicas:
+                    default: 1
+                    description: Minimum number of replicas
+                    format: int32
+                    minimum: 1
+                    type: integer
+                  targetCPUUtilizationPercentage:
+                    default: 80
+                    description: Target CPU utilization percentage
+                    format: int32
+                    maximum: 100
+                    minimum: 1
+                    type: integer
+                  targetMemoryUtilizationPercentage:
+                    description: Target memory utilization percentage
+                    format: int32
+                    maximum: 100
+                    minimum: 1
+                    type: integer
+                type: object
               clusterRef:
                 description: Reference to the StormCluster resource (inherited from
                   topology)

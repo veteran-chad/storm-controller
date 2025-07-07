@@ -45,14 +45,19 @@ const (
 	jarCacheDir       = "/tmp/storm-jars"
 )
 
+// getStormClient is a helper to get the storm client and handle errors consistently
+func (r *StormTopologyReconcilerSimple) getStormClient() (storm.Client, error) {
+	return r.ClientManager.GetClient()
+}
+
 // StormTopologyReconcilerSimple reconciles a StormTopology object
 type StormTopologyReconcilerSimple struct {
 	client.Client
-	Scheme       *runtime.Scheme
-	StormClient  storm.Client
-	JarExtractor *jarextractor.Extractor
-	ClusterName  string
-	Namespace    string
+	Scheme        *runtime.Scheme
+	ClientManager storm.ClientManager
+	JarExtractor  *jarextractor.Extractor
+	ClusterName   string
+	Namespace     string
 }
 
 //+kubebuilder:rbac:groups=storm.apache.org,resources=stormtopologies,verbs=get;list;watch;create;update;patch;delete
@@ -89,9 +94,17 @@ func (r *StormTopologyReconcilerSimple) Reconcile(ctx context.Context, req ctrl.
 		return ctrl.Result{RequeueAfter: 30 * time.Second}, nil
 	}
 
+	// Get Storm client
+	stormClient, err := r.ClientManager.GetClient()
+	if err != nil {
+		log.Error(err, "Storm client not available")
+		// Requeue to try again when client is available
+		return ctrl.Result{RequeueAfter: 30 * time.Second}, nil
+	}
+
 	// Handle deletion
 	if topology.DeletionTimestamp != nil {
-		return r.handleDeletion(ctx, topology)
+		return r.handleDeletion(ctx, topology, stormClient)
 	}
 
 	// Add finalizer if it doesn't exist
@@ -113,18 +126,18 @@ func (r *StormTopologyReconcilerSimple) Reconcile(ctx context.Context, req ctrl.
 		log.Info("Topology version changed, triggering update",
 			"oldVersion", topology.Status.DeployedVersion,
 			"newVersion", desiredVersion)
-		return r.handleVersionUpdate(ctx, topology, cluster, desiredVersion)
+		return r.handleVersionUpdate(ctx, topology, cluster, desiredVersion, stormClient)
 	}
 
 	// Actually reconcile the topology
-	return r.reconcileTopology(ctx, topology, cluster)
+	return r.reconcileTopology(ctx, topology, cluster, stormClient)
 }
 
-func (r *StormTopologyReconcilerSimple) reconcileTopology(ctx context.Context, topology *stormv1beta1.StormTopology, cluster *stormv1beta1.StormCluster) (ctrl.Result, error) {
+func (r *StormTopologyReconcilerSimple) reconcileTopology(ctx context.Context, topology *stormv1beta1.StormTopology, cluster *stormv1beta1.StormCluster, stormClient storm.Client) (ctrl.Result, error) {
 	log := log.FromContext(ctx)
 
 	// Check current topology state in Storm
-	stormTopology, err := r.StormClient.GetTopology(ctx, topology.Spec.Topology.Name)
+	stormTopology, err := stormClient.GetTopology(ctx, topology.Spec.Topology.Name)
 	if err != nil && !strings.Contains(err.Error(), "not found") {
 		log.Error(err, "Failed to get topology from Storm")
 		return ctrl.Result{}, r.updateStatus(ctx, topology, "Failed", err.Error())
@@ -133,7 +146,7 @@ func (r *StormTopologyReconcilerSimple) reconcileTopology(ctx context.Context, t
 	// Topology doesn't exist in Storm
 	if stormTopology == nil || (err != nil && strings.Contains(err.Error(), "not found")) {
 		log.Info("Topology not found in Storm, submitting", "topology", topology.Spec.Topology.Name)
-		return r.submitTopology(ctx, topology, cluster)
+		return r.submitTopology(ctx, topology, cluster, stormClient)
 	}
 
 	// Update status with current Storm state
@@ -201,7 +214,7 @@ func (r *StormTopologyReconcilerSimple) reconcileTopology(ctx context.Context, t
 	return ctrl.Result{RequeueAfter: 60 * time.Second}, nil
 }
 
-func (r *StormTopologyReconcilerSimple) submitTopology(ctx context.Context, topology *stormv1beta1.StormTopology, cluster *stormv1beta1.StormCluster) (ctrl.Result, error) {
+func (r *StormTopologyReconcilerSimple) submitTopology(ctx context.Context, topology *stormv1beta1.StormTopology, cluster *stormv1beta1.StormCluster, stormClient storm.Client) (ctrl.Result, error) {
 	log := log.FromContext(ctx)
 
 	// Update status to submitted
@@ -217,6 +230,9 @@ func (r *StormTopologyReconcilerSimple) submitTopology(ctx context.Context, topo
 	}
 
 	// Build storm submit command
+	// NOTE: We still use CLI for submission because Thrift API requires the
+	// actual StormTopology structure, which would need to be extracted from
+	// the JAR file. The CLI handles this complexity for us.
 	cmd := r.buildSubmitCommand(topology, cluster, jarPath)
 
 	log.Info("Submitting topology", "command", strings.Join(cmd, " "))
@@ -253,8 +269,14 @@ func (r *StormTopologyReconcilerSimple) submitTopology(ctx context.Context, topo
 func (r *StormTopologyReconcilerSimple) handleSuspend(ctx context.Context, topology *stormv1beta1.StormTopology) (ctrl.Result, error) {
 	log := log.FromContext(ctx)
 
+	// Get Storm client
+	stormClient, err := r.getStormClient()
+	if err != nil {
+		return ctrl.Result{RequeueAfter: 30 * time.Second}, err
+	}
+
 	// Check if topology is active in Storm
-	stormTopology, err := r.StormClient.GetTopology(ctx, topology.Spec.Topology.Name)
+	stormTopology, err := stormClient.GetTopology(ctx, topology.Spec.Topology.Name)
 	if err != nil {
 		if strings.Contains(err.Error(), "not found") {
 			// Topology doesn't exist, nothing to do
@@ -266,7 +288,7 @@ func (r *StormTopologyReconcilerSimple) handleSuspend(ctx context.Context, topol
 	// Deactivate if active
 	if stormTopology.Status == "ACTIVE" {
 		log.Info("Deactivating topology", "topology", topology.Spec.Topology.Name)
-		if err := r.StormClient.DeactivateTopology(ctx, topology.Spec.Topology.Name); err != nil {
+		if err := stormClient.DeactivateTopology(ctx, topology.Spec.Topology.Name); err != nil {
 			return ctrl.Result{}, err
 		}
 	}
@@ -274,34 +296,36 @@ func (r *StormTopologyReconcilerSimple) handleSuspend(ctx context.Context, topol
 	return ctrl.Result{}, r.updateStatus(ctx, topology, "Inactive", "Topology is suspended")
 }
 
-func (r *StormTopologyReconcilerSimple) handleDeletion(ctx context.Context, topology *stormv1beta1.StormTopology) (ctrl.Result, error) {
+func (r *StormTopologyReconcilerSimple) handleDeletion(ctx context.Context, topology *stormv1beta1.StormTopology, stormClient storm.Client) (ctrl.Result, error) {
 	log := log.FromContext(ctx)
 
 	if controllerutil.ContainsFinalizer(topology, topologyFinalizer) {
-		// Kill topology in Storm using CLI
-		log.Info("Killing topology using Storm CLI", "topology", topology.Spec.Topology.Name)
+		// Kill topology in Storm using Thrift client
+		log.Info("Killing topology using Thrift API", "topology", topology.Spec.Topology.Name)
 
-		// Build storm kill command
-		cmd := exec.CommandContext(ctx, "/apache-storm/bin/storm", "kill", topology.Spec.Topology.Name)
-
-		// Add nimbus host
-		nimbusHost := "storm-kubernetes-nimbus.storm-system.svc.cluster.local"
-		cmd.Args = append(cmd.Args, "-c", fmt.Sprintf("nimbus.seeds=[%q]", nimbusHost))
-
-		log.Info("Executing storm kill command", "command", strings.Join(cmd.Args, " "))
-
-		output, err := cmd.CombinedOutput()
+		// Kill topology with wait time (30 seconds default)
+		waitSecs := 30
+		err := stormClient.KillTopology(ctx, topology.Spec.Topology.Name, waitSecs)
 		if err != nil {
 			// Check if topology was not found
-			outputStr := string(output)
-			if strings.Contains(outputStr, "NotAliveException") || strings.Contains(outputStr, "not alive") {
+			errStr := err.Error()
+			if strings.Contains(errStr, "NotAliveException") ||
+				strings.Contains(errStr, "not alive") ||
+				strings.Contains(errStr, "not found") {
 				log.Info("Topology not found in Storm, continuing with deletion", "topology", topology.Spec.Topology.Name)
 			} else {
-				log.Error(err, "Failed to kill topology", "output", outputStr)
-				return ctrl.Result{}, fmt.Errorf("failed to kill topology: %v, output: %s", err, outputStr)
+				log.Error(err, "Failed to kill topology")
+				// Retry with backoff
+				return ctrl.Result{RequeueAfter: 5 * time.Second}, err
 			}
 		} else {
-			log.Info("Successfully killed topology", "topology", topology.Spec.Topology.Name, "output", string(output))
+			log.Info("Successfully killed topology", "topology", topology.Spec.Topology.Name)
+
+			// Update metrics
+			metrics.StormTopologyDeletions.With(map[string]string{
+				"namespace": topology.Namespace,
+				"result":    "success",
+			}).Inc()
 		}
 
 		// Remove finalizer
@@ -386,7 +410,13 @@ func (r *StormTopologyReconcilerSimple) downloadJAR(ctx context.Context, url str
 	}
 
 	// Download JAR
-	jarData, err := r.StormClient.DownloadJar(ctx, url)
+	// Get Storm client for downloading
+	stormClient, err := r.getStormClient()
+	if err != nil {
+		return "", err
+	}
+
+	jarData, err := stormClient.DownloadJar(ctx, url)
 	if err != nil {
 		return "", err
 	}
@@ -460,7 +490,7 @@ func (r *StormTopologyReconcilerSimple) getTopologyVersion(topology *stormv1beta
 }
 
 // handleVersionUpdate handles topology updates when version changes
-func (r *StormTopologyReconcilerSimple) handleVersionUpdate(ctx context.Context, topology *stormv1beta1.StormTopology, cluster *stormv1beta1.StormCluster, newVersion string) (ctrl.Result, error) {
+func (r *StormTopologyReconcilerSimple) handleVersionUpdate(ctx context.Context, topology *stormv1beta1.StormTopology, cluster *stormv1beta1.StormCluster, newVersion string, stormClient storm.Client) (ctrl.Result, error) {
 	log := log.FromContext(ctx)
 
 	log.Info("Starting topology version update",
@@ -470,7 +500,8 @@ func (r *StormTopologyReconcilerSimple) handleVersionUpdate(ctx context.Context,
 
 	// Step 1: Kill the existing topology
 	log.Info("Killing existing topology for version update", "topology", topology.Spec.Topology.Name)
-	if err := r.killTopologyWithCLI(ctx, topology.Spec.Topology.Name); err != nil {
+	waitSecs := 30
+	if err := stormClient.KillTopology(ctx, topology.Spec.Topology.Name, waitSecs); err != nil {
 		return ctrl.Result{}, err
 	}
 
@@ -487,37 +518,7 @@ func (r *StormTopologyReconcilerSimple) handleVersionUpdate(ctx context.Context,
 
 	// Step 3: Submit the new version
 	log.Info("Topology removed, submitting new version", "topology", topology.Spec.Topology.Name, "version", newVersion)
-	return r.submitTopology(ctx, topology, cluster)
-}
-
-// killTopologyWithCLI kills a topology using Storm CLI
-func (r *StormTopologyReconcilerSimple) killTopologyWithCLI(ctx context.Context, topologyName string) error {
-	log := log.FromContext(ctx)
-
-	// Build storm kill command
-	cmd := exec.CommandContext(ctx, "/apache-storm/bin/storm", "kill", topologyName)
-
-	// Add nimbus host
-	nimbusHost := "storm-kubernetes-nimbus.storm-system.svc.cluster.local"
-	cmd.Args = append(cmd.Args, "-c", fmt.Sprintf("nimbus.seeds=[%q]", nimbusHost))
-
-	log.Info("Executing storm kill command", "command", strings.Join(cmd.Args, " "))
-
-	output, err := cmd.CombinedOutput()
-	outputStr := string(output)
-
-	if err != nil {
-		// Check if topology was not found
-		if strings.Contains(outputStr, "NotAliveException") || strings.Contains(outputStr, "not alive") {
-			log.Info("Topology not found in Storm", "topology", topologyName)
-			return nil
-		}
-		log.Error(err, "Failed to kill topology", "output", outputStr)
-		return fmt.Errorf("failed to kill topology: %v, output: %s", err, outputStr)
-	}
-
-	log.Info("Successfully killed topology", "topology", topologyName, "output", outputStr)
-	return nil
+	return r.submitTopology(ctx, topology, cluster, stormClient)
 }
 
 // waitForTopologyRemoval polls Storm until the topology is fully removed
@@ -556,8 +557,15 @@ func (r *StormTopologyReconcilerSimple) waitForTopologyRemoval(ctx context.Conte
 
 // topologyExists checks if a topology exists in Storm
 func (r *StormTopologyReconcilerSimple) topologyExists(ctx context.Context, topologyName string) (bool, error) {
+	// Get Storm client
+	stormClient, err := r.getStormClient()
+	if err != nil {
+		// If no client available, assume topology doesn't exist
+		return false, nil
+	}
+
 	// Get topology from Storm
-	topology, err := r.StormClient.GetTopology(ctx, topologyName)
+	topology, err := stormClient.GetTopology(ctx, topologyName)
 	if err != nil {
 		if strings.Contains(err.Error(), "not found") {
 			return false, nil

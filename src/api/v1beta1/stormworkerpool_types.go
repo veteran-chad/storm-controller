@@ -56,6 +56,10 @@ type StormWorkerPoolSpec struct {
 	// Port configuration for workers
 	// +optional
 	Ports *PortConfig `json:"ports,omitempty"`
+
+	// Autoscaling configuration
+	// +optional
+	Autoscaling *AutoscalingSpec `json:"autoscaling,omitempty"`
 }
 
 // PodTemplateSpec defines the pod template for workers

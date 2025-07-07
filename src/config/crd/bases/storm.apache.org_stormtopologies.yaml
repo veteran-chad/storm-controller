@@ -1616,6 +1616,33 @@ spec:
                                 type: integer
                             type: object
                         type: object
+                      customMetrics:
+                        description: Custom metrics for autoscaling
+                        items:
+                          description: CustomMetric defines a custom metric for autoscaling
+                          properties:
+                            name:
+                              description: Name of the metric
+                              type: string
+                            targetAverageValue:
+                              description: Target average value for the metric
+                              type: string
+                            targetValue:
+                              description: Target value for the metric
+                              type: string
+                            type:
+                              default: pods
+                              description: Type of the metric (pods, resource, external)
+                              enum:
+                              - pods
+                              - resource
+                              - external
+                              type: string
+                          required:
+                          - name
+                          - targetValue
+                          type: object
+                        type: array
                       enabled:
                         default: true
                         description: Enable autoscaling
@@ -1627,7 +1654,7 @@ spec:
                         minimum: 1
                         type: integer
                       metrics:
-                        description: Metrics for autoscaling
+                        description: Metrics for autoscaling (deprecated, use CustomMetrics)
                         items:
                           description: MetricSpec defines a metric for autoscaling
                           properties:
@@ -1665,6 +1692,19 @@ spec:
                         default: 1
                         description: Minimum number of replicas
                         format: int32
+                        minimum: 1
+                        type: integer
+                      targetCPUUtilizationPercentage:
+                        default: 80
+                        description: Target CPU utilization percentage
+                        format: int32
+                        maximum: 100
+                        minimum: 1
+                        type: integer
+                      targetMemoryUtilizationPercentage:
+                        description: Target memory utilization percentage
+                        format: int32
+                        maximum: 100
                         minimum: 1
                         type: integer
                     type: object

@@ -245,13 +245,51 @@ type AutoscalingSpec struct {
 	// +optional
 	MaxReplicas int32 `json:"maxReplicas,omitempty"`
 
-	// Metrics for autoscaling
+	// Target CPU utilization percentage
+	// +kubebuilder:validation:Minimum=1
+	// +kubebuilder:validation:Maximum=100
+	// +kubebuilder:default=80
+	// +optional
+	TargetCPUUtilizationPercentage *int32 `json:"targetCPUUtilizationPercentage,omitempty"`
+
+	// Target memory utilization percentage
+	// +kubebuilder:validation:Minimum=1
+	// +kubebuilder:validation:Maximum=100
+	// +optional
+	TargetMemoryUtilizationPercentage *int32 `json:"targetMemoryUtilizationPercentage,omitempty"`
+
+	// Custom metrics for autoscaling
+	// +optional
+	CustomMetrics []CustomMetric `json:"customMetrics,omitempty"`
+
+	// Metrics for autoscaling (deprecated, use CustomMetrics)
 	// +optional
 	Metrics []MetricSpec `json:"metrics,omitempty"`
 
 	// Scaling behavior configuration
 	// +optional
 	Behavior *ScalingBehavior `json:"behavior,omitempty"`
+}
+
+// CustomMetric defines a custom metric for autoscaling
+type CustomMetric struct {
+	// Name of the metric
+	// +kubebuilder:validation:Required
+	Name string `json:"name"`
+
+	// Type of the metric (pods, resource, external)
+	// +kubebuilder:validation:Enum=pods;resource;external
+	// +kubebuilder:default="pods"
+	// +optional
+	Type string `json:"type,omitempty"`
+
+	// Target value for the metric
+	// +kubebuilder:validation:Required
+	TargetValue string `json:"targetValue"`
+
+	// Target average value for the metric
+	// +optional
+	TargetAverageValue string `json:"targetAverageValue,omitempty"`
 }
 
 // MetricSpec defines a metric for autoscaling

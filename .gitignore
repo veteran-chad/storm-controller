@@ -49,4 +49,5 @@ manager
 .helmignore
 
 # Docker
-.dockerignore
+.dockerignore__pycache__/
+*.pyc

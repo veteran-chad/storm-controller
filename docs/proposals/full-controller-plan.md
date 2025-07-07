@@ -330,6 +330,388 @@ func (r *StormWorkerPoolReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 }
 ```
 
+### Phase 2.5: Implement Testable State Machines (Week 4)
+
+#### Design Principle: Testable Business Logic
+
+All controller business logic should be implemented using testable state machines that are decoupled from Kubernetes client operations. This enables thorough unit testing without requiring a Kubernetes cluster.
+
+#### 2.5.1 State Machine Architecture
+
+**File: `src/pkg/statemachine/interface.go`**
+```go
+package statemachine
+
+import (
+    "context"
+    stormv1beta1 "github.com/veteran-chad/storm-controller/api/v1beta1"
+)
+
+// StateMachine defines the interface for resource state management
+type StateMachine interface {
+    // ValidateTransition checks if a state transition is valid
+    ValidateTransition(from, to string) error
+    
+    // GetNextState determines the next state based on current state and conditions
+    GetNextState(current string, conditions StateConditions) (string, error)
+    
+    // GetRequiredActions returns actions needed for a state transition
+    GetRequiredActions(from, to string) []StateAction
+}
+
+// StateConditions represents external conditions affecting state
+type StateConditions struct {
+    ResourceExists   bool
+    ResourceHealthy  bool
+    DependenciesMet  bool
+    CustomConditions map[string]interface{}
+}
+
+// StateAction represents an action to be performed
+type StateAction struct {
+    Type        string
+    Description string
+    Parameters  map[string]interface{}
+}
+```
+
+**File: `src/pkg/statemachine/topology_state_machine.go`**
+```go
+package statemachine
+
+import (
+    "fmt"
+)
+
+// TopologyStateMachine implements state transitions for StormTopology
+type TopologyStateMachine struct {
+    validTransitions map[string][]string
+}
+
+func NewTopologyStateMachine() *TopologyStateMachine {
+    return &TopologyStateMachine{
+        validTransitions: map[string][]string{
+            "":            {"Pending"},
+            "Pending":     {"Provisioning", "Failed"},
+            "Provisioning": {"Running", "Failed"},
+            "Running":     {"Updating", "Suspended", "Terminating"},
+            "Updating":    {"Running", "Failed"},
+            "Suspended":   {"Running", "Terminating"},
+            "Failed":      {"Pending", "Terminating"},
+            "Terminating": {"Terminated"},
+            "Terminated":  {},
+        },
+    }
+}
+
+func (sm *TopologyStateMachine) ValidateTransition(from, to string) error {
+    validStates, ok := sm.validTransitions[from]
+    if !ok {
+        return fmt.Errorf("unknown state: %s", from)
+    }
+    
+    for _, valid := range validStates {
+        if valid == to {
+            return nil
+        }
+    }
+    
+    return fmt.Errorf("invalid transition from %s to %s", from, to)
+}
+
+func (sm *TopologyStateMachine) GetNextState(current string, conditions StateConditions) (string, error) {
+    switch current {
+    case "":
+        return "Pending", nil
+        
+    case "Pending":
+        if !conditions.DependenciesMet {
+            return "Failed", nil
+        }
+        return "Provisioning", nil
+        
+    case "Provisioning":
+        if !conditions.ResourceExists {
+            return "Failed", nil
+        }
+        if conditions.ResourceHealthy {
+            return "Running", nil
+        }
+        return current, nil // Stay in Provisioning
+        
+    case "Running":
+        if !conditions.ResourceHealthy {
+            return "Failed", nil
+        }
+        // Check for version changes or other update conditions
+        if updateNeeded, ok := conditions.CustomConditions["versionChanged"].(bool); ok && updateNeeded {
+            return "Updating", nil
+        }
+        return current, nil
+        
+    default:
+        return current, nil
+    }
+}
+
+func (sm *TopologyStateMachine) GetRequiredActions(from, to string) []StateAction {
+    actions := []StateAction{}
+    
+    switch {
+    case from == "Pending" && to == "Provisioning":
+        actions = append(actions, StateAction{
+            Type:        "DownloadJAR",
+            Description: "Download topology JAR file",
+        })
+        actions = append(actions, StateAction{
+            Type:        "ValidateTopology",
+            Description: "Validate topology configuration",
+        })
+        
+    case from == "Provisioning" && to == "Running":
+        actions = append(actions, StateAction{
+            Type:        "SubmitTopology",
+            Description: "Submit topology to Storm cluster",
+        })
+        
+    case from == "Running" && to == "Updating":
+        actions = append(actions, StateAction{
+            Type:        "KillTopology",
+            Description: "Kill existing topology version",
+        })
+        actions = append(actions, StateAction{
+            Type:        "WaitForRemoval",
+            Description: "Wait for topology to be removed",
+        })
+        
+    case to == "Terminating":
+        actions = append(actions, StateAction{
+            Type:        "KillTopology",
+            Description: "Kill topology in Storm cluster",
+        })
+        actions = append(actions, StateAction{
+            Type:        "CleanupResources",
+            Description: "Clean up cached resources",
+        })
+    }
+    
+    return actions
+}
+```
+
+#### 2.5.2 Controller Integration
+
+**File: `src/controllers/stormtopology_controller_logic.go`**
+```go
+package controllers
+
+import (
+    "context"
+    "github.com/veteran-chad/storm-controller/pkg/statemachine"
+)
+
+// TopologyReconcilerLogic handles business logic separate from K8s operations
+type TopologyReconcilerLogic struct {
+    stateMachine statemachine.StateMachine
+}
+
+func NewTopologyReconcilerLogic() *TopologyReconcilerLogic {
+    return &TopologyReconcilerLogic{
+        stateMachine: statemachine.NewTopologyStateMachine(),
+    }
+}
+
+// DetermineActions determines what actions to take based on current and desired state
+func (l *TopologyReconcilerLogic) DetermineActions(current, desired TopologyState) ([]ReconcileAction, error) {
+    // Validate transition
+    if err := l.stateMachine.ValidateTransition(current.Phase, desired.Phase); err != nil {
+        return nil, err
+    }
+    
+    // Get required actions
+    stateActions := l.stateMachine.GetRequiredActions(current.Phase, desired.Phase)
+    
+    // Convert to reconcile actions
+    actions := []ReconcileAction{}
+    for _, sa := range stateActions {
+        actions = append(actions, ReconcileAction{
+            Type:       sa.Type,
+            Parameters: sa.Parameters,
+        })
+    }
+    
+    return actions, nil
+}
+
+// CalculateDesiredState calculates the desired state based on spec and current conditions
+func (l *TopologyReconcilerLogic) CalculateDesiredState(spec TopologySpec, status TopologyStatus, externalState ExternalState) (TopologyState, error) {
+    conditions := statemachine.StateConditions{
+        ResourceExists:  externalState.TopologyExists,
+        ResourceHealthy: externalState.TopologyHealthy,
+        DependenciesMet: externalState.ClusterReady,
+        CustomConditions: map[string]interface{}{
+            "versionChanged": spec.Version != status.DeployedVersion,
+            "suspended":      spec.Suspend,
+        },
+    }
+    
+    nextState, err := l.stateMachine.GetNextState(status.Phase, conditions)
+    if err != nil {
+        return TopologyState{}, err
+    }
+    
+    return TopologyState{
+        Phase:   nextState,
+        Version: spec.Version,
+    }, nil
+}
+```
+
+#### 2.5.3 Unit Testing State Machines
+
+**File: `src/pkg/statemachine/topology_state_machine_test.go`**
+```go
+package statemachine_test
+
+import (
+    "testing"
+    "github.com/stretchr/testify/assert"
+    "github.com/veteran-chad/storm-controller/pkg/statemachine"
+)
+
+func TestTopologyStateMachine_ValidateTransition(t *testing.T) {
+    sm := statemachine.NewTopologyStateMachine()
+    
+    tests := []struct {
+        name    string
+        from    string
+        to      string
+        wantErr bool
+    }{
+        {
+            name:    "valid transition from pending to provisioning",
+            from:    "Pending",
+            to:      "Provisioning",
+            wantErr: false,
+        },
+        {
+            name:    "invalid transition from running to pending",
+            from:    "Running",
+            to:      "Pending",
+            wantErr: true,
+        },
+        {
+            name:    "valid transition from failed to pending",
+            from:    "Failed",
+            to:      "Pending",
+            wantErr: false,
+        },
+    }
+    
+    for _, tt := range tests {
+        t.Run(tt.name, func(t *testing.T) {
+            err := sm.ValidateTransition(tt.from, tt.to)
+            if tt.wantErr {
+                assert.Error(t, err)
+            } else {
+                assert.NoError(t, err)
+            }
+        })
+    }
+}
+
+func TestTopologyStateMachine_GetNextState(t *testing.T) {
+    sm := statemachine.NewTopologyStateMachine()
+    
+    tests := []struct {
+        name       string
+        current    string
+        conditions statemachine.StateConditions
+        want       string
+    }{
+        {
+            name:    "pending with met dependencies",
+            current: "Pending",
+            conditions: statemachine.StateConditions{
+                DependenciesMet: true,
+            },
+            want: "Provisioning",
+        },
+        {
+            name:    "pending with unmet dependencies",
+            current: "Pending",
+            conditions: statemachine.StateConditions{
+                DependenciesMet: false,
+            },
+            want: "Failed",
+        },
+        {
+            name:    "running with version change",
+            current: "Running",
+            conditions: statemachine.StateConditions{
+                ResourceHealthy: true,
+                CustomConditions: map[string]interface{}{
+                    "versionChanged": true,
+                },
+            },
+            want: "Updating",
+        },
+    }
+    
+    for _, tt := range tests {
+        t.Run(tt.name, func(t *testing.T) {
+            got, err := sm.GetNextState(tt.current, tt.conditions)
+            assert.NoError(t, err)
+            assert.Equal(t, tt.want, got)
+        })
+    }
+}
+
+func TestTopologyStateMachine_GetRequiredActions(t *testing.T) {
+    sm := statemachine.NewTopologyStateMachine()
+    
+    actions := sm.GetRequiredActions("Pending", "Provisioning")
+    assert.Len(t, actions, 2)
+    assert.Equal(t, "DownloadJAR", actions[0].Type)
+    assert.Equal(t, "ValidateTopology", actions[1].Type)
+    
+    actions = sm.GetRequiredActions("Running", "Updating")
+    assert.Len(t, actions, 2)
+    assert.Equal(t, "KillTopology", actions[0].Type)
+    assert.Equal(t, "WaitForRemoval", actions[1].Type)
+}
+```
+
+#### 2.5.4 Benefits of This Approach
+
+1. **Testability**: Business logic can be tested without K8s dependencies
+2. **Clarity**: State transitions and actions are explicitly defined
+3. **Maintainability**: Easy to add new states or modify transitions
+4. **Debugging**: Clear state machine makes issues easier to diagnose
+5. **Documentation**: State machine serves as living documentation
+
+#### 2.5.5 Implementation for All Controllers
+
+Similar state machines should be implemented for:
+
+1. **ClusterStateMachine**: 
+   - States: Pending → Provisioning → Running → Scaling → Upgrading → Terminating
+   - Actions: CreateZookeeper, CreateNimbus, CreateSupervisors, etc.
+
+2. **WorkerPoolStateMachine**:
+   - States: Pending → Provisioning → Ready → Scaling → Updating → Terminating
+   - Actions: CreateDeployment, UpdateReplicas, ConfigureHPA, etc.
+
+Each controller's reconciliation loop becomes:
+1. Gather current state from K8s resources
+2. Query external state (Storm cluster status)
+3. Calculate desired state using state machine
+4. Determine required actions
+5. Execute actions
+6. Update resource status
+
+This separation ensures all business logic is unit testable while keeping K8s operations in the controller layer.
+
 ### Phase 3: Add Coordination Layer (Week 5)
 
 #### 3.1 Implement Admission Webhooks
@@ -569,6 +951,11 @@ func (c *JarCache) GetOrUpload(ctx context.Context, localPath string, uploader J
 #### 5.1 Testing Strategy
 
 1. **Unit Tests**
+   - **State Machine Tests** (no K8s dependencies required)
+     - Test all valid state transitions
+     - Test invalid transition rejection
+     - Test action generation for each transition
+     - Test state calculation based on conditions
    - Mock Thrift client for controller tests
    - Test connection pooling and retry logic
    - Validate topology serialization
@@ -686,6 +1073,12 @@ data:
    - Comprehensive metrics and observability
    - Well-documented APIs and configurations
 
+4. **Code Quality**
+   - 90%+ unit test coverage for business logic (state machines)
+   - All state transitions documented and tested
+   - Zero dependency on K8s for business logic tests
+   - Fast test execution (< 1 second for state machine tests)
+
 ## Risks and Mitigations
 
 1. **Thrift Protocol Changes**
@@ -707,7 +1100,8 @@ data:
 ## Timeline Summary
 
 - **Weeks 1-2**: Thrift infrastructure setup
-- **Weeks 3-4**: Controller enhancements
+- **Week 3**: Controller enhancements
+- **Week 4**: Implement testable state machines
 - **Week 5**: Coordination layer
 - **Week 6**: JAR management
 - **Weeks 7-8**: Testing and migration

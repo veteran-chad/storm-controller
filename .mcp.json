@@ -1,0 +1,10 @@
+{
+  "mcpServers": {
+    "storm-mcp-server": {
+      "type": "stdio",
+      "command": "./scripts/start-storm-mcp.sh",
+      "args": [],
+      "env": {}
+    }
+  }
+}

@@ -1086,6 +1086,79 @@ spec:
                           More info: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/
                         type: object
                     type: object
+                  thrift:
+                    description: Thrift configuration for client connections
+                    properties:
+                      connectionTimeout:
+                        default: 30
+                        description: Connection timeout in seconds
+                        format: int32
+                        minimum: 1
+                        type: integer
+                      maxConnections:
+                        default: 10
+                        description: Maximum number of connections in the pool
+                        format: int32
+                        maximum: 100
+                        minimum: 1
+                        type: integer
+                      maxIdleTime:
+                        default: 300
+                        description: Maximum idle time for connections in seconds
+                        format: int32
+                        minimum: 60
+                        type: integer
+                      maxRetries:
+                        default: 3
+                        description: Maximum retry attempts for failed operations
+                        format: int32
+                        maximum: 10
+                        minimum: 0
+                        type: integer
+                      minIdleConnections:
+                        default: 2
+                        description: Minimum number of idle connections in the pool
+                        format: int32
+                        maximum: 50
+                        minimum: 0
+                        type: integer
+                      port:
+                        default: 6627
+                        description: Thrift port for Nimbus
+                        format: int32
+                        maximum: 65535
+                        minimum: 1
+                        type: integer
+                      requestTimeout:
+                        default: 60
+                        description: Request timeout in seconds
+                        format: int32
+                        minimum: 1
+                        type: integer
+                      retryDelay:
+                        default: 1
+                        description: Retry delay in seconds
+                        format: int32
+                        minimum: 1
+                        type: integer
+                      tls:
+                        description: TLS configuration (if TLS is enabled)
+                        properties:
+                          certSecret:
+                            description: |-
+                              Secret containing TLS certificates
+                              The secret should contain tls.crt, tls.key, and ca.crt
+                            type: string
+                          insecureSkipVerify:
+                            default: false
+                            description: Skip TLS verification (insecure)
+                            type: boolean
+                        type: object
+                      useTLS:
+                        default: false
+                        description: Enable TLS for Thrift connections
+                        type: boolean
+                    type: object
                   tolerations:
                     description: Tolerations for Nimbus pods
                     items:

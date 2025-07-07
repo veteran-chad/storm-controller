@@ -43,6 +43,27 @@ cd src && go test ./controllers/... -v
 cd src && go test ./controllers/... -run TestStormTopologyController -v
 ```
 
+### Cleanup Scripts
+```bash
+# Clean up Storm resources in a namespace
+bash scripts/storm-controller-cleanup.sh storm-system
+
+# Force cleanup if resources are stuck
+bash scripts/storm-force-cleanup.sh storm-system
+```
+
+## Important Testing Guidelines
+
+- **ALWAYS use the `storm-system` namespace for testing** unless otherwise explicitly instructed
+- **ALWAYS run cleanup scripts before deploying** to ensure a clean state:
+  ```bash
+  bash scripts/storm-controller-cleanup.sh storm-system
+  ```
+- When deploying with Helm, use:
+  ```bash
+  helm upgrade --install storm-cluster ./charts/storm-kubernetes -f <values-file> --namespace storm-system --create-namespace
+  ```
+
 ## Architecture Overview
 
 ### CRD Structure
@@ -108,3 +129,8 @@ When adding new controller logic:
 2. Add necessary RBAC permissions using `+kubebuilder:rbac` markers
 3. Run `make manifests` to update RBAC configuration
 4. Test locally with `make run`
+
+## Debugging and Development Resources
+
+- **Storm MCP Server**:
+  - Use the storm-mcp-server for expertise on storm best practices and to assist troubleshooting and connecting to the cluster for debug

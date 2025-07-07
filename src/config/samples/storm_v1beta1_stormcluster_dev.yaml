@@ -1,0 +1,47 @@
+apiVersion: storm.apache.org/v1beta1
+kind: StormCluster
+metadata:
+  name: storm-dev
+  namespace: default
+spec:
+  # Minimal configuration for development
+  
+  # Single Nimbus node
+  nimbus:
+    replicas: 1
+    resources:
+      requests:
+        memory: "512Mi"
+        cpu: "500m"
+    persistence:
+      enabled: false  # Use emptyDir for dev
+    
+  # Two supervisor nodes
+  supervisor:
+    replicas: 2
+    workerSlots: 2  # 2 worker slots per supervisor
+    resources:
+      requests:
+        memory: "1Gi"
+        cpu: "1"
+    
+  # Enable UI
+  ui:
+    enabled: true
+    replicas: 1
+    service:
+      type: NodePort
+      port: 8080
+      nodePort: 30080  # Access UI at http://node-ip:30080
+    
+  # External Zookeeper (must be deployed separately)
+  zookeeper:
+    enabled: true
+    externalServers:
+      - "zookeeper.default.svc.cluster.local:2181"
+    chrootPath: "/storm"
+    
+  # Basic configuration
+  config:
+    "topology.max.spout.pending": "500"
+    "topology.message.timeout.secs": "30"

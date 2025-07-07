@@ -97,6 +97,10 @@ type NimbusSpec struct {
 	// +optional
 	Persistence PersistenceSpec `json:"persistence,omitempty"`
 
+	// Thrift configuration for client connections
+	// +optional
+	Thrift ThriftSpec `json:"thrift,omitempty"`
+
 	// Extra environment variables for Nimbus
 	// +optional
 	ExtraEnvVars []corev1.EnvVar `json:"extraEnvVars,omitempty"`
@@ -342,6 +346,82 @@ type MetricsSpec struct {
 	// ServiceMonitor labels
 	// +optional
 	ServiceMonitorLabels map[string]string `json:"serviceMonitorLabels,omitempty"`
+}
+
+// ThriftSpec defines Thrift client configuration
+type ThriftSpec struct {
+	// Thrift port for Nimbus
+	// +kubebuilder:validation:Minimum=1
+	// +kubebuilder:validation:Maximum=65535
+	// +kubebuilder:default=6627
+	// +optional
+	Port int32 `json:"port,omitempty"`
+
+	// Connection timeout in seconds
+	// +kubebuilder:validation:Minimum=1
+	// +kubebuilder:default=30
+	// +optional
+	ConnectionTimeout int32 `json:"connectionTimeout,omitempty"`
+
+	// Request timeout in seconds
+	// +kubebuilder:validation:Minimum=1
+	// +kubebuilder:default=60
+	// +optional
+	RequestTimeout int32 `json:"requestTimeout,omitempty"`
+
+	// Maximum number of connections in the pool
+	// +kubebuilder:validation:Minimum=1
+	// +kubebuilder:validation:Maximum=100
+	// +kubebuilder:default=10
+	// +optional
+	MaxConnections int32 `json:"maxConnections,omitempty"`
+
+	// Minimum number of idle connections in the pool
+	// +kubebuilder:validation:Minimum=0
+	// +kubebuilder:validation:Maximum=50
+	// +kubebuilder:default=2
+	// +optional
+	MinIdleConnections int32 `json:"minIdleConnections,omitempty"`
+
+	// Maximum idle time for connections in seconds
+	// +kubebuilder:validation:Minimum=60
+	// +kubebuilder:default=300
+	// +optional
+	MaxIdleTime int32 `json:"maxIdleTime,omitempty"`
+
+	// Maximum retry attempts for failed operations
+	// +kubebuilder:validation:Minimum=0
+	// +kubebuilder:validation:Maximum=10
+	// +kubebuilder:default=3
+	// +optional
+	MaxRetries int32 `json:"maxRetries,omitempty"`
+
+	// Retry delay in seconds
+	// +kubebuilder:validation:Minimum=1
+	// +kubebuilder:default=1
+	// +optional
+	RetryDelay int32 `json:"retryDelay,omitempty"`
+
+	// Enable TLS for Thrift connections
+	// +kubebuilder:default=false
+	// +optional
+	UseTLS bool `json:"useTLS,omitempty"`
+
+	// TLS configuration (if TLS is enabled)
+	// +optional
+	TLS *ThriftTLSSpec `json:"tls,omitempty"`
+}
+
+// ThriftTLSSpec defines TLS configuration for Thrift connections
+type ThriftTLSSpec struct {
+	// Secret containing TLS certificates
+	// The secret should contain tls.crt, tls.key, and ca.crt
+	CertSecret string `json:"certSecret,omitempty"`
+
+	// Skip TLS verification (insecure)
+	// +kubebuilder:default=false
+	// +optional
+	InsecureSkipVerify bool `json:"insecureSkipVerify,omitempty"`
 }
 
 // StormClusterStatus defines the observed state of StormCluster

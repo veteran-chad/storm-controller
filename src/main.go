@@ -112,14 +112,15 @@ func main() {
 		os.Exit(1)
 	}
 
-	// Create Storm client
-	stormClient := storm.NewClient(nimbusHost, nimbusPort, uiHost, uiPort)
+	// Create client manager instead of connecting immediately
+	clientManager := storm.NewClientManager()
+	setupLog.Info("Created Storm client manager, waiting for StormCluster resources")
 
-	// Setup StormCluster controller
-	if err = (&controllers.StormClusterReconciler{
-		Client:      mgr.GetClient(),
-		Scheme:      mgr.GetScheme(),
-		StormClient: stormClient,
+	// Setup StormCluster controller (state machine version)
+	if err = (&controllers.StormClusterReconcilerStateMachine{
+		Client:        mgr.GetClient(),
+		Scheme:        mgr.GetScheme(),
+		ClientManager: clientManager,
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "StormCluster")
 		os.Exit(1)
@@ -128,24 +129,24 @@ func main() {
 	// Create JAR extractor
 	jarExtractor := jarextractor.NewExtractor(mgr.GetClient(), stormNamespace)
 
-	// Setup StormTopology controller
-	if err = (&controllers.StormTopologyReconcilerSimple{
-		Client:       mgr.GetClient(),
-		Scheme:       mgr.GetScheme(),
-		StormClient:  stormClient,
-		JarExtractor: jarExtractor,
-		ClusterName:  stormClusterName,
-		Namespace:    stormNamespace,
+	// Setup StormTopology controller (state machine version)
+	if err = (&controllers.StormTopologyReconcilerStateMachine{
+		Client:        mgr.GetClient(),
+		Scheme:        mgr.GetScheme(),
+		ClientManager: clientManager,
+		JarExtractor:  jarExtractor,
+		ClusterName:   stormClusterName,
+		Namespace:     stormNamespace,
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "StormTopology")
 		os.Exit(1)
 	}
 
-	// Setup StormWorkerPool controller
-	if err = (&controllers.StormWorkerPoolReconciler{
-		Client:    mgr.GetClient(),
-		Scheme:    mgr.GetScheme(),
-		Namespace: stormNamespace,
+	// Setup StormWorkerPool controller (state machine version)
+	if err = (&controllers.StormWorkerPoolReconcilerStateMachine{
+		Client:        mgr.GetClient(),
+		Scheme:        mgr.GetScheme(),
+		ClientManager: clientManager,
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "StormWorkerPool")
 		os.Exit(1)

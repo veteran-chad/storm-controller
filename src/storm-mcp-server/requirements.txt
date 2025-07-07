@@ -1,0 +1,22 @@
+# Core MCP framework
+mcp>=1.0.0
+
+# Thrift for Storm API communication
+thrift>=0.19.0
+
+# Additional utility libraries (optional but recommended)
+pyyaml>=6.0
+requests>=2.31.0
+
+# Development and testing dependencies (optional)
+pytest>=7.0.0
+pytest-asyncio>=0.21.0
+
+# Logging and utilities
+colorlog>=6.7.0
+
+# Type hints support
+typing-extensions>=4.5.0
+
+# For enhanced error handling
+tenacity>=8.2.0
