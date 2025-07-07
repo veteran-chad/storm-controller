@@ -1,0 +1,17 @@
+apiVersion: storm.apache.org/v1beta1
+kind: StormTopology
+metadata:
+  name: wordcount-test
+  namespace: storm-system
+spec:
+  clusterRef: storm-cluster
+  topology:
+    name: wordcount-topology
+    jar:
+      url: "https://repo1.maven.org/maven2/org/apache/storm/storm-starter/2.4.0/storm-starter-2.4.0.jar"
+    mainClass: "org.apache.storm.starter.WordCountTopology"
+    config:
+      topology.version: "1.0.0"
+      topology.workers: "1"
+  workers:
+    replicas: 2
