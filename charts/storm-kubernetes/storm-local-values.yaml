@@ -31,7 +31,8 @@ nimbus:
   replicas: 1
 
 supervisor:
-  replicas: 3
+  replicas: 1
+  slotsPerSupervisor: 1
 
 ui:
   enabled: true

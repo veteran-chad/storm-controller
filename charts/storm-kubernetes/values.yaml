@@ -398,10 +398,10 @@ nimbus:
 supervisor:
   ## @param supervisor.replicaCount Number of Supervisor replicas
   ##
-  replicaCount: 3
+  replicaCount: 1
   ## @param supervisor.slotsPerSupervisor Number of worker slots per supervisor
   ##
-  slotsPerSupervisor: 4
+  slotsPerSupervisor: 1
   ## @param supervisor.configuration Storm configuration for Supervisor
   ## @param supervisor.existingConfigmap Name of existing ConfigMap with Storm configuration for Supervisor
   ## @param supervisor.extraEnvVars Array with extra environment variables to add to Supervisor containers

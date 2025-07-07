@@ -27,7 +27,7 @@ spec:
       name: Supervisors
       type: integer
     - description: Used/Total slots
-      jsonPath: .status.usedSlots
+      jsonPath: .status.slotsInfo
       name: Slots
       type: string
     - jsonPath: .metadata.creationTimestamp
@@ -2125,10 +2125,10 @@ spec:
                     description: Node selector for Supervisor pods
                     type: object
                   replicas:
-                    default: 3
+                    default: 1
                     description: Number of Supervisor replicas
                     format: int32
-                    minimum: 1
+                    minimum: 0
                     type: integer
                   resources:
                     description: Resource requirements for Supervisor pods
@@ -2223,10 +2223,10 @@ spec:
                       type: object
                     type: array
                   workerSlots:
-                    default: 4
+                    default: 1
                     description: Number of worker slots per supervisor
                     format: int32
-                    minimum: 1
+                    minimum: 0
                     type: integer
                 type: object
               ui:
@@ -2520,6 +2520,9 @@ spec:
                 - Failed
                 - Updating
                 - Terminating
+                type: string
+              slotsInfo:
+                description: Formatted slots info for display (used/total)
                 type: string
               supervisorReady:
                 description: Number of ready Supervisor nodes

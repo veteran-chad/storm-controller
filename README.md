@@ -155,6 +155,10 @@ Use the provided cleanup scripts to remove Storm deployments:
 - **Enhanced Logging**: Comprehensive logging of all operations
 - **Container JAR Support**: Extract JARs from container images
 
+## Future Enhancements
+
+- **CRD-Only Mode**: Support deployment mode where only CRDs and controller are deployed via Helm, and the controller creates all Storm cluster resources (Nimbus, Supervisors, UI, ConfigMaps, Services). This would enable GitOps-friendly deployments where the entire Storm cluster is defined through StormCluster CRD resources.
+
 ## License
 
 Apache License 2.0

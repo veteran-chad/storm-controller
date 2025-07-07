@@ -1897,10 +1897,17 @@ spec:
               deployedVersion:
                 description: Deployed topology version
                 type: string
+              downloadedJarPath:
+                description: Downloaded JAR file path (used internally between states)
+                type: string
               executors:
                 description: Number of executors
                 format: int32
                 type: integer
+              internalState:
+                description: Internal state for state machine tracking (not exposed
+                  in CRD)
+                type: string
               lastError:
                 description: Last error message
                 type: string
