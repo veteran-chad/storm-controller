@@ -22,6 +22,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 
@@ -449,7 +450,21 @@ func (r *StormTopologyReconcilerSimple) buildSubmitCommand(topology *stormv1beta
 	// Add configuration
 	if topology.Spec.Topology.Config != nil {
 		for key, value := range topology.Spec.Topology.Config {
-			cmd = append(cmd, "-c", fmt.Sprintf("%s=%s", key, value))
+			// Format the value based on its type
+			formattedValue := value
+
+			// Check if it's a boolean
+			if value == "true" || value == "false" {
+				formattedValue = value // Keep as-is for booleans
+			} else if value != "" && value[0] != '[' && value[0] != '{' && value[0] != '"' {
+				// Check if it's a number
+				if _, err := strconv.ParseFloat(value, 64); err != nil {
+					// It's a string, quote it
+					formattedValue = fmt.Sprintf("%q", value)
+				}
+			}
+
+			cmd = append(cmd, "-c", fmt.Sprintf("%s=%s", key, formattedValue))
 		}
 	}
 

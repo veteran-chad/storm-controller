@@ -59,10 +59,17 @@ bash scripts/storm-force-cleanup.sh storm-system
   ```bash
   bash scripts/storm-controller-cleanup.sh storm-system
   ```
-- When deploying with Helm, use:
+- **For local testing, always use the storm-local-values.yaml file**:
   ```bash
-  helm upgrade --install storm-cluster ./charts/storm-kubernetes -f <values-file> --namespace storm-system --create-namespace
+  # Using the deployment script
+  bash scripts/deploy-local.sh
+  
+  # Or manually with Helm
+  helm upgrade --install storm-cluster ./charts/storm-kubernetes \
+    -f charts/storm-kubernetes/storm-local-values.yaml \
+    --namespace storm-system --create-namespace
   ```
+- Example topology for testing is available at `examples/wordcount-topology.yaml`
 
 ## Architecture Overview
 

@@ -63,7 +63,7 @@ crds:
 image:
   registry: docker.io
   repository: storm
-  tag: 2.4.0
+  tag: 2.8.1
   digest: ""
   ## Specify a imagePullPolicy
   ## Defaults to 'Always' if image tag is 'latest', else set to 'IfNotPresent'

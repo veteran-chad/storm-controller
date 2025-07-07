@@ -758,7 +758,7 @@ func (r *StormWorkerPoolReconcilerStateMachine) buildWorkerPodSpec(workerPool *s
 	if cluster.Spec.ManagementMode == "reference" && cluster.Spec.ResourceNames != nil && cluster.Spec.ResourceNames.ConfigMap != "" {
 		configMapName = cluster.Spec.ResourceNames.ConfigMap
 	}
-	
+
 	return &corev1.PodSpec{
 		Containers:       []corev1.Container{container},
 		ImagePullSecrets: r.getImagePullSecrets(cluster),

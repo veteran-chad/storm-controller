@@ -1,0 +1,45 @@
+# Storm local development values
+
+# CRD installation
+crd:
+  install: true
+
+# Controller configuration
+controller:
+  enabled: true
+  image:
+    repository: storm-controller
+    tag: latest
+    pullPolicy: Never  # Use local image
+  
+  # Resources for controller
+  resources:
+    limits:
+      cpu: 500m
+      memory: 512Mi
+    requests:
+      cpu: 100m
+      memory: 128Mi
+
+# StormCluster resource
+stormCluster:
+  enabled: true
+  name: storm-cluster
+
+# Storm cluster configuration
+nimbus:
+  replicas: 1
+
+supervisor:
+  replicas: 3
+
+ui:
+  enabled: true
+
+zookeeper:
+  replicas: 3
+  
+# Enable debug logging
+storm:
+  config:
+    storm.log.level: "INFO"
