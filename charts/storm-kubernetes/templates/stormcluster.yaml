@@ -1,0 +1,73 @@
+{{- if .Values.stormCluster.enabled }}
+apiVersion: storm.apache.org/v1beta1
+kind: StormCluster
+metadata:
+  name: {{ .Values.stormCluster.name | default (include "storm.fullname" .) }}
+  namespace: {{ .Release.Namespace | quote }}
+  labels:
+    {{- include "storm.labels" . | nindent 4 }}
+    app.kubernetes.io/component: stormcluster
+  {{- with .Values.commonAnnotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  managementMode: reference
+  resourceNames:
+    nimbusStatefulSet: {{ include "storm.nimbus.fullname" . }}
+    supervisorDeployment: {{ include "storm.supervisor.fullname" . }}
+    uiDeployment: {{ include "storm.ui.fullname" . }}
+    nimbusService: {{ include "storm.nimbus.fullname" . }}-headless
+    uiService: {{ include "storm.ui.fullname" . }}
+    configMap: {{ include "storm.configmapName" . }}
+  image:
+    registry: {{ .Values.image.registry }}
+    repository: {{ .Values.image.repository }}
+    tag: {{ .Values.image.tag | default .Chart.AppVersion }}
+    pullPolicy: {{ .Values.image.pullPolicy }}
+    {{- if .Values.image.pullSecrets }}
+    pullSecrets:
+      {{- range .Values.image.pullSecrets }}
+      - {{ . }}
+      {{- end }}
+    {{- end }}
+  nimbus:
+    replicas: {{ .Values.nimbus.replicaCount }}
+    thrift:
+      port: {{ .Values.nimbus.service.ports.thrift }}
+    resources:
+      {{- toYaml .Values.nimbus.resources | nindent 6 }}
+  supervisor:
+    replicas: {{ .Values.supervisor.replicaCount }}
+    workerSlots: {{ .Values.supervisor.slotsPerSupervisor }}
+    resources:
+      {{- toYaml .Values.supervisor.resources | nindent 6 }}
+  ui:
+    enabled: {{ .Values.ui.enabled }}
+    {{- if .Values.ui.enabled }}
+    service:
+      port: {{ .Values.ui.service.ports.http }}
+    {{- end }}
+  zookeeper:
+    {{- if .Values.zookeeper.enabled }}
+    externalServers:
+      {{- range $i := until (int .Values.zookeeper.replicaCount) }}
+      - "{{ $.Release.Name }}-zookeeper-{{ $i }}.{{ $.Release.Name }}-zookeeper-headless.{{ $.Release.Namespace }}.svc.{{ $.Values.clusterDomain }}:2181"
+      {{- end }}
+    {{- else if .Values.externalZookeeper.servers }}
+    externalServers:
+      {{- toYaml .Values.externalZookeeper.servers | nindent 6 }}
+    {{- end }}
+    chrootPath: "/storm"
+  config:
+    {{- with .Values.stormConf }}
+    {{- range $key, $value := . }}
+    {{ $key | quote }}: {{ $value | quote }}
+    {{- end }}
+    {{- end }}
+    {{- with .Values.stormCluster.config }}
+    {{- range $key, $value := . }}
+    {{ $key | quote }}: {{ $value | quote }}
+    {{- end }}
+    {{- end }}
+{{- end }}

@@ -23,6 +23,16 @@ import (
 
 // StormClusterSpec defines the desired state of StormCluster
 type StormClusterSpec struct {
+	// Management mode for the cluster
+	// +kubebuilder:validation:Enum=create;reference
+	// +kubebuilder:default="create"
+	// +optional
+	ManagementMode string `json:"managementMode,omitempty"`
+
+	// Resource naming configuration for reference mode
+	// +optional
+	ResourceNames *ResourceNamesSpec `json:"resourceNames,omitempty"`
+
 	// Image configuration for Storm components
 	// +optional
 	Image ImageSpec `json:"image,omitempty"`
@@ -50,6 +60,33 @@ type StormClusterSpec struct {
 	// Metrics configuration
 	// +optional
 	Metrics MetricsSpec `json:"metrics,omitempty"`
+}
+
+// ResourceNamesSpec defines resource names for reference mode
+type ResourceNamesSpec struct {
+	// Name of the Nimbus StatefulSet
+	// +optional
+	NimbusStatefulSet string `json:"nimbusStatefulSet,omitempty"`
+
+	// Name of the Supervisor Deployment
+	// +optional
+	SupervisorDeployment string `json:"supervisorDeployment,omitempty"`
+
+	// Name of the UI Deployment
+	// +optional
+	UIDeployment string `json:"uiDeployment,omitempty"`
+
+	// Name of the Nimbus Service
+	// +optional
+	NimbusService string `json:"nimbusService,omitempty"`
+
+	// Name of the UI Service
+	// +optional
+	UIService string `json:"uiService,omitempty"`
+
+	// Name of the Storm ConfigMap
+	// +optional
+	ConfigMap string `json:"configMap,omitempty"`
 }
 
 // ImageSpec defines the container image configuration
@@ -454,6 +491,9 @@ type StormClusterStatus struct {
 	// Number of free worker slots
 	FreeSlots int32 `json:"freeSlots,omitempty"`
 
+	// Formatted slots info for display (used/total)
+	SlotsInfo string `json:"slotsInfo,omitempty"`
+
 	// Number of running topologies
 	TopologyCount int32 `json:"topologyCount,omitempty"`
 
@@ -489,7 +529,7 @@ type ClusterEndpoints struct {
 // +kubebuilder:printcolumn:name="Phase",type=string,JSONPath=`.status.phase`
 // +kubebuilder:printcolumn:name="Nimbus",type=integer,JSONPath=`.status.nimbusReady`
 // +kubebuilder:printcolumn:name="Supervisors",type=integer,JSONPath=`.status.supervisorReady`
-// +kubebuilder:printcolumn:name="Slots",type=string,JSONPath=`.status.usedSlots`,description="Used/Total slots"
+// +kubebuilder:printcolumn:name="Slots",type=string,JSONPath=`.status.slotsInfo`,description="Used/Total slots"
 // +kubebuilder:printcolumn:name="Age",type=date,JSONPath=`.metadata.creationTimestamp`
 
 // StormCluster is the Schema for the stormclusters API

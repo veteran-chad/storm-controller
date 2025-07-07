@@ -35,6 +35,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
 	stormv1beta1 "github.com/veteran-chad/storm-controller/api/v1beta1"
+	"github.com/veteran-chad/storm-controller/pkg/coordination"
 	"github.com/veteran-chad/storm-controller/pkg/jarextractor"
 	"github.com/veteran-chad/storm-controller/pkg/metrics"
 	"github.com/veteran-chad/storm-controller/pkg/state"
@@ -49,6 +50,7 @@ type StormTopologyReconcilerStateMachine struct {
 	JarExtractor  *jarextractor.Extractor
 	ClusterName   string
 	Namespace     string
+	Coordinator   *coordination.ResourceCoordinator
 }
 
 // TopologyContext holds the context for a topology reconciliation
@@ -77,7 +79,30 @@ func (r *StormTopologyReconcilerStateMachine) Reconcile(ctx context.Context, req
 		return ctrl.Result{}, err
 	}
 
-	// Get the associated Storm cluster
+	// Check dependencies using coordination layer
+	dependencies := coordination.CreateTopologyDependencies(topology)
+	dependencyManager := coordination.NewDependencyManager(r.Client)
+
+	dependencyResults, allSatisfied, waitTime := dependencyManager.CheckAllDependencies(ctx, dependencies)
+
+	if !allSatisfied {
+		// Log dependency status
+		for _, result := range dependencyResults {
+			if result.Status != coordination.DependencyStatusSatisfied {
+				log.Info("Dependency not satisfied",
+					"dependency", result.Dependency.Description,
+					"status", result.Status,
+					"message", result.Message)
+			}
+		}
+
+		// Update topology status with dependency information
+		r.updateTopologyStatusWithDependencies(ctx, topology, dependencyResults)
+
+		return ctrl.Result{RequeueAfter: waitTime}, nil
+	}
+
+	// Get the associated Storm cluster (we know it exists and is ready from dependency check)
 	cluster := &stormv1beta1.StormCluster{}
 	if err := r.Get(ctx, client.ObjectKey{
 		Name:      topology.Spec.ClusterRef,
@@ -85,12 +110,6 @@ func (r *StormTopologyReconcilerStateMachine) Reconcile(ctx context.Context, req
 	}, cluster); err != nil {
 		log.Error(err, "Failed to get StormCluster")
 		return ctrl.Result{}, err
-	}
-
-	// Check if cluster is healthy
-	if cluster.Status.Phase != "Running" {
-		log.Info("Storm cluster is not running, requeuing", "phase", cluster.Status.Phase)
-		return ctrl.Result{RequeueAfter: 30 * time.Second}, nil
 	}
 
 	// Get Storm client
@@ -293,8 +312,9 @@ func (r *StormTopologyReconcilerStateMachine) determineNextEvent(ctx context.Con
 	}
 }
 
-// validateTopology validates the topology configuration
+// validateTopology validates the topology configuration and provisions worker pools if needed
 func (r *StormTopologyReconcilerStateMachine) validateTopology(ctx context.Context, topologyCtx *TopologyContext) error {
+	log := log.FromContext(ctx)
 	topology := topologyCtx.Topology
 
 	// Validate JAR source
@@ -314,6 +334,39 @@ func (r *StormTopologyReconcilerStateMachine) validateTopology(ctx context.Conte
 	// Validate topology name
 	if topology.Spec.Topology.Name == "" {
 		return fmt.Errorf("topology name not specified")
+	}
+
+	// Intelligent worker pool provisioning
+	if r.Coordinator != nil && r.Coordinator.Provisioner != nil {
+		log.Info("Analyzing worker pool provisioning requirements", "topology", topology.Name)
+
+		// Determine provisioning strategy
+		decision, err := r.Coordinator.Provisioner.DetermineProvisioningStrategy(ctx, topology)
+		if err != nil {
+			log.Error(err, "Failed to determine provisioning strategy")
+			// Don't fail validation for provisioning errors, just log them
+		} else {
+			log.Info("Provisioning decision",
+				"strategy", decision.Strategy,
+				"action", decision.Action,
+				"reason", decision.Reason,
+				"message", decision.Message)
+
+			// Execute provisioning if needed
+			if decision.Action != coordination.ProvisioningActionNone &&
+				decision.Action != coordination.ProvisioningActionUse {
+				err := r.Coordinator.Provisioner.ProvisionWorkerPool(ctx, topology, decision)
+				if err != nil {
+					log.Error(err, "Failed to provision worker pool", "decision", decision)
+					// For now, don't fail validation - the topology can still run on shared resources
+					// In the future, this could be configurable based on topology requirements
+				} else {
+					log.Info("Successfully provisioned worker pool",
+						"workerPool", decision.WorkerPoolName,
+						"action", decision.Action)
+				}
+			}
+		}
 	}
 
 	return nil
@@ -686,6 +739,42 @@ func (r *StormTopologyReconcilerStateMachine) getTopologyVersion(topology *storm
 		}
 	}
 	return "unversioned"
+}
+
+// updateTopologyStatusWithDependencies updates topology status with dependency information
+func (r *StormTopologyReconcilerStateMachine) updateTopologyStatusWithDependencies(ctx context.Context, topology *stormv1beta1.StormTopology, dependencyResults []*coordination.DependencyResult) {
+	log := log.FromContext(ctx)
+
+	// Find the first unsatisfied dependency for status message
+	var statusMessage string
+	var statusReason string
+
+	for _, result := range dependencyResults {
+		if result.Status != coordination.DependencyStatusSatisfied {
+			statusReason = string(result.Status)
+			statusMessage = result.Message
+			break
+		}
+	}
+
+	if statusMessage == "" {
+		statusMessage = "All dependencies satisfied"
+		statusReason = "DependenciesSatisfied"
+	}
+
+	// Update condition
+	meta.SetStatusCondition(&topology.Status.Conditions, metav1.Condition{
+		Type:               "DependenciesReady",
+		Status:             metav1.ConditionFalse,
+		ObservedGeneration: topology.Generation,
+		Reason:             statusReason,
+		Message:            statusMessage,
+	})
+
+	// Update status
+	if err := r.Status().Update(ctx, topology); err != nil {
+		log.Error(err, "Failed to update topology status with dependency information")
+	}
 }
 
 // SetupWithManager sets up the controller with the Manager

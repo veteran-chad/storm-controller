@@ -35,6 +35,7 @@ import (
 
 	stormv1beta1 "github.com/veteran-chad/storm-controller/api/v1beta1"
 	"github.com/veteran-chad/storm-controller/controllers"
+	"github.com/veteran-chad/storm-controller/pkg/coordination"
 	"github.com/veteran-chad/storm-controller/pkg/jarextractor"
 	_ "github.com/veteran-chad/storm-controller/pkg/metrics" // Register metrics
 	"github.com/veteran-chad/storm-controller/pkg/storm"
@@ -116,11 +117,16 @@ func main() {
 	clientManager := storm.NewClientManager()
 	setupLog.Info("Created Storm client manager, waiting for StormCluster resources")
 
+	// Create resource coordinator
+	coordinator := coordination.NewResourceCoordinator(mgr.GetClient(), clientManager, mgr.GetScheme())
+	setupLog.Info("Created resource coordinator for cross-controller coordination")
+
 	// Setup StormCluster controller (state machine version)
 	if err = (&controllers.StormClusterReconcilerStateMachine{
 		Client:        mgr.GetClient(),
 		Scheme:        mgr.GetScheme(),
 		ClientManager: clientManager,
+		Coordinator:   coordinator,
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "StormCluster")
 		os.Exit(1)
@@ -137,6 +143,7 @@ func main() {
 		JarExtractor:  jarExtractor,
 		ClusterName:   stormClusterName,
 		Namespace:     stormNamespace,
+		Coordinator:   coordinator,
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "StormTopology")
 		os.Exit(1)
@@ -147,6 +154,7 @@ func main() {
 		Client:        mgr.GetClient(),
 		Scheme:        mgr.GetScheme(),
 		ClientManager: clientManager,
+		Coordinator:   coordinator,
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "StormWorkerPool")
 		os.Exit(1)

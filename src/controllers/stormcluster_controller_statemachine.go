@@ -33,6 +33,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
 	stormv1beta1 "github.com/veteran-chad/storm-controller/api/v1beta1"
+	"github.com/veteran-chad/storm-controller/pkg/coordination"
 	"github.com/veteran-chad/storm-controller/pkg/state"
 	"github.com/veteran-chad/storm-controller/pkg/storm"
 )
@@ -42,6 +43,7 @@ type StormClusterReconcilerStateMachine struct {
 	client.Client
 	Scheme        *runtime.Scheme
 	ClientManager storm.ClientManager
+	Coordinator   *coordination.ResourceCoordinator
 }
 
 // ClusterContext holds the context for cluster reconciliation
@@ -104,15 +106,29 @@ func (r *StormClusterReconcilerStateMachine) Reconcile(ctx context.Context, req 
 			return ctrl.Result{}, r.updateClusterStatus(ctx, cluster, sm.CurrentState(), err.Error())
 		}
 
-		// Execute action for the new state
-		if err := r.executeStateAction(ctx, clusterCtx); err != nil {
-			log.Error(err, "Failed to execute state action", "state", sm.CurrentState())
-			return ctrl.Result{}, r.updateClusterStatus(ctx, cluster, sm.CurrentState(), err.Error())
+		// Execute action for the new state (only for states that need actions)
+		needsAction := false
+		switch state.ClusterState(sm.CurrentState()) {
+		case state.ClusterStateCreating, state.ClusterStateUpdating, state.ClusterStateTerminating:
+			needsAction = true
+		}
+		
+		if needsAction {
+			if err := r.executeStateAction(ctx, clusterCtx); err != nil {
+				log.Error(err, "Failed to execute state action", "state", sm.CurrentState())
+				return ctrl.Result{}, r.updateClusterStatus(ctx, cluster, sm.CurrentState(), err.Error())
+			}
 		}
 
 		// Update status with new state
 		if err := r.updateClusterStatus(ctx, cluster, sm.CurrentState(), ""); err != nil {
 			return ctrl.Result{}, err
+		}
+	} else {
+		// Even if no event, update component counts periodically
+		r.updateComponentStatus(ctx, cluster)
+		if err := r.Status().Update(ctx, cluster); err != nil {
+			log.Error(err, "Failed to update cluster status")
 		}
 	}
 
@@ -220,6 +236,7 @@ func (r *StormClusterReconcilerStateMachine) determineNextEvent(ctx context.Cont
 	case state.ClusterStateCreating:
 		// Check if all resources are created and healthy
 		if err := r.checkCreationComplete(ctx, cluster); err != nil {
+			log.Info("Creation not complete", "error", err.Error())
 			return "", nil // Still creating
 		}
 		return state.EventCreateComplete, nil
@@ -233,6 +250,15 @@ func (r *StormClusterReconcilerStateMachine) determineNextEvent(ctx context.Cont
 		if !healthy {
 			return state.EventUnhealthy, nil
 		}
+
+		// Perform system-wide health monitoring and recovery
+		// TODO: Re-enable after fixing health check logic
+		// if r.Coordinator != nil {
+		// 	_, _, err := r.Coordinator.PerformSystemHealthCheckAndRecovery(ctx, cluster.Namespace)
+		// 	if err != nil {
+		// 		log.Error(err, "Failed to perform system health check and recovery")
+		// 	}
+		// }
 
 		// Check for updates
 		if r.needsUpdate(cluster) {
@@ -322,23 +348,48 @@ func (r *StormClusterReconcilerStateMachine) createCluster(ctx context.Context, 
 	return nil
 }
 
-
 // Additional helper methods...
 
 // checkCreationComplete checks if creation is complete
 func (r *StormClusterReconcilerStateMachine) checkCreationComplete(ctx context.Context, cluster *stormv1beta1.StormCluster) error {
+	// Determine resource names based on management mode
+	configMapName := getConfigMapName(cluster)
+	nimbusStatefulSetName := cluster.Name + "-nimbus"
+	supervisorDeploymentName := cluster.Name + "-supervisor"
+	nimbusServiceName := cluster.Name + "-nimbus"
+	uiDeploymentName := cluster.Name + "-ui"
+	uiServiceName := cluster.Name + "-ui"
+
+	if cluster.Spec.ManagementMode == "reference" && cluster.Spec.ResourceNames != nil {
+		if cluster.Spec.ResourceNames.NimbusStatefulSet != "" {
+			nimbusStatefulSetName = cluster.Spec.ResourceNames.NimbusStatefulSet
+		}
+		if cluster.Spec.ResourceNames.SupervisorDeployment != "" {
+			supervisorDeploymentName = cluster.Spec.ResourceNames.SupervisorDeployment
+		}
+		if cluster.Spec.ResourceNames.NimbusService != "" {
+			nimbusServiceName = cluster.Spec.ResourceNames.NimbusService
+		}
+		if cluster.Spec.ResourceNames.UIDeployment != "" {
+			uiDeploymentName = cluster.Spec.ResourceNames.UIDeployment
+		}
+		if cluster.Spec.ResourceNames.UIService != "" {
+			uiServiceName = cluster.Spec.ResourceNames.UIService
+		}
+	}
+
 	// Check if all expected resources exist
 	resources := []client.Object{
-		&corev1.ConfigMap{ObjectMeta: metav1.ObjectMeta{Name: stormConfigName, Namespace: cluster.Namespace}},
-		&appsv1.StatefulSet{ObjectMeta: metav1.ObjectMeta{Name: cluster.Name + "-nimbus", Namespace: cluster.Namespace}},
-		&appsv1.Deployment{ObjectMeta: metav1.ObjectMeta{Name: cluster.Name + "-supervisor", Namespace: cluster.Namespace}},
-		&corev1.Service{ObjectMeta: metav1.ObjectMeta{Name: cluster.Name + "-nimbus", Namespace: cluster.Namespace}},
+		&corev1.ConfigMap{ObjectMeta: metav1.ObjectMeta{Name: configMapName, Namespace: cluster.Namespace}},
+		&appsv1.StatefulSet{ObjectMeta: metav1.ObjectMeta{Name: nimbusStatefulSetName, Namespace: cluster.Namespace}},
+		&appsv1.Deployment{ObjectMeta: metav1.ObjectMeta{Name: supervisorDeploymentName, Namespace: cluster.Namespace}},
+		&corev1.Service{ObjectMeta: metav1.ObjectMeta{Name: nimbusServiceName, Namespace: cluster.Namespace}},
 	}
 
 	if cluster.Spec.UI.Enabled {
 		resources = append(resources,
-			&appsv1.Deployment{ObjectMeta: metav1.ObjectMeta{Name: cluster.Name + "-ui", Namespace: cluster.Namespace}},
-			&corev1.Service{ObjectMeta: metav1.ObjectMeta{Name: cluster.Name + "-ui", Namespace: cluster.Namespace}},
+			&appsv1.Deployment{ObjectMeta: metav1.ObjectMeta{Name: uiDeploymentName, Namespace: cluster.Namespace}},
+			&corev1.Service{ObjectMeta: metav1.ObjectMeta{Name: uiServiceName, Namespace: cluster.Namespace}},
 		)
 	}
 
@@ -354,11 +405,23 @@ func (r *StormClusterReconcilerStateMachine) checkCreationComplete(ctx context.C
 	return nil
 }
 
-
 // isClusterHealthy checks if the cluster is healthy
 func (r *StormClusterReconcilerStateMachine) isClusterHealthy(ctx context.Context, cluster *stormv1beta1.StormCluster) (bool, error) {
+	// Determine resource names based on management mode
+	nimbusStatefulSetName := cluster.Name + "-nimbus"
+	supervisorDeploymentName := cluster.Name + "-supervisor"
+
+	if cluster.Spec.ManagementMode == "reference" && cluster.Spec.ResourceNames != nil {
+		if cluster.Spec.ResourceNames.NimbusStatefulSet != "" {
+			nimbusStatefulSetName = cluster.Spec.ResourceNames.NimbusStatefulSet
+		}
+		if cluster.Spec.ResourceNames.SupervisorDeployment != "" {
+			supervisorDeploymentName = cluster.Spec.ResourceNames.SupervisorDeployment
+		}
+	}
+
 	// Check Nimbus health
-	nimbusReady, err := r.getReadyReplicas(ctx, cluster.Name+"-nimbus", cluster.Namespace, "nimbus")
+	nimbusReady, err := r.getReadyReplicas(ctx, nimbusStatefulSetName, cluster.Namespace, "nimbus")
 	if err != nil {
 		return false, err
 	}
@@ -368,7 +431,7 @@ func (r *StormClusterReconcilerStateMachine) isClusterHealthy(ctx context.Contex
 	}
 
 	// Check Supervisor health
-	supervisorReady, err := r.getReadyReplicas(ctx, cluster.Name+"-supervisor", cluster.Namespace, "supervisor")
+	supervisorReady, err := r.getReadyReplicas(ctx, supervisorDeploymentName, cluster.Namespace, "supervisor")
 	if err != nil {
 		return false, err
 	}
@@ -453,19 +516,53 @@ func (r *StormClusterReconcilerStateMachine) updateClusterStatus(ctx context.Con
 
 // updateComponentStatus updates component status counts
 func (r *StormClusterReconcilerStateMachine) updateComponentStatus(ctx context.Context, cluster *stormv1beta1.StormCluster) {
+	log := log.FromContext(ctx)
+	// Determine resource names based on management mode
+	nimbusStatefulSetName := cluster.Name + "-nimbus"
+	supervisorDeploymentName := cluster.Name + "-supervisor"
+	uiDeploymentName := cluster.Name + "-ui"
+
+	if cluster.Spec.ManagementMode == "reference" && cluster.Spec.ResourceNames != nil {
+		if cluster.Spec.ResourceNames.NimbusStatefulSet != "" {
+			nimbusStatefulSetName = cluster.Spec.ResourceNames.NimbusStatefulSet
+		}
+		if cluster.Spec.ResourceNames.SupervisorDeployment != "" {
+			supervisorDeploymentName = cluster.Spec.ResourceNames.SupervisorDeployment
+		}
+		if cluster.Spec.ResourceNames.UIDeployment != "" {
+			uiDeploymentName = cluster.Spec.ResourceNames.UIDeployment
+		}
+	}
+
 	// Get Nimbus ready count
-	nimbusReady, _ := r.getReadyReplicas(ctx, cluster.Name+"-nimbus", cluster.Namespace, "nimbus")
+	nimbusReady, _ := r.getReadyReplicas(ctx, nimbusStatefulSetName, cluster.Namespace, "nimbus")
 	cluster.Status.NimbusReady = nimbusReady
 
 	// Get Supervisor ready count
-	supervisorReady, _ := r.getReadyReplicas(ctx, cluster.Name+"-supervisor", cluster.Namespace, "supervisor")
+	supervisorReady, err := r.getReadyReplicas(ctx, supervisorDeploymentName, cluster.Namespace, "supervisor")
+	if err != nil {
+		log.Error(err, "Failed to get supervisor ready replicas", "name", supervisorDeploymentName)
+	} else {
+		log.Info("Got supervisor ready replicas", "name", supervisorDeploymentName, "ready", supervisorReady)
+	}
 	cluster.Status.SupervisorReady = supervisorReady
 
 	// Get UI ready count
 	if cluster.Spec.UI.Enabled {
-		uiReady, _ := r.getReadyReplicas(ctx, cluster.Name+"-ui", cluster.Namespace, "ui")
+		uiReady, _ := r.getReadyReplicas(ctx, uiDeploymentName, cluster.Namespace, "ui")
 		cluster.Status.UIReady = uiReady
 	}
+
+	// Calculate total slots
+	cluster.Status.TotalSlots = cluster.Status.SupervisorReady * cluster.Spec.Supervisor.WorkerSlots
+	
+	// TODO: Get actual used slots from Storm API
+	// For now, we'll leave UsedSlots as 0
+	cluster.Status.UsedSlots = 0
+	cluster.Status.FreeSlots = cluster.Status.TotalSlots - cluster.Status.UsedSlots
+	
+	// Format slots info for display
+	cluster.Status.SlotsInfo = fmt.Sprintf("%d/%d", cluster.Status.UsedSlots, cluster.Status.TotalSlots)
 
 	// Update endpoints
 	cluster.Status.Endpoints.Nimbus = fmt.Sprintf("%s-nimbus.%s.svc.cluster.local:%d",
@@ -547,9 +644,15 @@ func (r *StormClusterReconcilerStateMachine) getReadyReplicas(ctx context.Contex
 func (r *StormClusterReconcilerStateMachine) reconcileConfigMap(ctx context.Context, cluster *stormv1beta1.StormCluster) error {
 	log := log.FromContext(ctx)
 
+	// Determine the ConfigMap name based on management mode
+	configMapName := stormConfigName
+	if cluster.Spec.ManagementMode == "reference" && cluster.Spec.ResourceNames != nil && cluster.Spec.ResourceNames.ConfigMap != "" {
+		configMapName = cluster.Spec.ResourceNames.ConfigMap
+	}
+
 	configMap := &corev1.ConfigMap{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      stormConfigName,
+			Name:      configMapName,
 			Namespace: cluster.Namespace,
 		},
 	}
@@ -558,6 +661,11 @@ func (r *StormClusterReconcilerStateMachine) reconcileConfigMap(ctx context.Cont
 		// Set owner reference
 		if err := controllerutil.SetControllerReference(cluster, configMap, r.Scheme); err != nil {
 			return err
+		}
+
+		// In reference mode, don't modify existing ConfigMap
+		if cluster.Spec.ManagementMode == "reference" && !configMap.CreationTimestamp.IsZero() {
+			return nil
 		}
 
 		// Build Storm configuration
@@ -590,11 +698,20 @@ func (r *StormClusterReconcilerStateMachine) buildStormConfig(cluster *stormv1be
 	}
 	config += fmt.Sprintf("storm.zookeeper.root: \"%s\"\n", cluster.Spec.Zookeeper.ChrootPath)
 
-	// Nimbus seeds
+	// Nimbus seeds - handle reference mode
 	config += "nimbus.seeds:\n"
-	for i := 0; i < int(cluster.Spec.Nimbus.Replicas); i++ {
-		config += fmt.Sprintf("  - \"%s-nimbus-%d.%s-nimbus.%s.svc.cluster.local\"\n",
-			cluster.Name, i, cluster.Name, cluster.Namespace)
+	if cluster.Spec.ManagementMode == "reference" && cluster.Spec.ResourceNames != nil && cluster.Spec.ResourceNames.NimbusStatefulSet != "" {
+		// In reference mode, use the actual StatefulSet name
+		for i := 0; i < int(cluster.Spec.Nimbus.Replicas); i++ {
+			config += fmt.Sprintf("  - \"%s-%d.%s.%s.svc.cluster.local\"\n",
+				cluster.Spec.ResourceNames.NimbusStatefulSet, i, cluster.Spec.ResourceNames.NimbusStatefulSet, cluster.Namespace)
+		}
+	} else {
+		// In create mode, use default naming pattern
+		for i := 0; i < int(cluster.Spec.Nimbus.Replicas); i++ {
+			config += fmt.Sprintf("  - \"%s-nimbus-%d.%s-nimbus.%s.svc.cluster.local\"\n",
+				cluster.Name, i, cluster.Name, cluster.Namespace)
+		}
 	}
 
 	// Nimbus Thrift configuration

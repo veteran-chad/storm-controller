@@ -1,3 +1,21 @@
+# Storm image configuration
+image:
+  registry: docker.io
+  repository: storm
+  tag: latest
+  pullPolicy: Never  # Use local image
+
+# Enable StormCluster resource for coordination layer testing
+stormCluster:
+  enabled: true
+  # Use the same name as the Helm release to match resource naming
+  name: storm-cluster
+  config:
+    "worker.heap.memory.mb": "1024"
+    "nimbus.childopts": "-Xmx1024m" 
+    "supervisor.childopts": "-Xmx1024m"
+    "topology.worker.max.heap.size.mb": "768"
+
 # Enable controller with local image
 controller:
   enabled: true
@@ -14,3 +32,10 @@ controller:
     limits:
       cpu: 500m
       memory: 256Mi
+
+# Disable supervisor readiness probe since logviewer is not running
+supervisor:
+  livenessProbe:
+    enabled: false
+  readinessProbe:
+    enabled: false

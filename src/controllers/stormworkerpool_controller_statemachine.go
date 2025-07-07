@@ -38,6 +38,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
 	stormv1beta1 "github.com/veteran-chad/storm-controller/api/v1beta1"
+	"github.com/veteran-chad/storm-controller/pkg/coordination"
 	"github.com/veteran-chad/storm-controller/pkg/metrics"
 	"github.com/veteran-chad/storm-controller/pkg/state"
 	"github.com/veteran-chad/storm-controller/pkg/storm"
@@ -48,6 +49,7 @@ type StormWorkerPoolReconcilerStateMachine struct {
 	client.Client
 	Scheme        *runtime.Scheme
 	ClientManager storm.ClientManager
+	Coordinator   *coordination.ResourceCoordinator
 }
 
 // WorkerPoolContext holds the context for worker pool reconciliation

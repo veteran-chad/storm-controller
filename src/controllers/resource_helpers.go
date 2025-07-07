@@ -44,9 +44,15 @@ type ResourceReconciler interface {
 func (r *StormClusterReconcilerStateMachine) reconcileNimbus(ctx context.Context, cluster *stormv1beta1.StormCluster) error {
 	log := log.FromContext(ctx)
 
+	// Determine the StatefulSet name based on management mode
+	statefulSetName := cluster.Name + "-nimbus"
+	if cluster.Spec.ManagementMode == "reference" && cluster.Spec.ResourceNames != nil && cluster.Spec.ResourceNames.NimbusStatefulSet != "" {
+		statefulSetName = cluster.Spec.ResourceNames.NimbusStatefulSet
+	}
+
 	statefulSet := &appsv1.StatefulSet{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      cluster.Name + "-nimbus",
+			Name:      statefulSetName,
 			Namespace: cluster.Namespace,
 		},
 	}
@@ -57,7 +63,17 @@ func (r *StormClusterReconcilerStateMachine) reconcileNimbus(ctx context.Context
 			return err
 		}
 
-		// Build StatefulSet spec
+		// In reference mode, only update mutable fields
+		if cluster.Spec.ManagementMode == "reference" {
+			// For existing StatefulSets, we can only update certain fields
+			if !statefulSet.CreationTimestamp.IsZero() {
+				// Existing StatefulSet - don't modify it in reference mode
+				// The controller should only watch/monitor, not update
+				return nil
+			}
+		}
+		
+		// In create mode or for new resources, set the full spec
 		statefulSet.Spec = buildNimbusStatefulSetSpec(cluster)
 
 		return nil
@@ -75,9 +91,15 @@ func (r *StormClusterReconcilerStateMachine) reconcileNimbus(ctx context.Context
 func (r *StormClusterReconcilerStateMachine) reconcileSupervisors(ctx context.Context, cluster *stormv1beta1.StormCluster) error {
 	log := log.FromContext(ctx)
 
+	// Determine the Deployment name based on management mode
+	deploymentName := cluster.Name + "-supervisor"
+	if cluster.Spec.ManagementMode == "reference" && cluster.Spec.ResourceNames != nil && cluster.Spec.ResourceNames.SupervisorDeployment != "" {
+		deploymentName = cluster.Spec.ResourceNames.SupervisorDeployment
+	}
+
 	deployment := &appsv1.Deployment{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      cluster.Name + "-supervisor",
+			Name:      deploymentName,
 			Namespace: cluster.Namespace,
 		},
 	}
@@ -86,6 +108,11 @@ func (r *StormClusterReconcilerStateMachine) reconcileSupervisors(ctx context.Co
 		// Set owner reference
 		if err := controllerutil.SetControllerReference(cluster, deployment, r.Scheme); err != nil {
 			return err
+		}
+
+		// In reference mode, don't modify existing deployments
+		if cluster.Spec.ManagementMode == "reference" && !deployment.CreationTimestamp.IsZero() {
+			return nil
 		}
 
 		// Build Deployment spec
@@ -110,9 +137,15 @@ func (r *StormClusterReconcilerStateMachine) reconcileUI(ctx context.Context, cl
 
 	log := log.FromContext(ctx)
 
+	// Determine the Deployment name based on management mode
+	deploymentName := cluster.Name + "-ui"
+	if cluster.Spec.ManagementMode == "reference" && cluster.Spec.ResourceNames != nil && cluster.Spec.ResourceNames.UIDeployment != "" {
+		deploymentName = cluster.Spec.ResourceNames.UIDeployment
+	}
+
 	deployment := &appsv1.Deployment{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      cluster.Name + "-ui",
+			Name:      deploymentName,
 			Namespace: cluster.Namespace,
 		},
 	}
@@ -121,6 +154,11 @@ func (r *StormClusterReconcilerStateMachine) reconcileUI(ctx context.Context, cl
 		// Set owner reference
 		if err := controllerutil.SetControllerReference(cluster, deployment, r.Scheme); err != nil {
 			return err
+		}
+
+		// In reference mode, don't modify existing deployments
+		if cluster.Spec.ManagementMode == "reference" && !deployment.CreationTimestamp.IsZero() {
+			return nil
 		}
 
 		// Build Deployment spec
@@ -141,9 +179,15 @@ func (r *StormClusterReconcilerStateMachine) reconcileUI(ctx context.Context, cl
 func (r *StormClusterReconcilerStateMachine) reconcileNimbusService(ctx context.Context, cluster *stormv1beta1.StormCluster) error {
 	log := log.FromContext(ctx)
 
+	// Determine the Service name based on management mode
+	serviceName := cluster.Name + "-nimbus"
+	if cluster.Spec.ManagementMode == "reference" && cluster.Spec.ResourceNames != nil && cluster.Spec.ResourceNames.NimbusService != "" {
+		serviceName = cluster.Spec.ResourceNames.NimbusService
+	}
+
 	service := &corev1.Service{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      cluster.Name + "-nimbus",
+			Name:      serviceName,
 			Namespace: cluster.Namespace,
 		},
 	}
@@ -152,6 +196,11 @@ func (r *StormClusterReconcilerStateMachine) reconcileNimbusService(ctx context.
 		// Set owner reference
 		if err := controllerutil.SetControllerReference(cluster, service, r.Scheme); err != nil {
 			return err
+		}
+
+		// In reference mode, don't modify existing services
+		if cluster.Spec.ManagementMode == "reference" && !service.CreationTimestamp.IsZero() {
+			return nil
 		}
 
 		service.Spec = corev1.ServiceSpec{
@@ -191,9 +240,15 @@ func (r *StormClusterReconcilerStateMachine) reconcileUIService(ctx context.Cont
 
 	log := log.FromContext(ctx)
 
+	// Determine the Service name based on management mode
+	serviceName := cluster.Name + "-ui"
+	if cluster.Spec.ManagementMode == "reference" && cluster.Spec.ResourceNames != nil && cluster.Spec.ResourceNames.UIService != "" {
+		serviceName = cluster.Spec.ResourceNames.UIService
+	}
+
 	service := &corev1.Service{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      cluster.Name + "-ui",
+			Name:      serviceName,
 			Namespace: cluster.Namespace,
 		},
 	}
@@ -202,6 +257,11 @@ func (r *StormClusterReconcilerStateMachine) reconcileUIService(ctx context.Cont
 		// Set owner reference
 		if err := controllerutil.SetControllerReference(cluster, service, r.Scheme); err != nil {
 			return err
+		}
+
+		// In reference mode, don't modify existing services
+		if cluster.Spec.ManagementMode == "reference" && !service.CreationTimestamp.IsZero() {
+			return nil
 		}
 
 		service.Spec = corev1.ServiceSpec{
@@ -248,6 +308,13 @@ func getStormImage(cluster *stormv1beta1.StormCluster) string {
 		registry = "docker.io"
 	}
 	return fmt.Sprintf("%s/%s:%s", registry, cluster.Spec.Image.Repository, cluster.Spec.Image.Tag)
+}
+
+func getConfigMapName(cluster *stormv1beta1.StormCluster) string {
+	if cluster.Spec.ManagementMode == "reference" && cluster.Spec.ResourceNames != nil && cluster.Spec.ResourceNames.ConfigMap != "" {
+		return cluster.Spec.ResourceNames.ConfigMap
+	}
+	return stormConfigName
 }
 
 func getImagePullSecrets(cluster *stormv1beta1.StormCluster) []corev1.LocalObjectReference {
@@ -310,7 +377,7 @@ func buildNimbusStatefulSetSpec(cluster *stormv1beta1.StormCluster) appsv1.State
 				VolumeSource: corev1.VolumeSource{
 					ConfigMap: &corev1.ConfigMapVolumeSource{
 						LocalObjectReference: corev1.LocalObjectReference{
-							Name: stormConfigName,
+							Name: getConfigMapName(cluster),
 						},
 					},
 				},
@@ -321,22 +388,28 @@ func buildNimbusStatefulSetSpec(cluster *stormv1beta1.StormCluster) appsv1.State
 	// Build volume claim templates if persistence is enabled
 	var volumeClaimTemplates []corev1.PersistentVolumeClaim
 	if cluster.Spec.Nimbus.Persistence.Enabled {
+		pvcSpec := corev1.PersistentVolumeClaimSpec{
+			AccessModes: []corev1.PersistentVolumeAccessMode{
+				cluster.Spec.Nimbus.Persistence.AccessMode,
+			},
+			Resources: corev1.ResourceRequirements{
+				Requests: corev1.ResourceList{
+					corev1.ResourceStorage: resource.MustParse(cluster.Spec.Nimbus.Persistence.Size),
+				},
+			},
+		}
+
+		// Only set StorageClassName if it's not empty
+		if cluster.Spec.Nimbus.Persistence.StorageClass != "" {
+			pvcSpec.StorageClassName = &cluster.Spec.Nimbus.Persistence.StorageClass
+		}
+
 		volumeClaimTemplates = []corev1.PersistentVolumeClaim{
 			{
 				ObjectMeta: metav1.ObjectMeta{
 					Name: "nimbus-data",
 				},
-				Spec: corev1.PersistentVolumeClaimSpec{
-					AccessModes: []corev1.PersistentVolumeAccessMode{
-						cluster.Spec.Nimbus.Persistence.AccessMode,
-					},
-					Resources: corev1.ResourceRequirements{
-						Requests: corev1.ResourceList{
-							corev1.ResourceStorage: resource.MustParse(cluster.Spec.Nimbus.Persistence.Size),
-						},
-					},
-					StorageClassName: &cluster.Spec.Nimbus.Persistence.StorageClass,
-				},
+				Spec: pvcSpec,
 			},
 		}
 	} else {
@@ -427,7 +500,7 @@ func buildSupervisorDeploymentSpec(cluster *stormv1beta1.StormCluster) appsv1.De
 						VolumeSource: corev1.VolumeSource{
 							ConfigMap: &corev1.ConfigMapVolumeSource{
 								LocalObjectReference: corev1.LocalObjectReference{
-									Name: stormConfigName,
+									Name: getConfigMapName(cluster),
 								},
 							},
 						},
@@ -494,7 +567,7 @@ func buildUIDeploymentSpec(cluster *stormv1beta1.StormCluster) appsv1.Deployment
 						VolumeSource: corev1.VolumeSource{
 							ConfigMap: &corev1.ConfigMapVolumeSource{
 								LocalObjectReference: corev1.LocalObjectReference{
-									Name: stormConfigName,
+									Name: getConfigMapName(cluster),
 								},
 							},
 						},

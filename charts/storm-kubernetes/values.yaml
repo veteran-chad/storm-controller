@@ -1107,6 +1107,22 @@ ui:
     ##
     users: []
 
+## @section Storm Cluster parameters
+
+stormCluster:
+  ## @param stormCluster.enabled Enable StormCluster resource creation
+  ##
+  enabled: false
+  ## @param stormCluster.name Name of the StormCluster resource
+  ##
+  name: storm-cluster
+  ## @param stormCluster.config Storm configuration overrides for the cluster
+  ##
+  config:
+    "worker.heap.memory.mb": "1024"
+    "nimbus.childopts": "-Xmx1024m"
+    "supervisor.childopts": "-Xmx1024m"
+
 ## @section Storm Controller parameters
 
 controller:

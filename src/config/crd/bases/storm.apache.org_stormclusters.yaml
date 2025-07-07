@@ -27,7 +27,7 @@ spec:
       name: Supervisors
       type: integer
     - description: Used/Total slots
-      jsonPath: .status.usedSlots
+      jsonPath: .status.slotsInfo
       name: Slots
       type: string
     - jsonPath: .metadata.creationTimestamp
@@ -92,6 +92,13 @@ spec:
                     description: Storm image tag
                     type: string
                 type: object
+              managementMode:
+                default: create
+                description: Management mode for the cluster
+                enum:
+                - create
+                - reference
+                type: string
               metrics:
                 description: Metrics configuration
                 properties:
@@ -1198,6 +1205,28 @@ spec:
                           type: string
                       type: object
                     type: array
+                type: object
+              resourceNames:
+                description: Resource naming configuration for reference mode
+                properties:
+                  configMap:
+                    description: Name of the Storm ConfigMap
+                    type: string
+                  nimbusService:
+                    description: Name of the Nimbus Service
+                    type: string
+                  nimbusStatefulSet:
+                    description: Name of the Nimbus StatefulSet
+                    type: string
+                  supervisorDeployment:
+                    description: Name of the Supervisor Deployment
+                    type: string
+                  uiDeployment:
+                    description: Name of the UI Deployment
+                    type: string
+                  uiService:
+                    description: Name of the UI Service
+                    type: string
                 type: object
               supervisor:
                 description: Supervisor configuration
@@ -2491,6 +2520,9 @@ spec:
                 - Failed
                 - Updating
                 - Terminating
+                type: string
+              slotsInfo:
+                description: Formatted slots info for display (used/total)
                 type: string
               supervisorReady:
                 description: Number of ready Supervisor nodes

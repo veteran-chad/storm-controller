@@ -341,22 +341,28 @@ func (r *StormClusterReconcilerEnhanced) buildNimbusStatefulSetSpec(cluster *sto
 	// Build volume claim templates if persistence is enabled
 	var volumeClaimTemplates []corev1.PersistentVolumeClaim
 	if cluster.Spec.Nimbus.Persistence.Enabled {
+		pvcSpec := corev1.PersistentVolumeClaimSpec{
+			AccessModes: []corev1.PersistentVolumeAccessMode{
+				cluster.Spec.Nimbus.Persistence.AccessMode,
+			},
+			Resources: corev1.ResourceRequirements{
+				Requests: corev1.ResourceList{
+					corev1.ResourceStorage: resource.MustParse(cluster.Spec.Nimbus.Persistence.Size),
+				},
+			},
+		}
+
+		// Only set StorageClassName if it's not empty
+		if cluster.Spec.Nimbus.Persistence.StorageClass != "" {
+			pvcSpec.StorageClassName = &cluster.Spec.Nimbus.Persistence.StorageClass
+		}
+
 		volumeClaimTemplates = []corev1.PersistentVolumeClaim{
 			{
 				ObjectMeta: metav1.ObjectMeta{
 					Name: "nimbus-data",
 				},
-				Spec: corev1.PersistentVolumeClaimSpec{
-					AccessModes: []corev1.PersistentVolumeAccessMode{
-						cluster.Spec.Nimbus.Persistence.AccessMode,
-					},
-					Resources: corev1.ResourceRequirements{
-						Requests: corev1.ResourceList{
-							corev1.ResourceStorage: resource.MustParse(cluster.Spec.Nimbus.Persistence.Size),
-						},
-					},
-					StorageClassName: &cluster.Spec.Nimbus.Persistence.StorageClass,
-				},
+				Spec: pvcSpec,
 			},
 		}
 	} else {
