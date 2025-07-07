@@ -112,7 +112,7 @@ func (r *StormClusterReconcilerStateMachine) Reconcile(ctx context.Context, req 
 		case state.ClusterStateCreating, state.ClusterStateUpdating, state.ClusterStateTerminating:
 			needsAction = true
 		}
-		
+
 		if needsAction {
 			if err := r.executeStateAction(ctx, clusterCtx); err != nil {
 				log.Error(err, "Failed to execute state action", "state", sm.CurrentState())
@@ -252,13 +252,18 @@ func (r *StormClusterReconcilerStateMachine) determineNextEvent(ctx context.Cont
 		}
 
 		// Perform system-wide health monitoring and recovery
-		// TODO: Re-enable after fixing health check logic
-		// if r.Coordinator != nil {
-		// 	_, _, err := r.Coordinator.PerformSystemHealthCheckAndRecovery(ctx, cluster.Namespace)
-		// 	if err != nil {
-		// 		log.Error(err, "Failed to perform system health check and recovery")
-		// 	}
-		// }
+		if r.Coordinator != nil {
+			// Only perform health check if cluster is running and has been stable for at least 30 seconds
+			if cluster.Status.LastUpdateTime != nil && time.Since(cluster.Status.LastUpdateTime.Time) > 30*time.Second {
+				_, _, err := r.Coordinator.PerformSystemHealthCheckAndRecovery(ctx, cluster.Namespace)
+				if err != nil {
+					// Log error but don't fail reconciliation
+					log.Error(err, "Failed to perform system health check and recovery",
+						"cluster", cluster.Name,
+						"namespace", cluster.Namespace)
+				}
+			}
+		}
 
 		// Check for updates
 		if r.needsUpdate(cluster) {
@@ -538,6 +543,28 @@ func (r *StormClusterReconcilerStateMachine) updateComponentStatus(ctx context.C
 	nimbusReady, _ := r.getReadyReplicas(ctx, nimbusStatefulSetName, cluster.Namespace, "nimbus")
 	cluster.Status.NimbusReady = nimbusReady
 
+	// Update Storm client configuration when Nimbus is ready
+	if nimbusReady > 0 && r.ClientManager != nil {
+		// Determine UI host based on management mode
+		uiHost := fmt.Sprintf("%s-ui", cluster.Name)
+		if cluster.Spec.ManagementMode == "reference" && cluster.Spec.ResourceNames != nil && cluster.Spec.ResourceNames.UIService != "" {
+			uiHost = cluster.Spec.ResourceNames.UIService
+		}
+
+		clientConfig := &storm.ClientConfig{
+			Type:       storm.ClientTypeREST, // Use REST for now
+			NimbusHost: fmt.Sprintf("%s-nimbus.%s.svc.cluster.local", cluster.Name, cluster.Namespace),
+			NimbusPort: int(cluster.Spec.Nimbus.Thrift.Port),
+			UIHost:     uiHost,
+			UIPort:     int(cluster.Spec.UI.Service.Port),
+		}
+
+		if err := r.ClientManager.UpdateClient(clientConfig); err != nil {
+			log.Error(err, "Failed to update Storm client")
+			// Continue without failing - client will be updated on next reconcile
+		}
+	}
+
 	// Get Supervisor ready count
 	supervisorReady, err := r.getReadyReplicas(ctx, supervisorDeploymentName, cluster.Namespace, "supervisor")
 	if err != nil {
@@ -555,22 +582,52 @@ func (r *StormClusterReconcilerStateMachine) updateComponentStatus(ctx context.C
 
 	// Calculate total slots
 	cluster.Status.TotalSlots = cluster.Status.SupervisorReady * cluster.Spec.Supervisor.WorkerSlots
-	
-	// TODO: Get actual used slots from Storm API
-	// For now, we'll leave UsedSlots as 0
-	cluster.Status.UsedSlots = 0
+
+	// Get actual used slots from Storm API
+	if r.ClientManager != nil {
+		stormClient, err := r.ClientManager.GetClient()
+		if err != nil {
+			log.Info("Storm client not available", "error", err.Error())
+			cluster.Status.UsedSlots = 0
+		} else if stormClient != nil {
+			log.Info("Calling GetClusterInfo from Storm API")
+			clusterInfo, err := stormClient.GetClusterInfo(ctx)
+			if err != nil {
+				log.Error(err, "Failed to get cluster info from Storm API")
+				cluster.Status.UsedSlots = 0
+			} else {
+				log.Info("Successfully got cluster info from Storm API",
+					"usedSlots", clusterInfo.UsedSlots,
+					"totalSlots", clusterInfo.TotalSlots,
+					"topologies", clusterInfo.Topologies)
+				cluster.Status.UsedSlots = int32(clusterInfo.UsedSlots)
+				// Also get topology count
+				cluster.Status.TopologyCount = int32(clusterInfo.Topologies)
+			}
+		}
+	} else {
+		log.Info("ClientManager is nil")
+		cluster.Status.UsedSlots = 0
+	}
+
 	cluster.Status.FreeSlots = cluster.Status.TotalSlots - cluster.Status.UsedSlots
-	
+
 	// Format slots info for display
 	cluster.Status.SlotsInfo = fmt.Sprintf("%d/%d", cluster.Status.UsedSlots, cluster.Status.TotalSlots)
 
 	// Update endpoints
+	// Determine UI service name based on management mode
+	uiServiceName := fmt.Sprintf("%s-ui", cluster.Name)
+	if cluster.Spec.ManagementMode == "reference" && cluster.Spec.ResourceNames != nil && cluster.Spec.ResourceNames.UIService != "" {
+		uiServiceName = cluster.Spec.ResourceNames.UIService
+	}
+
 	cluster.Status.Endpoints.Nimbus = fmt.Sprintf("%s-nimbus.%s.svc.cluster.local:%d",
 		cluster.Name, cluster.Namespace, cluster.Spec.Nimbus.Thrift.Port)
-	cluster.Status.Endpoints.UI = fmt.Sprintf("%s-ui.%s.svc.cluster.local:%d",
-		cluster.Name, cluster.Namespace, cluster.Spec.UI.Service.Port)
-	cluster.Status.Endpoints.RestAPI = fmt.Sprintf("http://%s-ui.%s.svc.cluster.local:%d/api/v1",
-		cluster.Name, cluster.Namespace, cluster.Spec.UI.Service.Port)
+	cluster.Status.Endpoints.UI = fmt.Sprintf("%s.%s.svc.cluster.local:%d",
+		uiServiceName, cluster.Namespace, cluster.Spec.UI.Service.Port)
+	cluster.Status.Endpoints.RestAPI = fmt.Sprintf("http://%s.%s.svc.cluster.local:%d/api/v1",
+		uiServiceName, cluster.Namespace, cluster.Spec.UI.Service.Port)
 }
 
 // getRequeueDuration returns the requeue duration based on state

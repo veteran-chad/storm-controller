@@ -1901,6 +1901,10 @@ spec:
                 description: Number of executors
                 format: int32
                 type: integer
+              internalState:
+                description: Internal state for state machine tracking (not exposed
+                  in CRD)
+                type: string
               lastError:
                 description: Last error message
                 type: string

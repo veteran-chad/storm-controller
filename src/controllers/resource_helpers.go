@@ -72,7 +72,7 @@ func (r *StormClusterReconcilerStateMachine) reconcileNimbus(ctx context.Context
 				return nil
 			}
 		}
-		
+
 		// In create mode or for new resources, set the full spec
 		statefulSet.Spec = buildNimbusStatefulSetSpec(cluster)
 

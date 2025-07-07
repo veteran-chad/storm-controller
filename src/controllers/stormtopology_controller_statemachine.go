@@ -156,6 +156,12 @@ func (r *StormTopologyReconcilerStateMachine) Reconcile(ctx context.Context, req
 			return ctrl.Result{}, r.updateTopologyStatus(ctx, topology, sm.CurrentState(), err.Error())
 		}
 
+		// Execute action for the new state immediately
+		if err := r.executeStateAction(ctx, topologyCtx); err != nil {
+			log.Error(err, "Failed to execute state action", "state", sm.CurrentState())
+			return ctrl.Result{}, r.updateTopologyStatus(ctx, topology, sm.CurrentState(), err.Error())
+		}
+
 		// Update status with new state
 		if err := r.updateTopologyStatus(ctx, topology, sm.CurrentState(), ""); err != nil {
 			return ctrl.Result{}, err
@@ -169,42 +175,46 @@ func (r *StormTopologyReconcilerStateMachine) Reconcile(ctx context.Context, req
 
 // initializeStateMachine creates and initializes a state machine based on topology status
 func (r *StormTopologyReconcilerStateMachine) initializeStateMachine(topology *stormv1beta1.StormTopology) *state.StateMachine {
-	sm := state.NewTopologyStateMachine()
-
-	// Map topology status phase to state machine state
-	var currentState state.State
-	switch topology.Status.Phase {
-	case "Pending":
-		currentState = state.State(state.TopologyStatePending)
-	case "Validating":
-		currentState = state.State(state.TopologyStateValidating)
-	case "Downloading":
-		currentState = state.State(state.TopologyStateDownloading)
-	case "Submitting":
-		currentState = state.State(state.TopologyStateSubmitting)
-	case "Running":
-		currentState = state.State(state.TopologyStateRunning)
-	case "Suspended":
-		currentState = state.State(state.TopologyStateSuspended)
-	case "Updating":
-		currentState = state.State(state.TopologyStateUpdating)
-	case "Killing":
-		currentState = state.State(state.TopologyStateKilling)
-	case "Killed":
-		currentState = state.State(state.TopologyStateKilled)
-	case "Failed":
-		currentState = state.State(state.TopologyStateFailed)
-	default:
-		currentState = state.State(state.TopologyStateUnknown)
-	}
-
-	// Set the current state
-	if currentState != state.State(state.TopologyStateUnknown) {
-		// Create a new state machine with the current state
-		sm = state.NewStateMachine(currentState)
-		// Re-add all transitions
+	// First try to use internal state if available
+	if topology.Status.InternalState != "" {
+		sm := state.NewStateMachine(state.State(topology.Status.InternalState))
 		r.setupTopologyTransitions(sm)
+		r.setupTopologyHandlers(sm)
+		log.Log.Info("Initialized state machine from internal state",
+			"internalState", topology.Status.InternalState,
+			"phase", topology.Status.Phase)
+		return sm
 	}
+
+	// Otherwise determine initial state based on phase
+	var initialState state.State = state.State(state.TopologyStateUnknown)
+
+	// If we have a phase but no internal state, try to map it
+	if topology.Status.Phase != "" {
+		// Map topology status phase to state machine state
+		switch topology.Status.Phase {
+		case "Pending":
+			initialState = state.State(state.TopologyStatePending)
+		case "Submitted":
+			initialState = state.State(state.TopologyStateSubmitting)
+		case "Running":
+			initialState = state.State(state.TopologyStateRunning)
+		case "Suspended":
+			initialState = state.State(state.TopologyStateSuspended)
+		case "Updating":
+			initialState = state.State(state.TopologyStateUpdating)
+		case "Killed":
+			initialState = state.State(state.TopologyStateKilled)
+		case "Failed":
+			initialState = state.State(state.TopologyStateFailed)
+		default:
+			initialState = state.State(state.TopologyStateUnknown)
+		}
+	}
+
+	// Create state machine with the determined initial state
+	sm := state.NewStateMachine(initialState)
+	r.setupTopologyTransitions(sm)
 
 	// Set up handlers
 	r.setupTopologyHandlers(sm)
@@ -214,11 +224,47 @@ func (r *StormTopologyReconcilerStateMachine) initializeStateMachine(topology *s
 
 // setupTopologyTransitions sets up all state transitions for topology
 func (r *StormTopologyReconcilerStateMachine) setupTopologyTransitions(sm *state.StateMachine) {
-	// Copy transitions from the standard topology state machine
-	topologySM := state.NewTopologyStateMachine()
-	// This is a simplified version - in production, you'd want to expose
-	// the transitions or have a method to copy them
-	*sm = *topologySM
+	// Define state transitions (same as in NewTopologyStateMachine but without overwriting the current state)
+	// From Unknown
+	sm.AddTransition(state.State(state.TopologyStateUnknown), state.Event(state.EventValidate), state.State(state.TopologyStateValidating))
+
+	// From Pending
+	sm.AddTransition(state.State(state.TopologyStatePending), state.Event(state.EventValidate), state.State(state.TopologyStateValidating))
+	sm.AddTransition(state.State(state.TopologyStatePending), state.Event(state.EventKill), state.State(state.TopologyStateKilled))
+
+	// From Validating
+	sm.AddTransition(state.State(state.TopologyStateValidating), state.Event(state.EventValidationSuccess), state.State(state.TopologyStateDownloading))
+	sm.AddTransition(state.State(state.TopologyStateValidating), state.Event(state.EventValidationFailed), state.State(state.TopologyStateFailed))
+
+	// From Downloading
+	sm.AddTransition(state.State(state.TopologyStateDownloading), state.Event(state.EventDownloadComplete), state.State(state.TopologyStateSubmitting))
+	sm.AddTransition(state.State(state.TopologyStateDownloading), state.Event(state.EventDownloadFailed), state.State(state.TopologyStateFailed))
+
+	// From Submitting
+	sm.AddTransition(state.State(state.TopologyStateSubmitting), state.Event(state.EventSubmitSuccess), state.State(state.TopologyStateRunning))
+	sm.AddTransition(state.State(state.TopologyStateSubmitting), state.Event(state.EventSubmitFailed), state.State(state.TopologyStateFailed))
+
+	// From Running
+	sm.AddTransition(state.State(state.TopologyStateRunning), state.Event(state.EventSuspend), state.State(state.TopologyStateSuspended))
+	sm.AddTransition(state.State(state.TopologyStateRunning), state.Event(state.EventTopologyUpdate), state.State(state.TopologyStateUpdating))
+	sm.AddTransition(state.State(state.TopologyStateRunning), state.Event(state.EventKill), state.State(state.TopologyStateKilling))
+	sm.AddTransition(state.State(state.TopologyStateRunning), state.Event(state.EventError), state.State(state.TopologyStateFailed))
+
+	// From Suspended
+	sm.AddTransition(state.State(state.TopologyStateSuspended), state.Event(state.EventResume), state.State(state.TopologyStateRunning))
+	sm.AddTransition(state.State(state.TopologyStateSuspended), state.Event(state.EventKill), state.State(state.TopologyStateKilling))
+
+	// From Updating
+	sm.AddTransition(state.State(state.TopologyStateUpdating), state.Event(state.EventTopologyUpdateComplete), state.State(state.TopologyStateRunning))
+	sm.AddTransition(state.State(state.TopologyStateUpdating), state.Event(state.EventError), state.State(state.TopologyStateFailed))
+
+	// From Killing
+	sm.AddTransition(state.State(state.TopologyStateKilling), state.Event(state.EventKillComplete), state.State(state.TopologyStateKilled))
+	sm.AddTransition(state.State(state.TopologyStateKilling), state.Event(state.EventError), state.State(state.TopologyStateFailed))
+
+	// From Failed
+	sm.AddTransition(state.State(state.TopologyStateFailed), state.Event(state.EventRetry), state.State(state.TopologyStatePending))
+	sm.AddTransition(state.State(state.TopologyStateFailed), state.Event(state.EventKill), state.State(state.TopologyStateKilled))
 }
 
 // setupTopologyHandlers sets up state handlers
@@ -231,13 +277,36 @@ func (r *StormTopologyReconcilerStateMachine) setupTopologyHandlers(sm *state.St
 	})
 }
 
+// executeStateAction executes actions for specific states
+func (r *StormTopologyReconcilerStateMachine) executeStateAction(ctx context.Context, topologyCtx *TopologyContext) error {
+	currentState := topologyCtx.StateMachine.CurrentState()
+
+	switch state.TopologyState(currentState) {
+	case state.TopologyStateValidating:
+		// Validation happens in determineNextEvent
+		return nil
+	case state.TopologyStateDownloading:
+		// Download happens in determineNextEvent
+		return nil
+	case state.TopologyStateSubmitting:
+		// Submission happens in determineNextEvent
+		return nil
+	default:
+		// No action needed for other states
+		return nil
+	}
+}
+
 // determineNextEvent determines the next event based on current state and conditions
 func (r *StormTopologyReconcilerStateMachine) determineNextEvent(ctx context.Context, topologyCtx *TopologyContext) (state.TopologyEvent, error) {
 	log := log.FromContext(ctx)
 	topology := topologyCtx.Topology
 	currentState := topologyCtx.StateMachine.CurrentState()
 
-	log.Info("Determining next event", "currentState", currentState)
+	log.Info("Determining next event",
+		"currentState", currentState,
+		"internalState", topology.Status.InternalState,
+		"phase", topology.Status.Phase)
 
 	switch state.TopologyState(currentState) {
 	case state.TopologyStateUnknown:
@@ -488,9 +557,32 @@ func (r *StormTopologyReconcilerStateMachine) shouldRetry(topology *stormv1beta1
 	return false
 }
 
+// mapStateToPhase maps internal states to allowed CRD phases
+func mapStateToPhase(currentState state.State) string {
+	stateMapping := map[state.State]string{
+		state.State(state.TopologyStateUnknown):     "Pending",
+		state.State(state.TopologyStatePending):     "Pending",
+		state.State(state.TopologyStateValidating):  "Pending",
+		state.State(state.TopologyStateDownloading): "Pending",
+		state.State(state.TopologyStateSubmitting):  "Submitted",
+		state.State(state.TopologyStateRunning):     "Running",
+		state.State(state.TopologyStateSuspended):   "Suspended",
+		state.State(state.TopologyStateUpdating):    "Updating",
+		state.State(state.TopologyStateKilling):     "Killed",
+		state.State(state.TopologyStateKilled):      "Killed",
+		state.State(state.TopologyStateFailed):      "Failed",
+	}
+
+	if phase, ok := stateMapping[currentState]; ok {
+		return phase
+	}
+	return "Pending"
+}
+
 // updateTopologyStatus updates the topology status based on state
 func (r *StormTopologyReconcilerStateMachine) updateTopologyStatus(ctx context.Context, topology *stormv1beta1.StormTopology, currentState state.State, errorMsg string) error {
-	topology.Status.Phase = string(currentState)
+	topology.Status.Phase = mapStateToPhase(currentState)
+	topology.Status.InternalState = string(currentState)
 	topology.Status.LastUpdateTime = &metav1.Time{Time: time.Now()}
 
 	if errorMsg != "" {

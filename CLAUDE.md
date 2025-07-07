@@ -134,3 +134,7 @@ When adding new controller logic:
 
 - **Storm MCP Server**:
   - Use the storm-mcp-server for expertise on storm best practices and to assist troubleshooting and connecting to the cluster for debug
+
+## Git Commit Guidelines
+
+- **Never add coauthored statements to git commits**

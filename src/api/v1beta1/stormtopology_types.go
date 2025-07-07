@@ -401,6 +401,10 @@ type StormTopologyStatus struct {
 	// +kubebuilder:validation:Enum=Pending;Submitted;Running;Suspended;Failed;Killed;Updating
 	Phase string `json:"phase,omitempty"`
 
+	// Internal state for state machine tracking (not exposed in CRD)
+	// +optional
+	InternalState string `json:"internalState,omitempty"`
+
 	// Storm-assigned topology ID
 	TopologyID string `json:"topologyId,omitempty"`
 
