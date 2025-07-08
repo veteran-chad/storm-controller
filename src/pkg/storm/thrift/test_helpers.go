@@ -52,12 +52,13 @@ func DrainPool(pool *ConnectionPool) []*PooledConnection {
 	var connections []*PooledConnection
 	stats := pool.Stats()
 
+loop:
 	for i := 0; i < stats.Available; i++ {
 		select {
 		case conn := <-pool.connections:
 			connections = append(connections, conn)
 		default:
-			break
+			break loop
 		}
 	}
 

@@ -3,7 +3,6 @@ package thrift
 import (
 	"context"
 	"fmt"
-	"sync"
 	"time"
 )
 
@@ -11,7 +10,6 @@ import (
 type ThriftStormClient struct {
 	config *ThriftClientConfig
 	pool   *ConnectionPool
-	mu     sync.RWMutex
 }
 
 // NewThriftStormClient creates a new Thrift-based Storm client
@@ -59,7 +57,7 @@ func (c *ThriftStormClient) Connect(ctx context.Context) error {
 	if err != nil {
 		return fmt.Errorf("failed to connect: %w", err)
 	}
-	defer conn.Close()
+	defer func() { _ = conn.Close() }()
 
 	return nil
 }
@@ -78,7 +76,7 @@ func (c *ThriftStormClient) IsConnected() bool {
 	if err != nil {
 		return false
 	}
-	defer conn.Close()
+	defer func() { _ = conn.Close() }()
 
 	return true
 }
@@ -89,7 +87,7 @@ func (c *ThriftStormClient) withConnection(ctx context.Context, fn func(*NimbusC
 	if err != nil {
 		return err
 	}
-	defer conn.Close()
+	defer func() { _ = conn.Close() }()
 
 	// Execute with retry logic
 	var lastErr error

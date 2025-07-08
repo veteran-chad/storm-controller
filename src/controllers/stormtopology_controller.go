@@ -194,7 +194,7 @@ func (r *StormTopologyReconciler) initializeStateMachine(topology *stormv1beta1.
 	}
 
 	// Otherwise determine initial state based on phase
-	var initialState state.State = state.State(state.TopologyStateUnknown)
+	var initialState = state.State(state.TopologyStateUnknown)
 
 	// If we have a phase but no internal state, try to map it
 	if topology.Status.Phase != "" {
@@ -675,10 +675,14 @@ func (r *StormTopologyReconciler) handleDeletion(ctx context.Context, topology *
 		}
 
 		// Process completion event
-		sm.ProcessEvent(ctx, state.Event(state.EventKillComplete))
+		if err := sm.ProcessEvent(ctx, state.Event(state.EventKillComplete)); err != nil {
+			log.Error(err, "Failed to process kill complete event")
+		}
 
 		// Update status
-		r.updateTopologyStatus(ctx, topology, sm.CurrentState(), "")
+		if err := r.updateTopologyStatus(ctx, topology, sm.CurrentState(), ""); err != nil {
+			log.Error(err, "Failed to update topology status")
+		}
 
 		// Remove finalizer
 		controllerutil.RemoveFinalizer(topology, topologyFinalizer)
@@ -700,11 +704,11 @@ func (r *StormTopologyReconciler) getJARPath(ctx context.Context, topology *stor
 	} else if jarSpec.Container != nil {
 		return r.extractContainerJAR(ctx, topology, jarSpec.Container)
 	} else if jarSpec.ConfigMap != "" {
-		return "", fmt.Errorf("ConfigMap JAR source not yet implemented")
+		return "", fmt.Errorf("configMap JAR source not yet implemented")
 	} else if jarSpec.Secret != "" {
-		return "", fmt.Errorf("Secret JAR source not yet implemented")
+		return "", fmt.Errorf("secret JAR source not yet implemented")
 	} else if jarSpec.S3 != nil {
-		return "", fmt.Errorf("S3 JAR source not yet implemented")
+		return "", fmt.Errorf("s3 JAR source not yet implemented")
 	}
 
 	return "", fmt.Errorf("no JAR source specified")

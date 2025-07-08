@@ -10,7 +10,7 @@ import (
 func TestNewThriftStormClient(t *testing.T) {
 	// Test with default config and mock pool
 	pool := TestConnectionPool(t, nil)
-	defer pool.Close()
+	defer func() { _ = pool.Close() }()
 
 	client := NewThriftStormClientWithPool(nil, pool)
 
@@ -46,7 +46,7 @@ func TestThriftStormClientOperations(t *testing.T) {
 	pool := TestConnectionPool(t, nil)
 	successCount := int32(0)
 	pool.factory = MockConnectionFactory(&successCount, 0)
-	defer pool.Close()
+	defer func() { _ = pool.Close() }()
 
 	client := NewThriftStormClientWithPool(config, pool)
 
@@ -78,7 +78,7 @@ func TestThriftStormClientRetryLogic(t *testing.T) {
 	pool := TestConnectionPool(t, nil)
 	successCount := int32(0)
 	pool.factory = MockConnectionFactory(&successCount, 0)
-	defer pool.Close()
+	defer func() { _ = pool.Close() }()
 
 	client := NewThriftStormClientWithPool(config, pool)
 
@@ -121,7 +121,7 @@ func TestThriftStormClientPoolExhaustion(t *testing.T) {
 	})
 	successCount := int32(0)
 	smallPool.factory = MockConnectionFactory(&successCount, 0)
-	defer smallPool.Close()
+	defer func() { _ = smallPool.Close() }()
 
 	client := NewThriftStormClientWithPool(config, smallPool)
 
@@ -140,7 +140,7 @@ func TestThriftStormClientPoolExhaustion(t *testing.T) {
 	}
 
 	// Return connection
-	conn1.Close()
+	_ = conn1.Close()
 }
 
 // TestThriftStormClientAllMethods tests all interface methods
@@ -154,7 +154,7 @@ func TestThriftStormClientAllMethods(t *testing.T) {
 	pool := TestConnectionPool(t, nil)
 	successCount := int32(0)
 	pool.factory = MockConnectionFactory(&successCount, 0)
-	defer pool.Close()
+	defer func() { _ = pool.Close() }()
 
 	client := NewThriftStormClientWithPool(config, pool)
 
@@ -218,7 +218,7 @@ func BenchmarkThriftStormClientGetConnection(b *testing.B) {
 
 	successCount := int32(0)
 	pool.factory = MockConnectionFactory(&successCount, 0)
-	defer pool.Close()
+	defer func() { _ = pool.Close() }()
 
 	client := NewThriftStormClientWithPool(config, pool)
 
@@ -230,6 +230,6 @@ func BenchmarkThriftStormClientGetConnection(b *testing.B) {
 		if err != nil {
 			b.Fatal(err)
 		}
-		conn.Close()
+		_ = conn.Close()
 	}
 }

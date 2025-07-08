@@ -18,11 +18,7 @@ package jarextractor
 
 import (
 	"context"
-	"crypto/md5"
-	"crypto/sha256"
-	"crypto/sha512"
 	"fmt"
-	"hash"
 	"time"
 
 	batchv1 "k8s.io/api/batch/v1"
@@ -268,7 +264,7 @@ echo "JAR extraction completed successfully"
 
 // waitForJobCompletion waits for the extraction job to complete
 func (e *Extractor) waitForJobCompletion(ctx context.Context, job *batchv1.Job, timeout time.Duration) error {
-	return wait.PollImmediate(5*time.Second, timeout, func() (bool, error) {
+	return wait.PollUntilContextTimeout(ctx, 5*time.Second, timeout, true, func(ctx context.Context) (bool, error) {
 		var currentJob batchv1.Job
 		if err := e.Get(ctx, client.ObjectKeyFromObject(job), &currentJob); err != nil {
 			return false, err
@@ -353,14 +349,14 @@ func (e *Extractor) ValidateChecksum(ctx context.Context, jarPath string, checks
 	return nil
 }
 
-// getHasher returns the appropriate hash function
-func getHasher(algorithm string) hash.Hash {
-	switch algorithm {
-	case "md5":
-		return md5.New()
-	case "sha512":
-		return sha512.New()
-	default:
-		return sha256.New()
-	}
-}
+// // getHasher returns the appropriate hash function
+// func getHasher(algorithm string) hash.Hash {
+// 	switch algorithm {
+// 	case "md5":
+// 		return md5.New()
+// 	case "sha512":
+// 		return sha512.New()
+// 	default:
+// 		return sha256.New()
+// 	}
+// }

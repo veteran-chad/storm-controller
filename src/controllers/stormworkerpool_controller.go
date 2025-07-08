@@ -246,12 +246,12 @@ func (r *StormWorkerPoolReconciler) initializeStateMachine(workerPool *stormv1be
 	return sm
 }
 
-// setupWorkerPoolTransitions sets up all state transitions
-func (r *StormWorkerPoolReconciler) setupWorkerPoolTransitions(sm *state.StateMachine) {
-	// Copy transitions from the standard worker pool state machine
-	workerPoolSM := state.NewWorkerPoolStateMachine()
-	*sm = *workerPoolSM
-}
+// // setupWorkerPoolTransitions sets up all state transitions
+// func (r *StormWorkerPoolReconciler) setupWorkerPoolTransitions(sm *state.StateMachine) {
+// 	// Copy transitions from the standard worker pool state machine
+// 	workerPoolSM := state.NewWorkerPoolStateMachine()
+// 	*sm = *workerPoolSM
+// }
 
 // setupWorkerPoolHandlers sets up state handlers
 func (r *StormWorkerPoolReconciler) setupWorkerPoolHandlers(sm *state.StateMachine) {

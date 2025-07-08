@@ -113,8 +113,8 @@ func TestStateMachine_History(t *testing.T) {
 	sm.AddTransition("middle", "back", "start")
 
 	// Make some transitions
-	sm.ProcessEvent(context.Background(), "go")
-	sm.ProcessEvent(context.Background(), "back")
+	_ = sm.ProcessEvent(context.Background(), "go")
+	_ = sm.ProcessEvent(context.Background(), "back")
 
 	history := sm.History()
 	if len(history) != 2 {

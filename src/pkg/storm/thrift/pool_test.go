@@ -112,13 +112,11 @@ func TestConnectionPoolCreation(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create pool: %v", err)
 	}
-	pool.factory = MockConnectionFactory(&successCount, 0)
-	defer pool.Close()
-
-	// Check that pool was created
 	if pool == nil {
 		t.Fatal("Expected pool to be created")
 	}
+	pool.factory = MockConnectionFactory(&successCount, 0)
+	defer func() { _ = pool.Close() }()
 
 	stats := pool.Stats()
 	if stats.MaxAllowed != 5 {
@@ -148,7 +146,7 @@ func TestConnectionPoolGetAndPut(t *testing.T) {
 	})
 	successCount := int32(0)
 	pool.factory = MockConnectionFactory(&successCount, 0)
-	defer pool.Close()
+	defer func() { _ = pool.Close() }()
 
 	ctx := context.Background()
 
@@ -165,7 +163,7 @@ func TestConnectionPoolGetAndPut(t *testing.T) {
 	}
 
 	// Return connection
-	conn1.Close()
+	_ = conn1.Close()
 
 	// Check stats again
 	stats = pool.Stats()
@@ -189,7 +187,7 @@ func TestConnectionPoolConcurrency(t *testing.T) {
 		t.Fatalf("Failed to create pool: %v", err)
 	}
 	pool.factory = MockConnectionFactory(&successCount, 0)
-	defer pool.Close()
+	defer func() { _ = pool.Close() }()
 
 	ctx := context.Background()
 	var wg sync.WaitGroup
@@ -210,7 +208,7 @@ func TestConnectionPoolConcurrency(t *testing.T) {
 			// Simulate some work
 			time.Sleep(10 * time.Millisecond)
 
-			conn.Close()
+			_ = conn.Close()
 		}()
 	}
 
@@ -244,7 +242,7 @@ func TestConnectionPoolExhaustion(t *testing.T) {
 		t.Fatalf("Failed to create pool: %v", err)
 	}
 	pool.factory = MockConnectionFactory(&successCount, 0)
-	defer pool.Close()
+	defer func() { _ = pool.Close() }()
 
 	ctx := context.Background()
 
@@ -253,13 +251,13 @@ func TestConnectionPoolExhaustion(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to get connection 1: %v", err)
 	}
-	defer conn1.Close()
+	defer func() { _ = conn1.Close() }()
 
 	conn2, err := pool.Get(ctx)
 	if err != nil {
 		t.Fatalf("Failed to get connection 2: %v", err)
 	}
-	defer conn2.Close()
+	defer func() { _ = conn2.Close() }()
 
 	// Try to get another connection with short timeout
 	shortCtx, cancel := context.WithTimeout(ctx, 100*time.Millisecond)
@@ -286,7 +284,7 @@ func TestConnectionInvalidation(t *testing.T) {
 		t.Fatalf("Failed to create pool: %v", err)
 	}
 	pool.factory = MockConnectionFactory(&successCount, 0)
-	defer pool.Close()
+	defer func() { _ = pool.Close() }()
 
 	ctx := context.Background()
 
@@ -304,7 +302,7 @@ func TestConnectionInvalidation(t *testing.T) {
 	conn.Invalidate()
 
 	// Close should not return it to pool
-	conn.Close()
+	_ = conn.Close()
 
 	// After invalidation and close, the connection should be destroyed
 	afterStats := pool.Stats()

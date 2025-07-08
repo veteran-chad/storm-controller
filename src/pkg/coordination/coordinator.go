@@ -216,15 +216,15 @@ func (rc *ResourceCoordinator) checkResourceConflicts(ctx context.Context, topol
 	}, nil
 }
 
-// validateWorkerPoolAvailability checks if the specified worker pool is available
-// TODO: This function will be implemented when WorkerPoolRef is added to topology spec
-func (rc *ResourceCoordinator) validateWorkerPoolAvailability(ctx context.Context, topology *stormv1beta1.StormTopology) (*TopologyDeploymentResult, error) {
-	return &TopologyDeploymentResult{
-		CanDeploy: true,
-		Reason:    "WorkerPoolValidationSkipped",
-		Message:   "Worker pool validation not implemented yet",
-	}, nil
-}
+// // validateWorkerPoolAvailability checks if the specified worker pool is available
+// // TODO: This function will be implemented when WorkerPoolRef is added to topology spec
+// func (rc *ResourceCoordinator) validateWorkerPoolAvailability(ctx context.Context, topology *stormv1beta1.StormTopology) (*TopologyDeploymentResult, error) {
+// 	return &TopologyDeploymentResult{
+// 		CanDeploy: true,
+// 		Reason:    "WorkerPoolValidationSkipped",
+// 		Message:   "Worker pool validation not implemented yet",
+// 	}, nil
+// }
 
 // CalculateWorkerPoolRequirements calculates optimal worker pool configuration for a topology
 func (rc *ResourceCoordinator) CalculateWorkerPoolRequirements(ctx context.Context, topology *stormv1beta1.StormTopology) (*WorkerPoolRequirement, error) {

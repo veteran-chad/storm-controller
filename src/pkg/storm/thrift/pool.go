@@ -63,7 +63,7 @@ func (pc *PooledConnection) Invalidate() {
 
 	// Close transport if needed
 	if transport != nil {
-		transport.Close()
+		_ = transport.Close()
 	}
 
 	// Update pool stats if this was from a pool
@@ -159,7 +159,7 @@ func DefaultConnectionFactory(config *ThriftClientConfig) (*PooledConnection, er
 	}
 
 	// Use framed transport (required by Storm)
-	transport = thrift.NewTFramedTransport(transport)
+	transport = thrift.NewTFramedTransportConf(transport, nil)
 
 	// Open connection
 	if err := transport.Open(); err != nil {
@@ -201,7 +201,7 @@ func NewConnectionPool(config *ConnectionPoolConfig) (*ConnectionPool, error) {
 		conn, err := pool.createConnection()
 		if err != nil {
 			// Clean up any created connections
-			pool.Close()
+			_ = pool.Close()
 			return nil, fmt.Errorf("failed to create initial connections: %w", err)
 		}
 		pool.connections <- conn
@@ -409,7 +409,6 @@ func (p *ConnectionPool) ensureMinimumConnections() {
 		default:
 			// Pool is full
 			conn.Invalidate()
-			break
 		}
 	}
 }

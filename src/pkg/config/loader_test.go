@@ -72,7 +72,7 @@ func TestLoadOperatorConfig(t *testing.T) {
 
 			// Create fake client
 			scheme := runtime.NewScheme()
-			corev1.AddToScheme(scheme)
+			assert.NoError(t, corev1.AddToScheme(scheme))
 			client := fake.NewClientBuilder().
 				WithScheme(scheme).
 				WithObjects(cm).
@@ -96,7 +96,7 @@ func TestLoadOperatorConfig(t *testing.T) {
 func TestLoadOperatorConfigMissingConfigMap(t *testing.T) {
 	// Create fake client without ConfigMap
 	scheme := runtime.NewScheme()
-	corev1.AddToScheme(scheme)
+	assert.NoError(t, corev1.AddToScheme(scheme))
 	client := fake.NewClientBuilder().WithScheme(scheme).Build()
 
 	config, err := LoadOperatorConfig(context.TODO(), client, "test-namespace")
@@ -119,7 +119,7 @@ func TestLoadOperatorConfigMissingDefaultsYaml(t *testing.T) {
 	}
 
 	scheme := runtime.NewScheme()
-	corev1.AddToScheme(scheme)
+	assert.NoError(t, corev1.AddToScheme(scheme))
 	client := fake.NewClientBuilder().
 		WithScheme(scheme).
 		WithObjects(cm).
