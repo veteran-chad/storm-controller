@@ -56,8 +56,10 @@ jobs:
           tags: |
             ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.version.outputs.storm_tag }}
             ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:storm${{ matrix.storm-version }}
-          cache-from: type=gha,scope=buildkit
-          cache-to: type=gha,mode=max,scope=buildkit
+          # GitHub Actions cache disabled due to intermittent 502 errors
+          # See KNOWN_ISSUES.md for details
+          # cache-from: type=gha,scope=buildkit
+          # cache-to: type=gha,mode=max,scope=buildkit
 
   build-default-image:
     name: Build Default Image
@@ -98,8 +100,10 @@ jobs:
           tags: |
             ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.version.outputs.version }}
             ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
-          cache-from: type=gha,scope=buildkit
-          cache-to: type=gha,mode=max,scope=buildkit
+          # GitHub Actions cache disabled due to intermittent 502 errors
+          # See KNOWN_ISSUES.md for details
+          # cache-from: type=gha,scope=buildkit
+          # cache-to: type=gha,mode=max,scope=buildkit
 
   release-helm-charts:
     name: Release Helm Charts

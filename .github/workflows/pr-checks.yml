@@ -214,8 +214,10 @@ jobs:
           push: false
           tags: |
             storm-${{ matrix.component.name }}:pr-${{ github.event.pull_request.number }}
-          cache-from: type=gha,scope=buildkit
-          cache-to: type=gha,mode=max,scope=buildkit
+          # GitHub Actions cache disabled due to intermittent 502 errors
+          # See KNOWN_ISSUES.md for details
+          # cache-from: type=gha,scope=buildkit
+          # cache-to: type=gha,mode=max,scope=buildkit
           
   validate-examples:
     name: Validate Examples

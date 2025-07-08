@@ -119,3 +119,26 @@ Topology versions must be specified in the configuration:
 - Both should be kept in sync for clarity
 
 **Best Practice**: Always update both version fields when deploying new topology versions.
+
+## CI/CD Issues
+
+### GitHub Actions Docker Build Cache
+
+**Issue**: Docker builds in GitHub Actions may fail with 502 Bad Gateway errors when using the GitHub Actions cache (`type=gha`).
+
+**Error Message**:
+```
+ERROR: failed to parse error response 502: <!DOCTYPE html>
+```
+
+**Root Cause**: GitHub's cache service experiences intermittent failures, returning HTML error pages instead of proper cache responses.
+
+**Current Workaround**: The GitHub Actions cache has been disabled in all workflows. Docker builds will run without caching, which increases build times but ensures reliability.
+
+**Future Fix**: Re-enable caching once GitHub resolves the infrastructure issues. The cache configuration can be restored by uncommenting the following lines in the workflow files:
+```yaml
+cache-from: type=gha,scope=buildkit
+cache-to: type=gha,mode=max,scope=buildkit
+```
+
+**Impact**: Increased build times in CI/CD pipelines. No impact on functionality.
