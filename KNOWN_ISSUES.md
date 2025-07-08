@@ -142,3 +142,31 @@ cache-to: type=gha,mode=max,scope=buildkit
 ```
 
 **Impact**: Increased build times in CI/CD pipelines. No impact on functionality.
+
+### Helm Chart Dependency Version Conflicts in CI
+
+**Issue**: The CI workflow fails during the "Package Helm Charts" stage with Chart.lock out of sync errors when dynamically updating chart versions.
+
+**Error Messages**:
+```
+Error: the lock file (Chart.lock) is out of sync with the dependencies file (Chart.yaml). Please update the dependencies
+```
+Or:
+```
+Error: could not download oci://registry-1.docker.io/veteranchad/storm-shared: failed to perform "FetchReference" on source: registry-1.docker.io/veteranchad/storm-shared:0.0.0-70f2bd3: not found
+```
+
+**Root Cause**: The CI workflow updates chart versions dynamically (e.g., to `0.0.0-<commit-hash>` for non-release builds), but:
+1. This makes Chart.lock files out of sync with the modified Chart.yaml files
+2. When updating storm-shared dependency versions to match, the dependency cannot be found in the registry because it hasn't been pushed yet
+3. Various attempts to fix this (removing Chart.lock, using helm dependency update vs build, conditional logic) have not resolved the issue
+
+**Current Workaround**: The CI workflow has been temporarily disabled and can only be triggered manually via workflow_dispatch. The release workflow is still active for tagged releases.
+
+**Proposed Solutions**:
+1. Use a local file repository during CI builds for storm-shared
+2. Push storm-shared to a temporary tag first, then update dependencies
+3. Don't update dependency versions for non-release builds
+4. Use a different versioning strategy that doesn't require dynamic updates
+
+**Impact**: PR builds don't automatically build and test changes. Manual testing required before merging.
