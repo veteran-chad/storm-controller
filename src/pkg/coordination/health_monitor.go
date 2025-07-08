@@ -145,12 +145,17 @@ func (hm *HealthMonitor) checkKubernetesResourceHealth(ctx context.Context, clus
 		CheckDetails: make(map[string]interface{}),
 	}
 
-	if cluster.Status.NimbusReady >= cluster.Spec.Nimbus.Replicas {
+	var nimbusReplicas int32 = 1
+	if cluster.Spec.Nimbus != nil && cluster.Spec.Nimbus.Replicas != nil {
+		nimbusReplicas = *cluster.Spec.Nimbus.Replicas
+	}
+
+	if cluster.Status.NimbusReady >= nimbusReplicas {
 		nimbusHealth.Status = HealthStatusHealthy
-		nimbusHealth.Message = fmt.Sprintf("All %d Nimbus replicas are ready", cluster.Spec.Nimbus.Replicas)
+		nimbusHealth.Message = fmt.Sprintf("All %d Nimbus replicas are ready", nimbusReplicas)
 	} else if cluster.Status.NimbusReady > 0 {
 		nimbusHealth.Status = HealthStatusDegraded
-		nimbusHealth.Message = fmt.Sprintf("Only %d of %d Nimbus replicas are ready", cluster.Status.NimbusReady, cluster.Spec.Nimbus.Replicas)
+		nimbusHealth.Message = fmt.Sprintf("Only %d of %d Nimbus replicas are ready", cluster.Status.NimbusReady, nimbusReplicas)
 	} else {
 		nimbusHealth.Status = HealthStatusUnhealthy
 		nimbusHealth.Message = "No Nimbus replicas are ready"
@@ -167,20 +172,24 @@ func (hm *HealthMonitor) checkKubernetesResourceHealth(ctx context.Context, clus
 		CheckDetails: make(map[string]interface{}),
 	}
 
-	minSupervisors := cluster.Spec.Supervisor.Replicas / 2
+	var supervisorReplicas int32 = 1
+	if cluster.Spec.Supervisor != nil && cluster.Spec.Supervisor.Replicas != nil {
+		supervisorReplicas = *cluster.Spec.Supervisor.Replicas
+	}
+	minSupervisors := supervisorReplicas / 2
 	if minSupervisors == 0 {
 		minSupervisors = 1
 	}
 
-	if cluster.Status.SupervisorReady >= cluster.Spec.Supervisor.Replicas {
+	if cluster.Status.SupervisorReady >= supervisorReplicas {
 		supervisorHealth.Status = HealthStatusHealthy
-		supervisorHealth.Message = fmt.Sprintf("All %d Supervisor replicas are ready", cluster.Spec.Supervisor.Replicas)
+		supervisorHealth.Message = fmt.Sprintf("All %d Supervisor replicas are ready", supervisorReplicas)
 	} else if cluster.Status.SupervisorReady >= minSupervisors {
 		supervisorHealth.Status = HealthStatusDegraded
-		supervisorHealth.Message = fmt.Sprintf("Only %d of %d Supervisor replicas are ready", cluster.Status.SupervisorReady, cluster.Spec.Supervisor.Replicas)
+		supervisorHealth.Message = fmt.Sprintf("Only %d of %d Supervisor replicas are ready", cluster.Status.SupervisorReady, supervisorReplicas)
 	} else {
 		supervisorHealth.Status = HealthStatusUnhealthy
-		supervisorHealth.Message = fmt.Sprintf("Insufficient Supervisor replicas: %d of %d ready (minimum %d)", cluster.Status.SupervisorReady, cluster.Spec.Supervisor.Replicas, minSupervisors)
+		supervisorHealth.Message = fmt.Sprintf("Insufficient Supervisor replicas: %d of %d ready (minimum %d)", cluster.Status.SupervisorReady, supervisorReplicas, minSupervisors)
 	}
 
 	supervisorHealth.CheckDetails["ready_replicas"] = cluster.Status.SupervisorReady
@@ -269,7 +278,10 @@ func (hm *HealthMonitor) calculateTopologyCapacity(ctx context.Context, cluster 
 	}
 
 	// Calculate total available slots
-	totalSlots := cluster.Spec.Supervisor.Replicas * cluster.Spec.Supervisor.WorkerSlots
+	var totalSlots int32
+	if cluster.Spec.Supervisor != nil && cluster.Spec.Supervisor.Replicas != nil {
+		totalSlots = *cluster.Spec.Supervisor.Replicas * cluster.Spec.Supervisor.SlotsPerSupervisor
+	}
 
 	// Calculate used slots (simplified - assume 1 slot per running topology for now)
 	usedSlots := runningTopologies

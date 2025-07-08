@@ -58,6 +58,9 @@ spec:
           spec:
             description: StormClusterSpec defines the desired state of StormCluster
             properties:
+              clusterName:
+                description: ClusterName is the name of the Storm cluster
+                type: string
               config:
                 additionalProperties:
                   type: string
@@ -92,6 +95,22 @@ spec:
                     description: Storm image tag
                     type: string
                 type: object
+              imagePullSecrets:
+                description: ImagePullSecrets is a list of references to secrets for
+                  pulling images
+                items:
+                  description: |-
+                    LocalObjectReference contains enough information to let you locate the
+                    referenced object inside the same namespace.
+                  properties:
+                    name:
+                      description: |-
+                        Name of the referent.
+                        More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                      type: string
+                  type: object
+                  x-kubernetes-map-type: atomic
+                type: array
               managementMode:
                 default: create
                 description: Management mode for the cluster
@@ -99,27 +118,18 @@ spec:
                 - create
                 - reference
                 type: string
-              metrics:
-                description: Metrics configuration
+              monitoring:
+                description: Monitoring configuration
                 properties:
                   enabled:
-                    default: true
-                    description: Enable metrics
+                    default: false
+                    description: Enable monitoring
                     type: boolean
                   port:
-                    default: 7979
+                    default: 8080
                     description: Port for metrics endpoint
                     format: int32
                     type: integer
-                  serviceMonitor:
-                    default: false
-                    description: Enable ServiceMonitor for Prometheus Operator
-                    type: boolean
-                  serviceMonitorLabels:
-                    additionalProperties:
-                      type: string
-                    description: ServiceMonitor labels
-                    type: object
                 type: object
               nimbus:
                 description: Nimbus configuration
@@ -1013,20 +1023,12 @@ spec:
                   persistence:
                     description: Persistence configuration for Nimbus
                     properties:
-                      accessMode:
-                        default: ReadWriteOnce
-                        description: Access mode for persistent volume
-                        enum:
-                        - ReadWriteOnce
-                        - ReadOnlyMany
-                        - ReadWriteMany
-                        type: string
                       enabled:
-                        default: true
+                        default: false
                         description: Enable persistence
                         type: boolean
                       size:
-                        default: 10Gi
+                        default: 8Gi
                         description: Size of persistent volume
                         type: string
                       storageClass:
@@ -1205,6 +1207,21 @@ spec:
                           type: string
                       type: object
                     type: array
+                type: object
+              persistence:
+                description: Persistence configuration
+                properties:
+                  enabled:
+                    default: false
+                    description: Enable persistence
+                    type: boolean
+                  size:
+                    default: 8Gi
+                    description: Size of persistent volume
+                    type: string
+                  storageClass:
+                    description: Storage class for persistent volume
+                    type: string
                 type: object
               resourceNames:
                 description: Resource naming configuration for reference mode
@@ -2183,6 +2200,12 @@ spec:
                           More info: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/
                         type: object
                     type: object
+                  slotsPerSupervisor:
+                    default: 4
+                    description: Number of worker slots per supervisor
+                    format: int32
+                    minimum: 1
+                    type: integer
                   tolerations:
                     description: Tolerations for Supervisor pods
                     items:
@@ -2222,12 +2245,6 @@ spec:
                           type: string
                       type: object
                     type: array
-                  workerSlots:
-                    default: 4
-                    description: Number of worker slots per supervisor
-                    format: int32
-                    minimum: 1
-                    type: integer
                 type: object
               ui:
                 description: UI configuration
@@ -2400,19 +2417,23 @@ spec:
               zookeeper:
                 description: Zookeeper configuration
                 properties:
-                  chrootPath:
+                  connectionTimeout:
+                    default: 15000
+                    description: Connection timeout in milliseconds
+                    type: integer
+                  root:
                     default: /storm
-                    description: Chroot path in Zookeeper
+                    description: Root path in Zookeeper for this cluster
                     type: string
-                  enabled:
-                    default: true
-                    description: Enable embedded Zookeeper
-                    type: boolean
-                  externalServers:
-                    description: External Zookeeper servers (if not using embedded)
+                  servers:
+                    description: Zookeeper servers
                     items:
                       type: string
                     type: array
+                  sessionTimeout:
+                    default: 20000
+                    description: Session timeout in milliseconds
+                    type: integer
                 type: object
             type: object
           status:

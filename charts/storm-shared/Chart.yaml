@@ -1,0 +1,14 @@
+apiVersion: v2
+name: storm-shared
+description: Shared library chart for Storm Kubernetes deployments
+type: library
+version: 0.1.0
+maintainers:
+  - name: Apache Storm Community
+    email: dev@storm.apache.org
+keywords:
+  - storm
+  - library
+  - shared
+annotations:
+  category: Analytics

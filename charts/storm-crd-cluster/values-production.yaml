@@ -1,0 +1,174 @@
+# Production configuration for Storm CRD Cluster
+# This creates a production-ready Storm cluster with HA and monitoring
+# Suitable for production deployments
+
+# Global settings
+global:
+  imageRegistry: ""
+  imagePullSecrets: []
+  storageClass: "fast-ssd"
+
+# Common labels and annotations
+commonLabels:
+  environment: "production"
+  team: "data-platform"
+  
+commonAnnotations:
+  "prometheus.io/scrape": "true"
+  "prometheus.io/port": "8080"
+  "cost-center": "engineering"
+
+# Storm configuration
+storm:
+  image:
+    registry: docker.io
+    repository: storm
+    tag: 2.8.1
+    pullPolicy: IfNotPresent
+  
+  # Production Storm configuration
+  config:
+    # Logging
+    storm.log.level: "INFO"
+    storm.log.dir: "/logs"
+    storm.local.dir: "/storm/data"
+    
+    # Nimbus HA settings
+    nimbus.seeds: ["nimbus-0", "nimbus-1"]
+    nimbus.task.timeout.secs: "30"
+    nimbus.supervisor.timeout.secs: "60"
+    nimbus.monitor.freq.secs: "10"
+    nimbus.cleanup.inbox.freq.secs: "600"
+    nimbus.file.copy.expiration.secs: "600"
+    
+    # Supervisor settings
+    supervisor.worker.start.timeout.secs: "120"
+    supervisor.worker.timeout.secs: "30"
+    supervisor.monitor.frequency.secs: "3"
+    supervisor.heartbeat.frequency.secs: "5"
+    supervisor.enable: "true"
+    supervisor.slots.ports: [6700, 6701, 6702, 6703]
+    
+    # Worker settings
+    worker.childopts: "-Xmx1024m -XX:+UseG1GC -XX:MaxGCPauseMillis=200"
+    worker.heap.memory.mb: "1024"
+    worker.heartbeat.frequency.secs: "1"
+    
+    # Topology settings
+    topology.message.timeout.secs: "30"
+    topology.worker.max.heap.size.mb: "1024"
+    topology.max.task.parallelism: "128"
+    topology.acker.executors: "1"
+    topology.eventlogger.executors: "1"
+    
+    # Network settings
+    storm.messaging.transport: "backtype.storm.messaging.netty.Context"
+    storm.messaging.netty.server_worker_threads: "1"
+    storm.messaging.netty.client_worker_threads: "1"
+    storm.messaging.netty.buffer_size: "5242880"
+    storm.messaging.netty.max_retries: "30"
+    storm.messaging.netty.max_wait_ms: "1000"
+    storm.messaging.netty.min_wait_ms: "100"
+    
+    # Performance tuning
+    topology.executor.receive.buffer.size: "1024"
+    topology.executor.send.buffer.size: "1024"
+    topology.transfer.buffer.size: "1024"
+    topology.receiver.buffer.size: "8"
+    
+    # Metrics
+    topology.builtin.metrics.bucket.size.secs: "60"
+    topology.stats.sample.rate: "0.05"
+
+# Nimbus - HA configuration
+nimbus:
+  replicas: 2
+  resources:
+    requests:
+      cpu: 1000m
+      memory: 2Gi
+    limits:
+      cpu: 2000m
+      memory: 4Gi
+  
+  # Production node affinity
+  nodeSelector:
+    node-role.kubernetes.io/storm: "true"
+    
+  # Tolerations for dedicated nodes
+  tolerations:
+    - key: "storm"
+      operator: "Equal"
+      value: "true"
+      effect: "NoSchedule"
+
+# Supervisor - Multiple instances for production
+supervisor:
+  replicas: 3
+  slotsPerSupervisor: 4
+  resources:
+    requests:
+      cpu: 2000m
+      memory: 4Gi
+    limits:
+      cpu: 4000m
+      memory: 8Gi
+  
+  # Production node affinity
+  nodeSelector:
+    node-role.kubernetes.io/storm: "true"
+    
+  # Tolerations for dedicated nodes
+  tolerations:
+    - key: "storm"
+      operator: "Equal"
+      value: "true"
+      effect: "NoSchedule"
+
+# UI - Enabled with resources
+ui:
+  enabled: true
+  resources:
+    requests:
+      cpu: 250m
+      memory: 512Mi
+    limits:
+      cpu: 1000m
+      memory: 1Gi
+  
+  # UI on general nodes
+  nodeSelector:
+    node-role.kubernetes.io/app: "true"
+
+# External Zookeeper for production
+zookeeper:
+  external:
+    enabled: true
+    servers:
+      - "zookeeper-0.zookeeper-headless.zookeeper.svc.cluster.local"
+      - "zookeeper-1.zookeeper-headless.zookeeper.svc.cluster.local"
+      - "zookeeper-2.zookeeper-headless.zookeeper.svc.cluster.local"
+    root: "/storm/production"
+  default:
+    enabled: false
+
+# Enable persistence for production
+persistence:
+  enabled: true
+  storageClass: "fast-ssd"
+  size: 50Gi
+
+# Enable monitoring
+monitoring:
+  enabled: true
+  port: 8080
+
+# Additional labels for production tracking
+additionalLabels:
+  backup: "enabled"
+  disaster-recovery: "enabled"
+  
+# Additional annotations for production
+additionalAnnotations:
+  "backup.velero.io/backup-volumes": "nimbus-data,storm-logs"
+  "fluentbit.io/parser": "storm"

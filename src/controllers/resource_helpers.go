@@ -41,7 +41,7 @@ type ResourceReconciler interface {
 }
 
 // reconcileNimbus creates or updates the Nimbus StatefulSet
-func (r *StormClusterReconcilerStateMachine) reconcileNimbus(ctx context.Context, cluster *stormv1beta1.StormCluster) error {
+func (r *StormClusterReconciler) reconcileNimbus(ctx context.Context, cluster *stormv1beta1.StormCluster) error {
 	log := log.FromContext(ctx)
 
 	// Determine the StatefulSet name based on management mode
@@ -88,7 +88,7 @@ func (r *StormClusterReconcilerStateMachine) reconcileNimbus(ctx context.Context
 }
 
 // reconcileSupervisors creates or updates the Supervisor Deployment
-func (r *StormClusterReconcilerStateMachine) reconcileSupervisors(ctx context.Context, cluster *stormv1beta1.StormCluster) error {
+func (r *StormClusterReconciler) reconcileSupervisors(ctx context.Context, cluster *stormv1beta1.StormCluster) error {
 	log := log.FromContext(ctx)
 
 	// Determine the Deployment name based on management mode
@@ -130,7 +130,7 @@ func (r *StormClusterReconcilerStateMachine) reconcileSupervisors(ctx context.Co
 }
 
 // reconcileUI creates or updates the UI Deployment
-func (r *StormClusterReconcilerStateMachine) reconcileUI(ctx context.Context, cluster *stormv1beta1.StormCluster) error {
+func (r *StormClusterReconciler) reconcileUI(ctx context.Context, cluster *stormv1beta1.StormCluster) error {
 	if !cluster.Spec.UI.Enabled {
 		return nil
 	}
@@ -176,7 +176,7 @@ func (r *StormClusterReconcilerStateMachine) reconcileUI(ctx context.Context, cl
 }
 
 // reconcileNimbusService creates or updates the Nimbus Service
-func (r *StormClusterReconcilerStateMachine) reconcileNimbusService(ctx context.Context, cluster *stormv1beta1.StormCluster) error {
+func (r *StormClusterReconciler) reconcileNimbusService(ctx context.Context, cluster *stormv1beta1.StormCluster) error {
 	log := log.FromContext(ctx)
 
 	// Determine the Service name based on management mode
@@ -233,7 +233,7 @@ func (r *StormClusterReconcilerStateMachine) reconcileNimbusService(ctx context.
 }
 
 // reconcileUIService creates or updates the UI Service
-func (r *StormClusterReconcilerStateMachine) reconcileUIService(ctx context.Context, cluster *stormv1beta1.StormCluster) error {
+func (r *StormClusterReconciler) reconcileUIService(ctx context.Context, cluster *stormv1beta1.StormCluster) error {
 	if !cluster.Spec.UI.Enabled {
 		return nil
 	}
@@ -314,7 +314,7 @@ func getConfigMapName(cluster *stormv1beta1.StormCluster) string {
 	if cluster.Spec.ManagementMode == "reference" && cluster.Spec.ResourceNames != nil && cluster.Spec.ResourceNames.ConfigMap != "" {
 		return cluster.Spec.ResourceNames.ConfigMap
 	}
-	return stormConfigName
+	return cluster.Name + "-config"
 }
 
 func getImagePullSecrets(cluster *stormv1beta1.StormCluster) []corev1.LocalObjectReference {
@@ -351,6 +351,10 @@ func buildNimbusStatefulSetSpec(cluster *stormv1beta1.StormCluster) appsv1.State
 				Name:  "STORM_CONF_DIR",
 				Value: "/conf",
 			},
+			{
+				Name:  "STORM_LOG_DIR",
+				Value: "/logs",
+			},
 		}, cluster.Spec.Nimbus.ExtraEnvVars...),
 		VolumeMounts: []corev1.VolumeMount{
 			{
@@ -360,6 +364,14 @@ func buildNimbusStatefulSetSpec(cluster *stormv1beta1.StormCluster) appsv1.State
 			{
 				Name:      "nimbus-data",
 				MountPath: "/data",
+			},
+			{
+				Name:      "storm-logs",
+				MountPath: "/logs",
+			},
+			{
+				Name:      "storm-data",
+				MountPath: "/storm/data",
 			},
 		},
 	}
@@ -382,6 +394,18 @@ func buildNimbusStatefulSetSpec(cluster *stormv1beta1.StormCluster) appsv1.State
 					},
 				},
 			},
+			{
+				Name: "storm-logs",
+				VolumeSource: corev1.VolumeSource{
+					EmptyDir: &corev1.EmptyDirVolumeSource{},
+				},
+			},
+			{
+				Name: "storm-data",
+				VolumeSource: corev1.VolumeSource{
+					EmptyDir: &corev1.EmptyDirVolumeSource{},
+				},
+			},
 		},
 	}
 
@@ -390,7 +414,7 @@ func buildNimbusStatefulSetSpec(cluster *stormv1beta1.StormCluster) appsv1.State
 	if cluster.Spec.Nimbus.Persistence.Enabled {
 		pvcSpec := corev1.PersistentVolumeClaimSpec{
 			AccessModes: []corev1.PersistentVolumeAccessMode{
-				cluster.Spec.Nimbus.Persistence.AccessMode,
+				corev1.ReadWriteOnce,
 			},
 			Resources: corev1.ResourceRequirements{
 				Requests: corev1.ResourceList{
@@ -423,7 +447,7 @@ func buildNimbusStatefulSetSpec(cluster *stormv1beta1.StormCluster) appsv1.State
 	}
 
 	return appsv1.StatefulSetSpec{
-		Replicas: &replicas,
+		Replicas: replicas,
 		Selector: &metav1.LabelSelector{
 			MatchLabels: labels,
 		},
@@ -460,18 +484,30 @@ func buildSupervisorDeploymentSpec(cluster *stormv1beta1.StormCluster) appsv1.De
 				Name:  "STORM_CONF_DIR",
 				Value: "/conf",
 			},
+			{
+				Name:  "STORM_LOG_DIR",
+				Value: "/logs",
+			},
 		}, cluster.Spec.Supervisor.ExtraEnvVars...),
 		VolumeMounts: []corev1.VolumeMount{
 			{
 				Name:      "storm-config",
 				MountPath: "/conf",
 			},
+			{
+				Name:      "storm-logs",
+				MountPath: "/logs",
+			},
+			{
+				Name:      "storm-data",
+				MountPath: "/storm/data",
+			},
 		},
 		Ports: []corev1.ContainerPort{},
 	}
 
 	// Add worker ports
-	for i := 0; i < int(cluster.Spec.Supervisor.WorkerSlots); i++ {
+	for i := 0; i < int(cluster.Spec.Supervisor.SlotsPerSupervisor); i++ {
 		container.Ports = append(container.Ports, corev1.ContainerPort{
 			Name:          fmt.Sprintf("worker-%d", i),
 			ContainerPort: int32(6700 + i),
@@ -480,7 +516,7 @@ func buildSupervisorDeploymentSpec(cluster *stormv1beta1.StormCluster) appsv1.De
 	}
 
 	return appsv1.DeploymentSpec{
-		Replicas: &replicas,
+		Replicas: replicas,
 		Selector: &metav1.LabelSelector{
 			MatchLabels: labels,
 		},
@@ -503,6 +539,18 @@ func buildSupervisorDeploymentSpec(cluster *stormv1beta1.StormCluster) appsv1.De
 									Name: getConfigMapName(cluster),
 								},
 							},
+						},
+					},
+					{
+						Name: "storm-logs",
+						VolumeSource: corev1.VolumeSource{
+							EmptyDir: &corev1.EmptyDirVolumeSource{},
+						},
+					},
+					{
+						Name: "storm-data",
+						VolumeSource: corev1.VolumeSource{
+							EmptyDir: &corev1.EmptyDirVolumeSource{},
 						},
 					},
 				},
@@ -540,17 +588,29 @@ func buildUIDeploymentSpec(cluster *stormv1beta1.StormCluster) appsv1.Deployment
 				Name:  "STORM_CONF_DIR",
 				Value: "/conf",
 			},
+			{
+				Name:  "STORM_LOG_DIR",
+				Value: "/logs",
+			},
 		},
 		VolumeMounts: []corev1.VolumeMount{
 			{
 				Name:      "storm-config",
 				MountPath: "/conf",
 			},
+			{
+				Name:      "storm-logs",
+				MountPath: "/logs",
+			},
+			{
+				Name:      "storm-data",
+				MountPath: "/storm/data",
+			},
 		},
 	}
 
 	return appsv1.DeploymentSpec{
-		Replicas: &replicas,
+		Replicas: replicas,
 		Selector: &metav1.LabelSelector{
 			MatchLabels: labels,
 		},
@@ -570,6 +630,18 @@ func buildUIDeploymentSpec(cluster *stormv1beta1.StormCluster) appsv1.Deployment
 									Name: getConfigMapName(cluster),
 								},
 							},
+						},
+					},
+					{
+						Name: "storm-logs",
+						VolumeSource: corev1.VolumeSource{
+							EmptyDir: &corev1.EmptyDirVolumeSource{},
+						},
+					},
+					{
+						Name: "storm-data",
+						VolumeSource: corev1.VolumeSource{
+							EmptyDir: &corev1.EmptyDirVolumeSource{},
 						},
 					},
 				},

@@ -1,0 +1,128 @@
+apiVersion: storm.apache.org/v1beta1
+kind: StormCluster
+metadata:
+  name: {{ include "storm-shared.fullname" . }}
+  namespace: {{ .Release.Namespace | quote }}
+  labels:
+    {{- include "storm-shared.labels" . | nindent 4 }}
+    {{- if .Values.additionalLabels }}
+    {{- toYaml .Values.additionalLabels | nindent 4 }}
+    {{- end }}
+  {{- if or .Values.commonAnnotations .Values.additionalAnnotations }}
+  annotations:
+    {{- if .Values.commonAnnotations }}
+    {{- toYaml .Values.commonAnnotations | nindent 4 }}
+    {{- end }}
+    {{- if .Values.additionalAnnotations }}
+    {{- toYaml .Values.additionalAnnotations | nindent 4 }}
+    {{- end }}
+  {{- end }}
+spec:
+  clusterName: {{ include "storm-shared.fullname" . }}
+  
+  # Zookeeper configuration
+  zookeeper:
+    {{- if .Values.zookeeper.external.enabled }}
+    servers:
+      {{- range .Values.zookeeper.external.servers }}
+      - {{ . | quote }}
+      {{- end }}
+    {{- if .Values.zookeeper.external.root }}
+    root: {{ .Values.zookeeper.external.root }}
+    {{- else }}
+    root: "/storm/{{ include "storm-shared.fullname" . }}"
+    {{- end }}
+    {{- else }}
+    # Use default Zookeeper from operator
+    servers:
+      - "{{ .Values.zookeeper.default.serviceName }}.{{ .Values.zookeeper.default.operatorNamespace }}.svc.{{ .Values.clusterDomain | default "cluster.local" }}:2181"
+    root: "/storm/{{ include "storm-shared.fullname" . }}"
+    {{- end }}
+  
+  # Storm image configuration
+  image:
+    registry: {{ include "storm-shared.images.registry" (dict "imageRoot" .Values.storm.image "global" .Values.global) }}
+    repository: {{ include "storm-shared.images.repository" (dict "imageRoot" .Values.storm.image "global" .Values.global "defaultRepository" "storm") }}
+    tag: {{ .Values.storm.image.tag }}
+    pullPolicy: {{ include "storm-shared.images.pullPolicy" (dict "imageRoot" .Values.storm.image "global" .Values.global) }}
+  
+  # Image pull secrets
+  {{- if or .Values.global.imagePullSecrets .Values.storm.image.pullSecrets }}
+  imagePullSecrets:
+    {{- range .Values.global.imagePullSecrets }}
+    - name: {{ . }}
+    {{- end }}
+    {{- range .Values.storm.image.pullSecrets }}
+    - name: {{ . }}
+    {{- end }}
+  {{- end }}
+  
+  # Nimbus configuration
+  nimbus:
+    replicas: {{ .Values.nimbus.replicas }}
+    {{- if .Values.nimbus.resources }}
+    resources:
+      {{- toYaml .Values.nimbus.resources | nindent 6 }}
+    {{- end }}
+    {{- if .Values.nimbus.nodeSelector }}
+    nodeSelector:
+      {{- toYaml .Values.nimbus.nodeSelector | nindent 6 }}
+    {{- end }}
+    {{- if .Values.nimbus.tolerations }}
+    tolerations:
+      {{- toYaml .Values.nimbus.tolerations | nindent 6 }}
+    {{- end }}
+  
+  # Supervisor configuration
+  supervisor:
+    replicas: {{ .Values.supervisor.replicas }}
+    slotsPerSupervisor: {{ .Values.supervisor.slotsPerSupervisor }}
+    {{- if .Values.supervisor.resources }}
+    resources:
+      {{- toYaml .Values.supervisor.resources | nindent 6 }}
+    {{- end }}
+    {{- if .Values.supervisor.nodeSelector }}
+    nodeSelector:
+      {{- toYaml .Values.supervisor.nodeSelector | nindent 6 }}
+    {{- end }}
+    {{- if .Values.supervisor.tolerations }}
+    tolerations:
+      {{- toYaml .Values.supervisor.tolerations | nindent 6 }}
+    {{- end }}
+  
+  # UI configuration
+  ui:
+    enabled: {{ .Values.ui.enabled }}
+    {{- if and .Values.ui.enabled .Values.ui.resources }}
+    resources:
+      {{- toYaml .Values.ui.resources | nindent 6 }}
+    {{- end }}
+    {{- if and .Values.ui.enabled .Values.ui.nodeSelector }}
+    nodeSelector:
+      {{- toYaml .Values.ui.nodeSelector | nindent 6 }}
+    {{- end }}
+    {{- if and .Values.ui.enabled .Values.ui.tolerations }}
+    tolerations:
+      {{- toYaml .Values.ui.tolerations | nindent 6 }}
+    {{- end }}
+  
+  # Storm configuration
+  {{- if .Values.storm.config }}
+  config:
+    {{- toYaml .Values.storm.config | nindent 4 }}
+  {{- end }}
+  
+  # Persistence configuration
+  {{- if .Values.persistence.enabled }}
+  persistence:
+    enabled: true
+    storageClass: {{ .Values.persistence.storageClass | default .Values.global.storageClass | quote }}
+    size: {{ .Values.persistence.size }}
+  {{- end }}
+  
+  # Monitoring configuration
+  {{- if .Values.monitoring.enabled }}
+  monitoring:
+    enabled: true
+    port: {{ .Values.monitoring.port }}
+  {{- end }}

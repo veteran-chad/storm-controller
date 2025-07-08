@@ -101,7 +101,10 @@ const (
 	EventWPDeleteComplete WorkerPoolEvent = "DeleteComplete"
 
 	// EventWPRecover triggers recovery
-	EventWPRecover WorkerPoolEvent = "Recover"
+	EventWPRecover WorkerPoolEvent = "WPRecover"
+
+	// EventWPHealthCheckFailed indicates health check failed
+	EventWPHealthCheckFailed WorkerPoolEvent = "HealthCheckFailed"
 )
 
 // NewWorkerPoolStateMachine creates a state machine for Storm worker pool lifecycle
@@ -125,6 +128,7 @@ func NewWorkerPoolStateMachine() *StateMachine {
 	sm.AddTransition(State(WorkerPoolStateReady), Event(EventWPUpdateConfig), State(WorkerPoolStateUpdating))
 	sm.AddTransition(State(WorkerPoolStateReady), Event(EventWPDrain), State(WorkerPoolStateDraining))
 	sm.AddTransition(State(WorkerPoolStateReady), Event(EventWPDelete), State(WorkerPoolStateDeleting))
+	sm.AddTransition(State(WorkerPoolStateReady), Event(EventWPHealthCheckFailed), State(WorkerPoolStateFailed))
 
 	// From Scaling
 	sm.AddTransition(State(WorkerPoolStateScaling), Event(EventWPScaleComplete), State(WorkerPoolStateReady))

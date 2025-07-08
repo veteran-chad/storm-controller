@@ -286,13 +286,21 @@ The controller is designed to manage a single Storm cluster per namespace:
 - **RBAC**: Simplified permission management
 - **Resource Limits**: Per-namespace resource quotas
 
-### 2. Reference-Based Cluster Management
+### 2. Dual Management Modes
 
-StormCluster resources don't create Storm infrastructure:
+StormCluster resources support two modes:
 
-- **Flexibility**: Use any deployment method (Helm, manifests, operators)
-- **Separation of Concerns**: Infrastructure vs. application management
-- **Compatibility**: Works with existing Storm deployments
+#### Reference Mode (Default)
+- **Purpose**: Reference existing Storm deployments
+- **Use Case**: When Storm is deployed separately (e.g., via Helm)
+- **Benefits**: Works with any deployment method
+- **Configuration**: `managementMode: reference`
+
+#### Create Mode
+- **Purpose**: Operator creates and manages Storm resources
+- **Use Case**: Full lifecycle management by the operator
+- **Benefits**: Simplified deployment, automatic updates
+- **Configuration**: `managementMode: create`
 
 ### 3. CLI-Based Topology Submission
 
@@ -300,6 +308,7 @@ Currently uses Storm CLI instead of Thrift API:
 
 - **Simplicity**: Easier implementation and debugging
 - **Compatibility**: Works with all Storm versions
+- **Type Safety**: Proper handling of boolean, integer, and string config values
 - **Trade-off**: Less efficient than direct Thrift
 - **Future**: Plans to migrate to Thrift API
 
@@ -310,6 +319,15 @@ Regular status updates ensure eventual consistency:
 - **Health Checks**: Every 60 seconds for clusters
 - **Topology Monitoring**: Continuous state verification
 - **External Changes**: Detects manual interventions
+
+### 5. Configuration Management
+
+Advanced configuration merging and type handling:
+
+- **Hierarchical Config**: Chart defaults → CRD defaults → User config
+- **Type Preservation**: Maintains boolean, integer, and string types
+- **Storm Compatibility**: Proper formatting for Storm CLI submission
+- **ConfigMap Generation**: Automatic creation with merged configurations
 
 ## Metrics and Observability
 
@@ -387,7 +405,29 @@ The controller requires specific Kubernetes permissions:
 2. **Authentication**: No built-in Storm authentication support
 3. **Worker Pools**: Basic implementation only
 4. **API Integration**: CLI-based instead of Thrift API
-5. **Cluster Management**: Single cluster per controller
+5. **Config Type Detection**: Limited to basic type inference
+
+### Recent Enhancements
+
+1. **State Machine Controllers**: Implemented for all resources
+   - Clear state transitions
+   - Better error handling
+   - Predictable behavior
+   
+2. **Configuration Management**: 
+   - Hierarchical config merging
+   - Type-safe parameter handling
+   - Support for complex Storm configurations
+   
+3. **Helm Chart Refactoring**:
+   - Separated operator and cluster charts
+   - CRD-based cluster deployment
+   - Improved modularity
+
+4. **Version Tracking**:
+   - Topology version in configuration
+   - Zero-downtime updates
+   - Version history in status
 
 ### Planned Enhancements
 
@@ -399,28 +439,72 @@ The controller requires specific Kubernetes permissions:
 
 ## Deployment Architecture
 
+### Chart Structure
+
+The Storm Controller ecosystem consists of three Helm charts:
+
+1. **storm-operator**: Deploys the Storm Operator and optional Zookeeper
+2. **storm-crd-cluster**: Creates a StormCluster CR (managed by the operator)
+3. **storm-kubernetes**: Full Storm deployment with optional controller (legacy)
+
 ```mermaid
 graph TB
     subgraph "Kubernetes Cluster"
         subgraph "storm-system namespace"
-            HC[Helm Chart]
-            SC[Storm Cluster]
-            CO[Storm Controller]
+            subgraph "Storm Operator Chart"
+                OP[Storm Operator]
+                ZK[Zookeeper]
+                CRDs[Storm CRDs]
+            end
+            
+            subgraph "Storm CRD Cluster Chart"
+                SCR[StormCluster CR]
+            end
+            
+            subgraph "Created by Operator"
+                SC[Storm Cluster]
+                CM[ConfigMaps]
+                SVC[Services]
+            end
         end
         
         subgraph "application namespace"
             ST1[StormTopology 1]
             ST2[StormTopology 2]
-            SCR[StormCluster Reference]
         end
     end
     
-    HC --> SC
-    HC --> CO
-    CO --> SCR
-    SCR --> SC
+    OP --> CRDs
+    OP --> ZK
+    SCR --> OP
+    OP --> SC
+    OP --> CM
+    OP --> SVC
     ST1 --> SCR
     ST2 --> SCR
+```
+
+### Deployment Modes
+
+#### Mode 1: Operator with CRD-based Clusters (Recommended)
+
+```bash
+# 1. Install the operator
+helm install storm-operator ./charts/storm-operator \
+  --namespace storm-system --create-namespace
+
+# 2. Deploy Storm clusters via CRs
+helm install my-storm ./charts/storm-crd-cluster \
+  --namespace storm-system
+```
+
+#### Mode 2: Traditional Deployment (Legacy)
+
+```bash
+# Deploy Storm cluster directly with optional controller
+helm install storm ./charts/storm-kubernetes \
+  --namespace storm-system --create-namespace \
+  --set controller.enabled=true
 ```
 
 ## Conclusion

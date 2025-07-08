@@ -8,6 +8,14 @@ rules:
   - ""
   resources:
   - configmaps
+  - pods
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - ""
+  resources:
   - services
   verbs:
   - create
@@ -18,20 +26,9 @@ rules:
   - update
   - watch
 - apiGroups:
-  - ""
-  resources:
-  - pods
-  - secrets
-  verbs:
-  - get
-  - list
-  - watch
-- apiGroups:
   - apps
   resources:
-  - daemonsets
   - deployments
-  - statefulsets
   verbs:
   - create
   - delete
@@ -44,18 +41,6 @@ rules:
   - autoscaling
   resources:
   - horizontalpodautoscalers
-  verbs:
-  - create
-  - delete
-  - get
-  - list
-  - patch
-  - update
-  - watch
-- apiGroups:
-  - networking.k8s.io
-  resources:
-  - ingresses
   verbs:
   - create
   - delete

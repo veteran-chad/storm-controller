@@ -1,0 +1,6 @@
+dependencies:
+- name: storm-shared
+  repository: file://../storm-shared
+  version: 0.1.0
+digest: sha256:f45ca558576b42b52e02159d3e2a9e7ab370cb81bf0bfc8a7df83d0b0db5125d
+generated: "2025-07-07T22:59:32.686127895Z"

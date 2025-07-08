@@ -1,0 +1,27 @@
+{{- if .Values.operator.pdb.create }}
+apiVersion: {{ include "common.capabilities.policy.apiVersion" . }}
+kind: PodDisruptionBudget
+metadata:
+  name: {{ include "storm-shared.fullname" . }}-operator
+  namespace: {{ .Release.Namespace | quote }}
+  labels:
+    {{- include "storm-shared.componentLabels" (dict "component" "controller" "context" .) | nindent 4 }}
+    {{- if .Values.commonLabels }}
+    {{- toYaml .Values.commonLabels | nindent 4 }}
+    {{- end }}
+  {{- if .Values.commonAnnotations }}
+  annotations:
+    {{- toYaml .Values.commonAnnotations | nindent 4 }}
+  {{- end }}
+spec:
+  {{- if .Values.operator.pdb.minAvailable }}
+  minAvailable: {{ .Values.operator.pdb.minAvailable }}
+  {{- end }}
+  {{- if .Values.operator.pdb.maxUnavailable }}
+  maxUnavailable: {{ .Values.operator.pdb.maxUnavailable }}
+  {{- end }}
+  selector:
+    matchLabels:
+      {{- include "storm-shared.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: controller
+{{- end }}

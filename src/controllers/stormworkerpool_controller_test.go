@@ -42,7 +42,7 @@ import (
 
 var _ = Describe("StormWorkerPool State Machine Controller", func() {
 	var (
-		reconciler      *StormWorkerPoolReconcilerStateMachine
+		reconciler      *StormWorkerPoolReconciler
 		fakeClient      client.Client
 		mockStormClient *MockStormClient
 		mockClientMgr   *MockClientManager
@@ -67,7 +67,7 @@ var _ = Describe("StormWorkerPool State Machine Controller", func() {
 		mockClientMgr.On("GetClient").Return(mockStormClient, nil)
 
 		// Create reconciler
-		reconciler = &StormWorkerPoolReconcilerStateMachine{
+		reconciler = &StormWorkerPoolReconciler{
 			Client:        fakeClient,
 			Scheme:        scheme,
 			ClientManager: mockClientMgr,
@@ -91,6 +91,7 @@ var _ = Describe("StormWorkerPool State Machine Controller", func() {
 				phase         string
 				expectedState string
 			}{
+				{"", "Unknown"},
 				{"Pending", "Pending"},
 				{"Creating", "Creating"},
 				{"Running", "Ready"},
@@ -316,7 +317,7 @@ var _ = Describe("StormWorkerPool State Machine Controller", func() {
 
 				event, err := reconciler.determineNextEvent(ctx, workerPoolCtx)
 				Expect(err).NotTo(HaveOccurred())
-				Expect(string(event)).To(Equal("WPCreateFailed"))
+				Expect(string(event)).To(Equal("HealthCheckFailed"))
 
 				err = sm.ProcessEvent(ctx, state.Event(event))
 				Expect(err).NotTo(HaveOccurred())
@@ -366,7 +367,7 @@ var _ = Describe("StormWorkerPool State Machine Controller", func() {
 					Namespace: "storm-system",
 				},
 				Spec: stormv1beta1.StormClusterSpec{
-					Image: stormv1beta1.ImageSpec{
+					Image: &stormv1beta1.ImageSpec{
 						Repository: "apache/storm",
 						Tag:        "2.6.0",
 					},
@@ -528,6 +529,10 @@ var _ = Describe("StormWorkerPool State Machine Controller", func() {
 			// Create worker pool
 			Expect(fakeClient.Create(ctx, workerPool)).To(Succeed())
 
+			// Add finalizer (simulating what the reconciler would do)
+			workerPool.Finalizers = []string{"storm.apache.org/workerpool-finalizer"}
+			Expect(fakeClient.Update(ctx, workerPool)).To(Succeed())
+
 			// First reconciliation - should start creating
 			req := reconcile.Request{
 				NamespacedName: types.NamespacedName{
@@ -661,7 +666,7 @@ func TestWorkerPoolResourceChecks(t *testing.T) {
 		WithScheme(scheme).
 		Build()
 
-	reconciler := &StormWorkerPoolReconcilerStateMachine{
+	reconciler := &StormWorkerPoolReconciler{
 		Client: fakeClient,
 		Scheme: scheme,
 	}
@@ -763,7 +768,7 @@ func TestWorkerPoolResourceChecks(t *testing.T) {
 }
 
 func TestBuildWorkerDeploymentSpec(t *testing.T) {
-	reconciler := &StormWorkerPoolReconcilerStateMachine{}
+	reconciler := &StormWorkerPoolReconciler{}
 
 	workerPool := &stormv1beta1.StormWorkerPool{
 		ObjectMeta: metav1.ObjectMeta{
@@ -794,7 +799,7 @@ func TestBuildWorkerDeploymentSpec(t *testing.T) {
 			Name: "test-cluster",
 		},
 		Spec: stormv1beta1.StormClusterSpec{
-			Image: stormv1beta1.ImageSpec{
+			Image: &stormv1beta1.ImageSpec{
 				Registry:   "custom-registry.io",
 				Repository: "storm/custom",
 				Tag:        "1.2.3",
@@ -853,7 +858,7 @@ func TestBuildWorkerDeploymentSpec(t *testing.T) {
 }
 
 func TestBuildHPASpec(t *testing.T) {
-	reconciler := &StormWorkerPoolReconcilerStateMachine{}
+	reconciler := &StormWorkerPoolReconciler{}
 
 	workerPool := &stormv1beta1.StormWorkerPool{
 		Spec: stormv1beta1.StormWorkerPoolSpec{

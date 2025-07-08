@@ -290,7 +290,10 @@ func (rc *ResourceCoordinator) GetClusterCapacity(ctx context.Context, clusterRe
 	}
 
 	// Calculate total capacity (simplified calculation)
-	totalSlots := cluster.Spec.Supervisor.Replicas * cluster.Spec.Supervisor.WorkerSlots
+	var totalSlots int32
+	if cluster.Spec.Supervisor != nil && cluster.Spec.Supervisor.Replicas != nil {
+		totalSlots = *cluster.Spec.Supervisor.Replicas * cluster.Spec.Supervisor.SlotsPerSupervisor
+	}
 
 	return &ClusterCapacity{
 		TotalSlots:         totalSlots,

@@ -33,33 +33,45 @@ type StormClusterSpec struct {
 	// +optional
 	ResourceNames *ResourceNamesSpec `json:"resourceNames,omitempty"`
 
+	// ClusterName is the name of the Storm cluster
+	// +optional
+	ClusterName string `json:"clusterName,omitempty"`
+
 	// Image configuration for Storm components
 	// +optional
-	Image ImageSpec `json:"image,omitempty"`
+	Image *ImageSpec `json:"image,omitempty"`
+
+	// ImagePullSecrets is a list of references to secrets for pulling images
+	// +optional
+	ImagePullSecrets []corev1.LocalObjectReference `json:"imagePullSecrets,omitempty"`
 
 	// Nimbus configuration
 	// +optional
-	Nimbus NimbusSpec `json:"nimbus,omitempty"`
+	Nimbus *NimbusSpec `json:"nimbus,omitempty"`
 
 	// Supervisor configuration
 	// +optional
-	Supervisor SupervisorSpec `json:"supervisor,omitempty"`
+	Supervisor *SupervisorSpec `json:"supervisor,omitempty"`
 
 	// UI configuration
 	// +optional
-	UI UISpec `json:"ui,omitempty"`
+	UI *UISpec `json:"ui,omitempty"`
 
 	// Zookeeper configuration
 	// +optional
-	Zookeeper ZookeeperSpec `json:"zookeeper,omitempty"`
+	Zookeeper *ZookeeperSpec `json:"zookeeper,omitempty"`
 
 	// Common Storm configuration parameters
 	// +optional
 	Config map[string]string `json:"config,omitempty"`
 
-	// Metrics configuration
+	// Persistence configuration
 	// +optional
-	Metrics MetricsSpec `json:"metrics,omitempty"`
+	Persistence *PersistenceSpec `json:"persistence,omitempty"`
+
+	// Monitoring configuration
+	// +optional
+	Monitoring *MonitoringSpec `json:"monitoring,omitempty"`
 }
 
 // ResourceNamesSpec defines resource names for reference mode
@@ -124,7 +136,7 @@ type NimbusSpec struct {
 	// +kubebuilder:validation:Maximum=5
 	// +kubebuilder:default=1
 	// +optional
-	Replicas int32 `json:"replicas,omitempty"`
+	Replicas *int32 `json:"replicas,omitempty"`
 
 	// Resource requirements for Nimbus pods
 	// +optional
@@ -161,7 +173,7 @@ type SupervisorSpec struct {
 	// +kubebuilder:validation:Minimum=1
 	// +kubebuilder:default=3
 	// +optional
-	Replicas int32 `json:"replicas,omitempty"`
+	Replicas *int32 `json:"replicas,omitempty"`
 
 	// Deployment mode: "deployment" or "daemonset"
 	// +kubebuilder:validation:Enum=deployment;daemonset
@@ -173,7 +185,7 @@ type SupervisorSpec struct {
 	// +kubebuilder:validation:Minimum=1
 	// +kubebuilder:default=4
 	// +optional
-	WorkerSlots int32 `json:"workerSlots,omitempty"`
+	SlotsPerSupervisor int32 `json:"slotsPerSupervisor,omitempty"`
 
 	// Resource requirements for Supervisor pods
 	// +optional
@@ -207,7 +219,7 @@ type UISpec struct {
 	// +kubebuilder:validation:Minimum=1
 	// +kubebuilder:default=1
 	// +optional
-	Replicas int32 `json:"replicas,omitempty"`
+	Replicas *int32 `json:"replicas,omitempty"`
 
 	// Resource requirements for UI pods
 	// +optional
@@ -228,42 +240,41 @@ type UISpec struct {
 
 // ZookeeperSpec defines the Zookeeper configuration
 type ZookeeperSpec struct {
-	// Enable embedded Zookeeper
-	// +kubebuilder:default=true
+	// Zookeeper servers
 	// +optional
-	Enabled bool `json:"enabled,omitempty"`
+	Servers []string `json:"servers,omitempty"`
 
-	// External Zookeeper servers (if not using embedded)
-	// +optional
-	ExternalServers []string `json:"externalServers,omitempty"`
-
-	// Chroot path in Zookeeper
+	// Root path in Zookeeper for this cluster
 	// +kubebuilder:default="/storm"
 	// +optional
-	ChrootPath string `json:"chrootPath,omitempty"`
+	Root string `json:"root,omitempty"`
+
+	// Connection timeout in milliseconds
+	// +kubebuilder:default=15000
+	// +optional
+	ConnectionTimeout int `json:"connectionTimeout,omitempty"`
+
+	// Session timeout in milliseconds
+	// +kubebuilder:default=20000
+	// +optional
+	SessionTimeout int `json:"sessionTimeout,omitempty"`
 }
 
 // PersistenceSpec defines persistence configuration
 type PersistenceSpec struct {
 	// Enable persistence
-	// +kubebuilder:default=true
+	// +kubebuilder:default=false
 	// +optional
 	Enabled bool `json:"enabled,omitempty"`
 
 	// Size of persistent volume
-	// +kubebuilder:default="10Gi"
+	// +kubebuilder:default="8Gi"
 	// +optional
 	Size string `json:"size,omitempty"`
 
 	// Storage class for persistent volume
 	// +optional
 	StorageClass string `json:"storageClass,omitempty"`
-
-	// Access mode for persistent volume
-	// +kubebuilder:validation:Enum=ReadWriteOnce;ReadOnlyMany;ReadWriteMany
-	// +kubebuilder:default="ReadWriteOnce"
-	// +optional
-	AccessMode corev1.PersistentVolumeAccessMode `json:"accessMode,omitempty"`
 }
 
 // ServiceSpec defines service configuration
@@ -363,26 +374,17 @@ type AuthUser struct {
 	Password string `json:"password"`
 }
 
-// MetricsSpec defines metrics configuration
-type MetricsSpec struct {
-	// Enable metrics
-	// +kubebuilder:default=true
+// MonitoringSpec defines monitoring configuration
+type MonitoringSpec struct {
+	// Enable monitoring
+	// +kubebuilder:default=false
 	// +optional
 	Enabled bool `json:"enabled,omitempty"`
 
 	// Port for metrics endpoint
-	// +kubebuilder:default=7979
+	// +kubebuilder:default=8080
 	// +optional
 	Port int32 `json:"port,omitempty"`
-
-	// Enable ServiceMonitor for Prometheus Operator
-	// +kubebuilder:default=false
-	// +optional
-	ServiceMonitor bool `json:"serviceMonitor,omitempty"`
-
-	// ServiceMonitor labels
-	// +optional
-	ServiceMonitorLabels map[string]string `json:"serviceMonitorLabels,omitempty"`
 }
 
 // ThriftSpec defines Thrift client configuration

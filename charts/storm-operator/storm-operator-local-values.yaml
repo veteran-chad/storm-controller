@@ -1,0 +1,194 @@
+# Local testing values for Storm Operator
+
+# Operator configuration
+operator:
+  # Image configuration
+  image:
+    repository: storm-controller
+    tag: latest
+    pullPolicy: IfNotPresent
+  
+  # Override args to remove --config
+  args:
+    - --operator-namespace=storm-system
+    - --storm-namespace=storm-system
+    - --leader-elect
+    - --metrics-bind-address=:8080
+    - --health-probe-bind-address=:8081
+    
+  # Fix probe configuration
+  customLivenessProbe:
+    httpGet:
+      path: /healthz
+      port: 8081
+    initialDelaySeconds: 15
+    periodSeconds: 20
+    
+  customReadinessProbe:
+    httpGet:
+      path: /readyz  
+      port: 8081
+    initialDelaySeconds: 5
+    periodSeconds: 10
+  
+  # Resource limits
+  resources:
+    limits:
+      cpu: 500m
+      memory: 256Mi
+    requests:
+      cpu: 100m
+      memory: 128Mi
+  
+  # Log level
+  logLevel: debug
+  # Default Storm configuration
+  defaults:
+    storm:
+      image:
+        registry: docker.io
+        repository: storm
+        tag: 2.8.1
+      config:
+        nimbus.seeds: ["storm-cluster-nimbus-0.storm-cluster-nimbus-hs"]
+        storm.zookeeper.servers: ["storm-operator-zookeeper-0.storm-operator-zookeeper-hs.storm-system.svc.cluster.local:2181", "storm-operator-zookeeper-1.storm-operator-zookeeper-hs.storm-system.svc.cluster.local:2181", "storm-operator-zookeeper-2.storm-operator-zookeeper-hs.storm-system.svc.cluster.local:2181"]
+        storm.log.dir: "/logs"
+        storm.local.dir: "/storm/data"
+        nimbus.thrift.port: 6627
+    
+    cluster:
+      nimbus:
+        replicas: 1
+        resources:
+          limits:
+            cpu: 1000m
+            memory: 1Gi
+          requests:
+            cpu: 200m
+            memory: 512Mi
+      
+      supervisor:
+        replicas: 3
+        slotsPerSupervisor: 4
+        resources:
+          limits:
+            cpu: 2000m
+            memory: 2Gi
+          requests:
+            cpu: 500m
+            memory: 1Gi
+      
+      ui:
+        enabled: true
+        replicas: 1
+        resources:
+          limits:
+            cpu: 500m
+            memory: 512Mi
+          requests:
+            cpu: 100m
+            memory: 256Mi
+    
+    zookeeper:
+      servers: []  # Will use embedded if empty
+      root: "/storm"
+      connectionTimeout: 15000
+      sessionTimeout: 20000
+
+# Embedded Zookeeper configuration
+zookeeper:
+  enabled: true
+  replicaCount: 3
+  persistence:
+    enabled: true
+    size: 1Gi
+    storageClass: ""  # Use default storage class
+  resources:
+    limits:
+      cpu: 500m
+      memory: 512Mi
+    requests:
+      cpu: 100m
+      memory: 256Mi
+
+# ServiceMonitor for Prometheus
+serviceMonitor:
+  enabled: false
+
+# Pod Security Context
+podSecurityContext:
+  fsGroup: 1000
+  runAsUser: 1000
+  runAsNonRoot: true
+
+# Security Context for containers
+securityContext:
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: true
+  runAsNonRoot: true
+  runAsUser: 1000
+  capabilities:
+    drop:
+    - ALL
+
+# Node selector
+nodeSelector: {}
+
+# Tolerations
+tolerations: []
+
+# Affinity
+affinity: {}
+
+# Service Account
+serviceAccount:
+  create: true
+  annotations: {}
+  name: ""
+
+# RBAC
+rbac:
+  create: true
+
+# CRD installation
+crd:
+  install: true
+  keep: true
+
+# Webhook configuration (disabled for local testing)
+webhook:
+  enabled: false
+
+# Namespace to watch (empty means all namespaces)
+watchNamespace: ""
+
+# Leader election
+leaderElection:
+  enabled: true
+  namespace: ""  # Use release namespace
+
+# Metrics
+metrics:
+  enabled: true
+  port: 8080
+  path: /metrics
+
+# Health probes
+health:
+  enabled: true
+  port: 8081
+  livenessProbe:
+    path: /healthz
+    initialDelaySeconds: 15
+    periodSeconds: 20
+  readinessProbe:
+    path: /readyz
+    initialDelaySeconds: 5
+    periodSeconds: 10
+
+# Development/debugging
+development:
+  # Enable development mode (more verbose logging)
+  enabled: true
+  # Enable pprof endpoints
+  pprof: false

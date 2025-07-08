@@ -1,0 +1,53 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "storm-shared.fullname" . }}-operator-metrics
+  namespace: {{ .Release.Namespace | quote }}
+  labels:
+    {{- include "storm-shared.componentLabels" (dict "component" "controller" "context" .) | nindent 4 }}
+    {{- if .Values.commonLabels }}
+    {{- toYaml .Values.commonLabels | nindent 4 }}
+    {{- end }}
+  {{- if or .Values.operator.service.annotations .Values.commonAnnotations }}
+  annotations:
+    {{- if .Values.commonAnnotations }}
+    {{- toYaml .Values.commonAnnotations | nindent 4 }}
+    {{- end }}
+    {{- if .Values.operator.service.annotations }}
+    {{- toYaml .Values.operator.service.annotations | nindent 4 }}
+    {{- end }}
+  {{- end }}
+spec:
+  type: {{ .Values.operator.service.type }}
+  {{- if and .Values.operator.service.clusterIP (eq .Values.operator.service.type "ClusterIP") }}
+  clusterIP: {{ .Values.operator.service.clusterIP }}
+  {{- end }}
+  {{- if and .Values.operator.service.loadBalancerIP (eq .Values.operator.service.type "LoadBalancer") }}
+  loadBalancerIP: {{ .Values.operator.service.loadBalancerIP }}
+  {{- end }}
+  {{- if and (eq .Values.operator.service.type "LoadBalancer") .Values.operator.service.loadBalancerSourceRanges }}
+  loadBalancerSourceRanges: {{- toYaml .Values.operator.service.loadBalancerSourceRanges | nindent 4 }}
+  {{- end }}
+  {{- if or (eq .Values.operator.service.type "LoadBalancer") (eq .Values.operator.service.type "NodePort") }}
+  externalTrafficPolicy: {{ .Values.operator.service.externalTrafficPolicy | quote }}
+  {{- end }}
+  {{- if .Values.operator.service.sessionAffinity }}
+  sessionAffinity: {{ .Values.operator.service.sessionAffinity }}
+  {{- end }}
+  {{- if .Values.operator.service.sessionAffinityConfig }}
+  sessionAffinityConfig: {{- toYaml .Values.operator.service.sessionAffinityConfig | nindent 4 }}
+  {{- end }}
+  ports:
+    - name: metrics
+      port: {{ .Values.operator.service.ports.metrics }}
+      targetPort: metrics
+      protocol: TCP
+      {{- if and (or (eq .Values.operator.service.type "NodePort") (eq .Values.operator.service.type "LoadBalancer")) .Values.operator.service.nodePorts.metrics }}
+      nodePort: {{ .Values.operator.service.nodePorts.metrics }}
+      {{- end }}
+    {{- if .Values.operator.service.extraPorts }}
+    {{- toYaml .Values.operator.service.extraPorts | nindent 4 }}
+    {{- end }}
+  selector:
+    {{- include "storm-shared.selectorLabels" . | nindent 4 }}
+    app.kubernetes.io/component: controller

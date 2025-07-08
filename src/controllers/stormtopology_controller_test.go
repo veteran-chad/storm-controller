@@ -54,7 +54,6 @@ func (m *MockStormClient) GetTopology(ctx context.Context, name string) (*storm.
 	return args.Get(0).(*storm.TopologyInfo), args.Error(1)
 }
 
-
 func (m *MockStormClient) KillTopology(ctx context.Context, name string, waitSecs int) error {
 	args := m.Called(ctx, name, waitSecs)
 	return args.Error(0)
@@ -67,7 +66,6 @@ func (m *MockStormClient) DownloadJar(ctx context.Context, url string) ([]byte, 
 	}
 	return args.Get(0).([]byte), args.Error(1)
 }
-
 
 func (m *MockStormClient) DeactivateTopology(ctx context.Context, name string) error {
 	args := m.Called(ctx, name)
@@ -147,12 +145,12 @@ func (m *MockClientManager) HasClient() bool {
 
 var _ = Describe("StormTopology State Machine Controller", func() {
 	var (
-		reconciler     *StormTopologyReconcilerStateMachine
-		fakeClient     client.Client
+		reconciler      *StormTopologyReconciler
+		fakeClient      client.Client
 		mockStormClient *MockStormClient
 		mockClientMgr   *MockClientManager
-		ctx            context.Context
-		scheme         *runtime.Scheme
+		ctx             context.Context
+		scheme          *runtime.Scheme
 	)
 
 	BeforeEach(func() {
@@ -172,7 +170,7 @@ var _ = Describe("StormTopology State Machine Controller", func() {
 		mockClientMgr.On("GetClient").Return(mockStormClient, nil)
 
 		// Create reconciler
-		reconciler = &StormTopologyReconcilerStateMachine{
+		reconciler = &StormTopologyReconciler{
 			Client:        fakeClient,
 			Scheme:        scheme,
 			ClientManager: mockClientMgr,
@@ -261,6 +259,9 @@ var _ = Describe("StormTopology State Machine Controller", func() {
 						MainClass: "com.example.TestTopology",
 						Jar: stormv1beta1.JarSpec{
 							URL: "http://example.com/test.jar",
+						},
+						Config: map[string]string{
+							"topology.version": "v1",
 						},
 					},
 				},
@@ -473,6 +474,9 @@ var _ = Describe("StormTopology State Machine Controller", func() {
 						Jar: stormv1beta1.JarSpec{
 							URL: "http://example.com/test.jar",
 						},
+						Config: map[string]string{
+							"topology.version": "v1",
+						},
 					},
 				},
 			}
@@ -481,6 +485,10 @@ var _ = Describe("StormTopology State Machine Controller", func() {
 		It("should handle full lifecycle from creation to running", func() {
 			// Create topology
 			Expect(fakeClient.Create(ctx, topology)).To(Succeed())
+
+			// Add finalizer (simulating what the reconciler would do)
+			topology.Finalizers = []string{"storm.apache.org/topology-finalizer"}
+			Expect(fakeClient.Update(ctx, topology)).To(Succeed())
 
 			// Mock JAR download
 			mockStormClient.On("DownloadJar", ctx, "http://example.com/test.jar").Return([]byte("jar-content"), nil)
@@ -512,6 +520,24 @@ var _ = Describe("StormTopology State Machine Controller", func() {
 			// Check topology status moved to submitting
 			Expect(fakeClient.Get(ctx, req.NamespacedName, updatedTopology)).To(Succeed())
 			Expect(updatedTopology.Status.InternalState).To(Equal("Submitting"))
+
+			// Mock successful submission
+			mockStormClient.On("SubmitTopology", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(nil)
+
+			// Mock topology now exists and is running
+			mockStormClient.On("GetTopology", ctx, "test-topology").Return(&storm.TopologyInfo{
+				Name:   "test-topology",
+				Status: "ACTIVE",
+			}, nil)
+
+			// Third reconciliation - should move to running
+			result, err = reconciler.Reconcile(ctx, req)
+			Expect(err).NotTo(HaveOccurred())
+
+			// Check final status
+			Expect(fakeClient.Get(ctx, req.NamespacedName, updatedTopology)).To(Succeed())
+			Expect(updatedTopology.Status.InternalState).To(Equal("Running"))
+			Expect(updatedTopology.Status.Phase).To(Equal("Running"))
 		})
 
 		It("should handle deletion with finalizer", func() {
@@ -590,7 +616,7 @@ var _ = Describe("StormTopology State Machine Controller", func() {
 
 // Unit tests using standard testing package
 func TestTopologyValidation(t *testing.T) {
-	reconciler := &StormTopologyReconcilerStateMachine{}
+	reconciler := &StormTopologyReconciler{}
 	ctx := context.Background()
 
 	tests := []struct {
@@ -673,7 +699,7 @@ func TestTopologyValidation(t *testing.T) {
 }
 
 func TestBuildSubmitCommand(t *testing.T) {
-	reconciler := &StormTopologyReconcilerStateMachine{}
+	reconciler := &StormTopologyReconciler{}
 
 	topology := &stormv1beta1.StormTopology{
 		Spec: stormv1beta1.StormTopologySpec{
@@ -682,10 +708,10 @@ func TestBuildSubmitCommand(t *testing.T) {
 				MainClass: "com.example.TestTopology",
 				Args:      []string{"arg1", "arg2"},
 				Config: map[string]string{
-					"topology.workers":     "4",
-					"topology.debug":       "false",
+					"topology.workers":           "4",
+					"topology.debug":             "false",
 					"topology.max.spout.pending": "1000",
-					"topology.name.suffix": "prod",
+					"topology.name.suffix":       "prod",
 				},
 			},
 		},

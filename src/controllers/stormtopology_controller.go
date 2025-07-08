@@ -36,50 +36,79 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
 	stormv1beta1 "github.com/veteran-chad/storm-controller/api/v1beta1"
+	"github.com/veteran-chad/storm-controller/pkg/coordination"
 	"github.com/veteran-chad/storm-controller/pkg/jarextractor"
 	"github.com/veteran-chad/storm-controller/pkg/metrics"
+	"github.com/veteran-chad/storm-controller/pkg/state"
 	"github.com/veteran-chad/storm-controller/pkg/storm"
 )
 
 const (
-	topologyFinalizer = "storm.apache.org/topology-finalizer"
+	topologyFinalizer = "storm.apache.org/stormtopology-finalizer"
 	jarCacheDir       = "/tmp/storm-jars"
 )
 
-// getStormClient is a helper to get the storm client and handle errors consistently
-func (r *StormTopologyReconcilerSimple) getStormClient() (storm.Client, error) {
-	return r.ClientManager.GetClient()
-}
-
-// StormTopologyReconcilerSimple reconciles a StormTopology object
-type StormTopologyReconcilerSimple struct {
+// StormTopologyReconciler reconciles a StormTopology object using state machines
+type StormTopologyReconciler struct {
 	client.Client
 	Scheme        *runtime.Scheme
 	ClientManager storm.ClientManager
 	JarExtractor  *jarextractor.Extractor
 	ClusterName   string
 	Namespace     string
+	Coordinator   *coordination.ResourceCoordinator
+}
+
+// TopologyContext holds the context for a topology reconciliation
+type TopologyContext struct {
+	Topology     *stormv1beta1.StormTopology
+	Cluster      *stormv1beta1.StormCluster
+	StormClient  storm.Client
+	StateMachine *state.StateMachine
+	JarPath      string
 }
 
 //+kubebuilder:rbac:groups=storm.apache.org,resources=stormtopologies,verbs=get;list;watch;create;update;patch;delete
 //+kubebuilder:rbac:groups=storm.apache.org,resources=stormtopologies/status,verbs=get;update;patch
 //+kubebuilder:rbac:groups=storm.apache.org,resources=stormtopologies/finalizers,verbs=update
 
-// Reconcile handles StormTopology reconciliation
-func (r *StormTopologyReconcilerSimple) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
+// Reconcile handles StormTopology reconciliation using state machines
+func (r *StormTopologyReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	log := log.FromContext(ctx)
 
 	// Fetch the StormTopology instance
 	topology := &stormv1beta1.StormTopology{}
 	if err := r.Get(ctx, req.NamespacedName, topology); err != nil {
 		if errors.IsNotFound(err) {
-			// Object not found, return and don't requeue
 			return ctrl.Result{}, nil
 		}
 		return ctrl.Result{}, err
 	}
 
-	// Get the associated Storm cluster
+	// Check dependencies using coordination layer
+	dependencies := coordination.CreateTopologyDependencies(topology)
+	dependencyManager := coordination.NewDependencyManager(r.Client)
+
+	dependencyResults, allSatisfied, waitTime := dependencyManager.CheckAllDependencies(ctx, dependencies)
+
+	if !allSatisfied {
+		// Log dependency status
+		for _, result := range dependencyResults {
+			if result.Status != coordination.DependencyStatusSatisfied {
+				log.Info("Dependency not satisfied",
+					"dependency", result.Dependency.Description,
+					"status", result.Status,
+					"message", result.Message)
+			}
+		}
+
+		// Update topology status with dependency information
+		r.updateTopologyStatusWithDependencies(ctx, topology, dependencyResults)
+
+		return ctrl.Result{RequeueAfter: waitTime}, nil
+	}
+
+	// Get the associated Storm cluster (we know it exists and is ready from dependency check)
 	cluster := &stormv1beta1.StormCluster{}
 	if err := r.Get(ctx, client.ObjectKey{
 		Name:      topology.Spec.ClusterRef,
@@ -89,17 +118,10 @@ func (r *StormTopologyReconcilerSimple) Reconcile(ctx context.Context, req ctrl.
 		return ctrl.Result{}, err
 	}
 
-	// Check if cluster is healthy
-	if cluster.Status.Phase != "Running" {
-		log.Info("Storm cluster is not running, requeuing", "phase", cluster.Status.Phase)
-		return ctrl.Result{RequeueAfter: 30 * time.Second}, nil
-	}
-
 	// Get Storm client
 	stormClient, err := r.ClientManager.GetClient()
 	if err != nil {
 		log.Error(err, "Storm client not available")
-		// Requeue to try again when client is available
 		return ctrl.Result{RequeueAfter: 30 * time.Second}, nil
 	}
 
@@ -116,133 +138,338 @@ func (r *StormTopologyReconcilerSimple) Reconcile(ctx context.Context, req ctrl.
 		}
 	}
 
-	// Handle suspend
-	if topology.Spec.Suspend {
-		return r.handleSuspend(ctx, topology)
+	// Create topology context
+	topologyCtx := &TopologyContext{
+		Topology:    topology,
+		Cluster:     cluster,
+		StormClient: stormClient,
+		JarPath:     topology.Status.DownloadedJarPath, // Restore JAR path from previous state
 	}
 
-	// Check for version changes
-	desiredVersion := r.getTopologyVersion(topology)
-	if topology.Status.DeployedVersion != "" && topology.Status.DeployedVersion != desiredVersion {
-		log.Info("Topology version changed, triggering update",
-			"oldVersion", topology.Status.DeployedVersion,
-			"newVersion", desiredVersion)
-		return r.handleVersionUpdate(ctx, topology, cluster, desiredVersion, stormClient)
-	}
+	// Initialize state machine based on current status
+	sm := r.initializeStateMachine(topology)
+	topologyCtx.StateMachine = sm
 
-	// Actually reconcile the topology
-	return r.reconcileTopology(ctx, topology, cluster, stormClient)
-}
-
-func (r *StormTopologyReconcilerSimple) reconcileTopology(ctx context.Context, topology *stormv1beta1.StormTopology, cluster *stormv1beta1.StormCluster, stormClient storm.Client) (ctrl.Result, error) {
-	log := log.FromContext(ctx)
-
-	// Check current topology state in Storm
-	stormTopology, err := stormClient.GetTopology(ctx, topology.Spec.Topology.Name)
-	if err != nil && !strings.Contains(err.Error(), "not found") {
-		log.Error(err, "Failed to get topology from Storm")
-		return ctrl.Result{}, r.updateStatus(ctx, topology, "Failed", err.Error())
-	}
-
-	// Topology doesn't exist in Storm
-	if stormTopology == nil || (err != nil && strings.Contains(err.Error(), "not found")) {
-		log.Info("Topology not found in Storm, submitting", "topology", topology.Spec.Topology.Name)
-		return r.submitTopology(ctx, topology, cluster, stormClient)
-	}
-
-	// Update status with current Storm state
-	// Map Storm status to our status
-	statusMap := map[string]string{
-		"ACTIVE":      "Running",
-		"INACTIVE":    "Suspended",
-		"REBALANCING": "Running",
-		"KILLED":      "Killed",
-	}
-
-	if mappedStatus, ok := statusMap[stormTopology.Status]; ok {
-		topology.Status.Phase = mappedStatus
-	} else {
-		topology.Status.Phase = stormTopology.Status
-	}
-	topology.Status.TopologyID = stormTopology.ID
-	topology.Status.Workers = int32(stormTopology.Workers)
-	topology.Status.Executors = int32(stormTopology.Executors)
-	topology.Status.Tasks = int32(stormTopology.Tasks)
-	topology.Status.Uptime = fmt.Sprintf("%ds", stormTopology.UptimeSeconds)
-	topology.Status.LastUpdateTime = &metav1.Time{Time: time.Now()}
-
-	// Set deployed version if not already set
-	if topology.Status.DeployedVersion == "" {
-		topology.Status.DeployedVersion = r.getTopologyVersion(topology)
-		log.Info("Setting deployed version for existing topology",
-			"topology", topology.Spec.Topology.Name,
-			"version", topology.Status.DeployedVersion)
-	}
-
-	// Update metrics
-	labels := map[string]string{
-		"topology":  topology.Name,
-		"namespace": topology.Namespace,
-		"cluster":   topology.Spec.ClusterRef,
-	}
-
-	metrics.StormTopologyInfo.With(map[string]string{
-		"topology":  topology.Name,
-		"namespace": topology.Namespace,
-		"cluster":   topology.Spec.ClusterRef,
-		"status":    stormTopology.Status,
-	}).Set(1)
-
-	metrics.StormTopologyWorkers.With(labels).Set(float64(stormTopology.Workers))
-	metrics.StormTopologyExecutors.With(labels).Set(float64(stormTopology.Executors))
-	metrics.StormTopologyTasks.With(labels).Set(float64(stormTopology.Tasks))
-	metrics.StormTopologyUptime.With(labels).Set(float64(stormTopology.UptimeSeconds))
-
-	// Update status conditions
-	meta.SetStatusCondition(&topology.Status.Conditions, metav1.Condition{
-		Type:               "Ready",
-		Status:             metav1.ConditionTrue,
-		ObservedGeneration: topology.Generation,
-		Reason:             "TopologyRunning",
-		Message:            fmt.Sprintf("Topology is running with %d workers", stormTopology.Workers),
-	})
-
-	if err := r.Status().Update(ctx, topology); err != nil {
-		return ctrl.Result{}, err
-	}
-
-	// Requeue to check status periodically
-	return ctrl.Result{RequeueAfter: 60 * time.Second}, nil
-}
-
-func (r *StormTopologyReconcilerSimple) submitTopology(ctx context.Context, topology *stormv1beta1.StormTopology, cluster *stormv1beta1.StormCluster, stormClient storm.Client) (ctrl.Result, error) {
-	log := log.FromContext(ctx)
-
-	// Update status to submitted
-	if err := r.updateStatus(ctx, topology, "Submitted", "Preparing topology submission"); err != nil {
-		return ctrl.Result{}, err
-	}
-
-	// Get JAR from topology spec - now supports multiple sources
-	jarPath, err := r.getJARPath(ctx, topology)
+	// Process the topology based on its current state
+	event, err := r.determineNextEvent(ctx, topologyCtx)
 	if err != nil {
-		log.Error(err, "Failed to get JAR")
-		return ctrl.Result{}, r.updateStatus(ctx, topology, "Failed", fmt.Sprintf("Failed to get JAR: %v", err))
+		log.Error(err, "Failed to determine next event")
+		return ctrl.Result{}, err
 	}
+
+	if event != "" {
+		if err := sm.ProcessEvent(ctx, state.Event(event)); err != nil {
+			log.Error(err, "Failed to process event", "event", event)
+			return ctrl.Result{}, r.updateTopologyStatus(ctx, topology, sm.CurrentState(), err.Error())
+		}
+
+		// Execute action for the new state immediately
+		if err := r.executeStateAction(ctx, topologyCtx); err != nil {
+			log.Error(err, "Failed to execute state action", "state", sm.CurrentState())
+			return ctrl.Result{}, r.updateTopologyStatus(ctx, topology, sm.CurrentState(), err.Error())
+		}
+
+		// Update status with new state
+		if err := r.updateTopologyStatus(ctx, topology, sm.CurrentState(), ""); err != nil {
+			return ctrl.Result{}, err
+		}
+	}
+
+	// Determine requeue time based on state
+	requeueAfter := r.getRequeueDuration(sm.CurrentState())
+	return ctrl.Result{RequeueAfter: requeueAfter}, nil
+}
+
+// initializeStateMachine creates and initializes a state machine based on topology status
+func (r *StormTopologyReconciler) initializeStateMachine(topology *stormv1beta1.StormTopology) *state.StateMachine {
+	// First try to use internal state if available
+	if topology.Status.InternalState != "" {
+		sm := state.NewStateMachine(state.State(topology.Status.InternalState))
+		r.setupTopologyTransitions(sm)
+		r.setupTopologyHandlers(sm)
+		log.Log.Info("Initialized state machine from internal state",
+			"internalState", topology.Status.InternalState,
+			"phase", topology.Status.Phase)
+		return sm
+	}
+
+	// Otherwise determine initial state based on phase
+	var initialState state.State = state.State(state.TopologyStateUnknown)
+
+	// If we have a phase but no internal state, try to map it
+	if topology.Status.Phase != "" {
+		// Map topology status phase to state machine state
+		switch topology.Status.Phase {
+		case "Pending":
+			initialState = state.State(state.TopologyStatePending)
+		case "Submitted":
+			initialState = state.State(state.TopologyStateSubmitting)
+		case "Running":
+			initialState = state.State(state.TopologyStateRunning)
+		case "Suspended":
+			initialState = state.State(state.TopologyStateSuspended)
+		case "Updating":
+			initialState = state.State(state.TopologyStateUpdating)
+		case "Killed":
+			initialState = state.State(state.TopologyStateKilled)
+		case "Failed":
+			initialState = state.State(state.TopologyStateFailed)
+		default:
+			initialState = state.State(state.TopologyStateUnknown)
+		}
+	}
+
+	// Create state machine with the determined initial state
+	sm := state.NewStateMachine(initialState)
+	r.setupTopologyTransitions(sm)
+
+	// Set up handlers
+	r.setupTopologyHandlers(sm)
+
+	return sm
+}
+
+// setupTopologyTransitions sets up all state transitions for topology
+func (r *StormTopologyReconciler) setupTopologyTransitions(sm *state.StateMachine) {
+	// Define state transitions (same as in NewTopologyStateMachine but without overwriting the current state)
+	// From Unknown
+	sm.AddTransition(state.State(state.TopologyStateUnknown), state.Event(state.EventValidate), state.State(state.TopologyStateValidating))
+
+	// From Pending
+	sm.AddTransition(state.State(state.TopologyStatePending), state.Event(state.EventValidate), state.State(state.TopologyStateValidating))
+	sm.AddTransition(state.State(state.TopologyStatePending), state.Event(state.EventKill), state.State(state.TopologyStateKilled))
+
+	// From Validating
+	sm.AddTransition(state.State(state.TopologyStateValidating), state.Event(state.EventValidationSuccess), state.State(state.TopologyStateDownloading))
+	sm.AddTransition(state.State(state.TopologyStateValidating), state.Event(state.EventValidationFailed), state.State(state.TopologyStateFailed))
+
+	// From Downloading
+	sm.AddTransition(state.State(state.TopologyStateDownloading), state.Event(state.EventDownloadComplete), state.State(state.TopologyStateSubmitting))
+	sm.AddTransition(state.State(state.TopologyStateDownloading), state.Event(state.EventDownloadFailed), state.State(state.TopologyStateFailed))
+
+	// From Submitting
+	sm.AddTransition(state.State(state.TopologyStateSubmitting), state.Event(state.EventSubmitSuccess), state.State(state.TopologyStateRunning))
+	sm.AddTransition(state.State(state.TopologyStateSubmitting), state.Event(state.EventSubmitFailed), state.State(state.TopologyStateFailed))
+
+	// From Running
+	sm.AddTransition(state.State(state.TopologyStateRunning), state.Event(state.EventSuspend), state.State(state.TopologyStateSuspended))
+	sm.AddTransition(state.State(state.TopologyStateRunning), state.Event(state.EventTopologyUpdate), state.State(state.TopologyStateUpdating))
+	sm.AddTransition(state.State(state.TopologyStateRunning), state.Event(state.EventKill), state.State(state.TopologyStateKilling))
+	sm.AddTransition(state.State(state.TopologyStateRunning), state.Event(state.EventError), state.State(state.TopologyStateFailed))
+
+	// From Suspended
+	sm.AddTransition(state.State(state.TopologyStateSuspended), state.Event(state.EventResume), state.State(state.TopologyStateRunning))
+	sm.AddTransition(state.State(state.TopologyStateSuspended), state.Event(state.EventKill), state.State(state.TopologyStateKilling))
+
+	// From Updating
+	sm.AddTransition(state.State(state.TopologyStateUpdating), state.Event(state.EventTopologyUpdateComplete), state.State(state.TopologyStateRunning))
+	sm.AddTransition(state.State(state.TopologyStateUpdating), state.Event(state.EventError), state.State(state.TopologyStateFailed))
+
+	// From Killing
+	sm.AddTransition(state.State(state.TopologyStateKilling), state.Event(state.EventKillComplete), state.State(state.TopologyStateKilled))
+	sm.AddTransition(state.State(state.TopologyStateKilling), state.Event(state.EventError), state.State(state.TopologyStateFailed))
+
+	// From Failed
+	sm.AddTransition(state.State(state.TopologyStateFailed), state.Event(state.EventRetry), state.State(state.TopologyStatePending))
+	sm.AddTransition(state.State(state.TopologyStateFailed), state.Event(state.EventKill), state.State(state.TopologyStateKilled))
+}
+
+// setupTopologyHandlers sets up state handlers
+func (r *StormTopologyReconciler) setupTopologyHandlers(sm *state.StateMachine) {
+	// Set transition function to update status
+	sm.SetTransitionFunc(func(ctx context.Context, from, to state.State, event state.Event) error {
+		log := log.FromContext(ctx)
+		log.Info("State transition", "from", from, "to", to, "event", event)
+		return nil
+	})
+}
+
+// executeStateAction executes actions for specific states
+func (r *StormTopologyReconciler) executeStateAction(ctx context.Context, topologyCtx *TopologyContext) error {
+	currentState := topologyCtx.StateMachine.CurrentState()
+
+	switch state.TopologyState(currentState) {
+	case state.TopologyStateValidating:
+		// Validation happens in determineNextEvent
+		return nil
+	case state.TopologyStateDownloading:
+		// Download happens in determineNextEvent
+		return nil
+	case state.TopologyStateSubmitting:
+		// Submission happens in determineNextEvent
+		return nil
+	default:
+		// No action needed for other states
+		return nil
+	}
+}
+
+// determineNextEvent determines the next event based on current state and conditions
+func (r *StormTopologyReconciler) determineNextEvent(ctx context.Context, topologyCtx *TopologyContext) (state.TopologyEvent, error) {
+	log := log.FromContext(ctx)
+	topology := topologyCtx.Topology
+	currentState := topologyCtx.StateMachine.CurrentState()
+
+	log.Info("Determining next event",
+		"currentState", currentState,
+		"internalState", topology.Status.InternalState,
+		"phase", topology.Status.Phase)
+
+	switch state.TopologyState(currentState) {
+	case state.TopologyStateUnknown:
+		return state.EventValidate, nil
+
+	case state.TopologyStatePending:
+		if topology.Spec.Suspend {
+			return "", nil // Stay in pending if suspended
+		}
+		return state.EventValidate, nil
+
+	case state.TopologyStateValidating:
+		// Perform validation
+		if err := r.validateTopology(ctx, topologyCtx); err != nil {
+			return state.EventValidationFailed, nil
+		}
+		return state.EventValidationSuccess, nil
+
+	case state.TopologyStateDownloading:
+		// Download JAR
+		jarPath, err := r.downloadJAR(ctx, topologyCtx)
+		if err != nil {
+			return state.EventDownloadFailed, nil
+		}
+		topologyCtx.JarPath = jarPath
+		// Save JAR path in status for next reconciliation
+		topology.Status.DownloadedJarPath = jarPath
+		return state.EventDownloadComplete, nil
+
+	case state.TopologyStateSubmitting:
+		// Submit topology
+		if err := r.submitTopology(ctx, topologyCtx); err != nil {
+			return state.EventSubmitFailed, nil
+		}
+		return state.EventSubmitSuccess, nil
+
+	case state.TopologyStateRunning:
+		// Check if suspended
+		if topology.Spec.Suspend {
+			return state.EventSuspend, nil
+		}
+		// Check for version update
+		if r.needsUpdate(topology) {
+			return state.EventTopologyUpdate, nil
+		}
+		// Check health
+		if err := r.checkTopologyHealth(ctx, topologyCtx); err != nil {
+			return state.EventError, nil
+		}
+		return "", nil // Stay in running
+
+	case state.TopologyStateSuspended:
+		if !topology.Spec.Suspend {
+			return state.EventResume, nil
+		}
+		return "", nil // Stay suspended
+
+	case state.TopologyStateUpdating:
+		// Perform update
+		if err := r.updateTopology(ctx, topologyCtx); err != nil {
+			return state.EventError, nil
+		}
+		return state.EventTopologyUpdateComplete, nil
+
+	case state.TopologyStateFailed:
+		// Check if retry is needed
+		if r.shouldRetry(topology) {
+			return state.EventRetry, nil
+		}
+		return "", nil // Stay in failed
+
+	default:
+		return "", nil
+	}
+}
+
+// validateTopology validates the topology configuration and provisions worker pools if needed
+func (r *StormTopologyReconciler) validateTopology(ctx context.Context, topologyCtx *TopologyContext) error {
+	log := log.FromContext(ctx)
+	topology := topologyCtx.Topology
+
+	// Validate JAR source
+	if topology.Spec.Topology.Jar.URL == "" &&
+		topology.Spec.Topology.Jar.Container == nil &&
+		topology.Spec.Topology.Jar.ConfigMap == "" &&
+		topology.Spec.Topology.Jar.Secret == "" &&
+		topology.Spec.Topology.Jar.S3 == nil {
+		return fmt.Errorf("no JAR source specified")
+	}
+
+	// Validate main class
+	if topology.Spec.Topology.MainClass == "" {
+		return fmt.Errorf("main class not specified")
+	}
+
+	// Validate topology name
+	if topology.Spec.Topology.Name == "" {
+		return fmt.Errorf("topology name not specified")
+	}
+
+	// Intelligent worker pool provisioning
+	if r.Coordinator != nil && r.Coordinator.Provisioner != nil {
+		log.Info("Analyzing worker pool provisioning requirements", "topology", topology.Name)
+
+		// Determine provisioning strategy
+		decision, err := r.Coordinator.Provisioner.DetermineProvisioningStrategy(ctx, topology)
+		if err != nil {
+			log.Error(err, "Failed to determine provisioning strategy")
+			// Don't fail validation for provisioning errors, just log them
+		} else {
+			log.Info("Provisioning decision",
+				"strategy", decision.Strategy,
+				"action", decision.Action,
+				"reason", decision.Reason,
+				"message", decision.Message)
+
+			// Execute provisioning if needed
+			if decision.Action != coordination.ProvisioningActionNone &&
+				decision.Action != coordination.ProvisioningActionUse {
+				err := r.Coordinator.Provisioner.ProvisionWorkerPool(ctx, topology, decision)
+				if err != nil {
+					log.Error(err, "Failed to provision worker pool", "decision", decision)
+					// For now, don't fail validation - the topology can still run on shared resources
+					// In the future, this could be configurable based on topology requirements
+				} else {
+					log.Info("Successfully provisioned worker pool",
+						"workerPool", decision.WorkerPoolName,
+						"action", decision.Action)
+				}
+			}
+		}
+	}
+
+	return nil
+}
+
+// downloadJAR downloads the topology JAR
+func (r *StormTopologyReconciler) downloadJAR(ctx context.Context, topologyCtx *TopologyContext) (string, error) {
+	return r.getJARPath(ctx, topologyCtx.Topology)
+}
+
+// submitTopology submits the topology to Storm
+func (r *StormTopologyReconciler) submitTopology(ctx context.Context, topologyCtx *TopologyContext) error {
+	log := log.FromContext(ctx)
+	topology := topologyCtx.Topology
+	cluster := topologyCtx.Cluster
 
 	// Build storm submit command
-	// NOTE: We still use CLI for submission because Thrift API requires the
-	// actual StormTopology structure, which would need to be extracted from
-	// the JAR file. The CLI handles this complexity for us.
-	cmd := r.buildSubmitCommand(topology, cluster, jarPath)
-
+	cmd := r.buildSubmitCommand(topology, cluster, topologyCtx.JarPath)
 	log.Info("Submitting topology", "command", strings.Join(cmd, " "))
 
 	// Execute storm submit
 	output, err := exec.CommandContext(ctx, cmd[0], cmd[1:]...).CombinedOutput()
 	if err != nil {
 		log.Error(err, "Failed to submit topology", "output", string(output))
-		return ctrl.Result{}, r.updateStatus(ctx, topology, "Failed", fmt.Sprintf("Submit failed: %v\nOutput: %s", err, output))
+		return fmt.Errorf("submit failed: %v, output: %s", err, output)
 	}
 
 	log.Info("Topology submitted successfully", "output", string(output))
@@ -253,81 +480,205 @@ func (r *StormTopologyReconcilerSimple) submitTopology(ctx context.Context, topo
 		"result":    "success",
 	}).Inc()
 
-	// Update status with deployed version
+	// Update deployed version
 	topology.Status.DeployedVersion = r.getTopologyVersion(topology)
-	if err := r.updateStatus(ctx, topology, "Running", "Topology submitted successfully"); err != nil {
-		return ctrl.Result{}, err
-	}
+	topology.Status.TopologyID = topology.Spec.Topology.Name
+	topology.Status.LastUpdateTime = &metav1.Time{Time: time.Now()}
 
-	log.Info("Topology submitted with version",
-		"topology", topology.Spec.Topology.Name,
-		"version", topology.Status.DeployedVersion)
-
-	// Requeue to update status from Storm
-	return ctrl.Result{RequeueAfter: 10 * time.Second}, nil
+	return nil
 }
 
-func (r *StormTopologyReconcilerSimple) handleSuspend(ctx context.Context, topology *stormv1beta1.StormTopology) (ctrl.Result, error) {
+// checkTopologyHealth checks if the topology is healthy
+func (r *StormTopologyReconciler) checkTopologyHealth(ctx context.Context, topologyCtx *TopologyContext) error {
+	topology := topologyCtx.Topology
+	stormTopology, err := topologyCtx.StormClient.GetTopology(ctx, topology.Spec.Topology.Name)
+	if err != nil {
+		return err
+	}
+
+	if stormTopology.Status != "ACTIVE" {
+		return fmt.Errorf("topology is not active: %s", stormTopology.Status)
+	}
+
+	// Update status with current Storm state
+	topology.Status.Workers = int32(stormTopology.Workers)
+	topology.Status.Executors = int32(stormTopology.Executors)
+	topology.Status.Tasks = int32(stormTopology.Tasks)
+	topology.Status.Uptime = fmt.Sprintf("%ds", stormTopology.UptimeSeconds)
+
+	// Update metrics
+	labels := map[string]string{
+		"topology":  topology.Name,
+		"namespace": topology.Namespace,
+		"cluster":   topology.Spec.ClusterRef,
+	}
+
+	metrics.StormTopologyWorkers.With(labels).Set(float64(stormTopology.Workers))
+	metrics.StormTopologyExecutors.With(labels).Set(float64(stormTopology.Executors))
+	metrics.StormTopologyTasks.With(labels).Set(float64(stormTopology.Tasks))
+	metrics.StormTopologyUptime.With(labels).Set(float64(stormTopology.UptimeSeconds))
+
+	return nil
+}
+
+// needsUpdate checks if topology needs update
+func (r *StormTopologyReconciler) needsUpdate(topology *stormv1beta1.StormTopology) bool {
+	desiredVersion := r.getTopologyVersion(topology)
+	return topology.Status.DeployedVersion != "" && topology.Status.DeployedVersion != desiredVersion
+}
+
+// updateTopology updates the topology
+func (r *StormTopologyReconciler) updateTopology(ctx context.Context, topologyCtx *TopologyContext) error {
 	log := log.FromContext(ctx)
+	topology := topologyCtx.Topology
 
-	// Get Storm client
-	stormClient, err := r.getStormClient()
+	log.Info("Updating topology",
+		"topology", topology.Spec.Topology.Name,
+		"oldVersion", topology.Status.DeployedVersion,
+		"newVersion", r.getTopologyVersion(topology))
+
+	// Kill the existing topology
+	waitSecs := 30
+	if err := topologyCtx.StormClient.KillTopology(ctx, topology.Spec.Topology.Name, waitSecs); err != nil {
+		return fmt.Errorf("failed to kill topology: %w", err)
+	}
+
+	// Wait for topology to be removed
+	if err := r.waitForTopologyRemoval(ctx, topologyCtx, topology.Spec.Topology.Name); err != nil {
+		return fmt.Errorf("failed waiting for topology removal: %w", err)
+	}
+
+	// Re-download JAR if needed
+	jarPath, err := r.downloadJAR(ctx, topologyCtx)
 	if err != nil {
-		return ctrl.Result{RequeueAfter: 30 * time.Second}, err
+		return fmt.Errorf("failed to download JAR for update: %w", err)
 	}
+	topologyCtx.JarPath = jarPath
 
-	// Check if topology is active in Storm
-	stormTopology, err := stormClient.GetTopology(ctx, topology.Spec.Topology.Name)
-	if err != nil {
-		if strings.Contains(err.Error(), "not found") {
-			// Topology doesn't exist, nothing to do
-			return ctrl.Result{}, r.updateStatus(ctx, topology, "Suspended", "Topology is suspended")
-		}
-		return ctrl.Result{}, err
-	}
-
-	// Deactivate if active
-	if stormTopology.Status == "ACTIVE" {
-		log.Info("Deactivating topology", "topology", topology.Spec.Topology.Name)
-		if err := stormClient.DeactivateTopology(ctx, topology.Spec.Topology.Name); err != nil {
-			return ctrl.Result{}, err
-		}
-	}
-
-	return ctrl.Result{}, r.updateStatus(ctx, topology, "Inactive", "Topology is suspended")
+	// Submit new version
+	return r.submitTopology(ctx, topologyCtx)
 }
 
-func (r *StormTopologyReconcilerSimple) handleDeletion(ctx context.Context, topology *stormv1beta1.StormTopology, stormClient storm.Client) (ctrl.Result, error) {
+// shouldRetry determines if a failed topology should be retried
+func (r *StormTopologyReconciler) shouldRetry(topology *stormv1beta1.StormTopology) bool {
+	// Check retry count and backoff
+	// For now, simple implementation
+	return false
+}
+
+// mapStateToPhase maps internal states to allowed CRD phases
+func mapStateToPhase(currentState state.State) string {
+	stateMapping := map[state.State]string{
+		state.State(state.TopologyStateUnknown):     "Pending",
+		state.State(state.TopologyStatePending):     "Pending",
+		state.State(state.TopologyStateValidating):  "Pending",
+		state.State(state.TopologyStateDownloading): "Pending",
+		state.State(state.TopologyStateSubmitting):  "Submitted",
+		state.State(state.TopologyStateRunning):     "Running",
+		state.State(state.TopologyStateSuspended):   "Suspended",
+		state.State(state.TopologyStateUpdating):    "Updating",
+		state.State(state.TopologyStateKilling):     "Killed",
+		state.State(state.TopologyStateKilled):      "Killed",
+		state.State(state.TopologyStateFailed):      "Failed",
+	}
+
+	if phase, ok := stateMapping[currentState]; ok {
+		return phase
+	}
+	return "Pending"
+}
+
+// updateTopologyStatus updates the topology status based on state
+func (r *StormTopologyReconciler) updateTopologyStatus(ctx context.Context, topology *stormv1beta1.StormTopology, currentState state.State, errorMsg string) error {
+	topology.Status.Phase = mapStateToPhase(currentState)
+	topology.Status.InternalState = string(currentState)
+	topology.Status.LastUpdateTime = &metav1.Time{Time: time.Now()}
+
+	if errorMsg != "" {
+		topology.Status.LastError = errorMsg
+		meta.SetStatusCondition(&topology.Status.Conditions, metav1.Condition{
+			Type:               "Ready",
+			Status:             metav1.ConditionFalse,
+			ObservedGeneration: topology.Generation,
+			Reason:             string(currentState),
+			Message:            errorMsg,
+		})
+	} else {
+		readyStates := map[state.State]bool{
+			state.State(state.TopologyStateRunning):   true,
+			state.State(state.TopologyStateSuspended): true,
+		}
+
+		conditionStatus := metav1.ConditionFalse
+		if readyStates[currentState] {
+			conditionStatus = metav1.ConditionTrue
+		}
+
+		meta.SetStatusCondition(&topology.Status.Conditions, metav1.Condition{
+			Type:               "Ready",
+			Status:             conditionStatus,
+			ObservedGeneration: topology.Generation,
+			Reason:             string(currentState),
+			Message:            fmt.Sprintf("Topology is in %s state", currentState),
+		})
+	}
+
+	return r.Status().Update(ctx, topology)
+}
+
+// getRequeueDuration returns the requeue duration based on state
+func (r *StormTopologyReconciler) getRequeueDuration(currentState state.State) time.Duration {
+	switch state.TopologyState(currentState) {
+	case state.TopologyStateRunning:
+		return 60 * time.Second // Check every minute when running
+	case state.TopologyStateFailed:
+		return 5 * time.Minute // Check less frequently when failed
+	case state.TopologyStateKilled:
+		return 0 // Don't requeue terminal states
+	default:
+		return 10 * time.Second // Default requeue for transitional states
+	}
+}
+
+// Additional helper methods would be copied/adapted from the simple controller...
+
+// handleDeletion handles topology deletion
+func (r *StormTopologyReconciler) handleDeletion(ctx context.Context, topology *stormv1beta1.StormTopology, stormClient storm.Client) (ctrl.Result, error) {
 	log := log.FromContext(ctx)
 
 	if controllerutil.ContainsFinalizer(topology, topologyFinalizer) {
-		// Kill topology in Storm using Thrift client
-		log.Info("Killing topology using Thrift API", "topology", topology.Spec.Topology.Name)
+		// Create context with state machine for deletion
+		sm := state.NewStateMachine(state.State(state.TopologyStateKilling))
+		sm.AddTransition(state.State(state.TopologyStateKilling), state.Event(state.EventKillComplete), state.State(state.TopologyStateKilled))
 
-		// Kill topology with wait time (30 seconds default)
+		// Kill topology in Storm
+		log.Info("Killing topology", "topology", topology.Spec.Topology.Name)
+
 		waitSecs := 30
 		err := stormClient.KillTopology(ctx, topology.Spec.Topology.Name, waitSecs)
 		if err != nil {
-			// Check if topology was not found
 			errStr := err.Error()
 			if strings.Contains(errStr, "NotAliveException") ||
 				strings.Contains(errStr, "not alive") ||
 				strings.Contains(errStr, "not found") {
-				log.Info("Topology not found in Storm, continuing with deletion", "topology", topology.Spec.Topology.Name)
+				log.Info("Topology not found in Storm, continuing with deletion")
 			} else {
 				log.Error(err, "Failed to kill topology")
-				// Retry with backoff
 				return ctrl.Result{RequeueAfter: 5 * time.Second}, err
 			}
 		} else {
-			log.Info("Successfully killed topology", "topology", topology.Spec.Topology.Name)
-
 			// Update metrics
 			metrics.StormTopologyDeletions.With(map[string]string{
 				"namespace": topology.Namespace,
 				"result":    "success",
 			}).Inc()
 		}
+
+		// Process completion event
+		sm.ProcessEvent(ctx, state.Event(state.EventKillComplete))
+
+		// Update status
+		r.updateTopologyStatus(ctx, topology, sm.CurrentState(), "")
 
 		// Remove finalizer
 		controllerutil.RemoveFinalizer(topology, topologyFinalizer)
@@ -340,30 +691,65 @@ func (r *StormTopologyReconcilerSimple) handleDeletion(ctx context.Context, topo
 }
 
 // getJARPath handles all JAR source types and returns the local path to the JAR
-func (r *StormTopologyReconcilerSimple) getJARPath(ctx context.Context, topology *stormv1beta1.StormTopology) (string, error) {
+func (r *StormTopologyReconciler) getJARPath(ctx context.Context, topology *stormv1beta1.StormTopology) (string, error) {
 	jarSpec := topology.Spec.Topology.Jar
 
 	// Handle different JAR sources
 	if jarSpec.URL != "" {
-		return r.downloadJAR(ctx, jarSpec.URL)
+		return r.downloadJARFromURL(ctx, jarSpec.URL)
 	} else if jarSpec.Container != nil {
 		return r.extractContainerJAR(ctx, topology, jarSpec.Container)
 	} else if jarSpec.ConfigMap != "" {
-		// TODO: Implement ConfigMap JAR support
 		return "", fmt.Errorf("ConfigMap JAR source not yet implemented")
 	} else if jarSpec.Secret != "" {
-		// TODO: Implement Secret JAR support
 		return "", fmt.Errorf("Secret JAR source not yet implemented")
 	} else if jarSpec.S3 != nil {
-		// TODO: Implement S3 JAR support
 		return "", fmt.Errorf("S3 JAR source not yet implemented")
 	}
 
 	return "", fmt.Errorf("no JAR source specified")
 }
 
+// downloadJARFromURL downloads JAR from URL
+func (r *StormTopologyReconciler) downloadJARFromURL(ctx context.Context, url string) (string, error) {
+	// Create cache directory
+	if err := os.MkdirAll(jarCacheDir, 0755); err != nil {
+		return "", fmt.Errorf("failed to create JAR cache directory: %w", err)
+	}
+
+	// Generate cache file path
+	jarName := filepath.Base(url)
+	if jarName == "" || jarName == "/" {
+		jarName = "topology.jar"
+	}
+	jarPath := filepath.Join(jarCacheDir, jarName)
+
+	// Check if already cached
+	if _, err := os.Stat(jarPath); err == nil {
+		return jarPath, nil
+	}
+
+	// Get Storm client for downloading
+	stormClient, err := r.ClientManager.GetClient()
+	if err != nil {
+		return "", err
+	}
+
+	jarData, err := stormClient.DownloadJar(ctx, url)
+	if err != nil {
+		return "", err
+	}
+
+	// Write to cache
+	if err := os.WriteFile(jarPath, jarData, 0644); err != nil {
+		return "", fmt.Errorf("failed to write JAR file: %w", err)
+	}
+
+	return jarPath, nil
+}
+
 // extractContainerJAR extracts JAR from container image
-func (r *StormTopologyReconcilerSimple) extractContainerJAR(ctx context.Context, topology *stormv1beta1.StormTopology, jarSpec *stormv1beta1.ContainerJarSource) (string, error) {
+func (r *StormTopologyReconciler) extractContainerJAR(ctx context.Context, topology *stormv1beta1.StormTopology, jarSpec *stormv1beta1.ContainerJarSource) (string, error) {
 	log := log.FromContext(ctx)
 
 	if r.JarExtractor == nil {
@@ -386,51 +772,11 @@ func (r *StormTopologyReconcilerSimple) extractContainerJAR(ctx context.Context,
 		"size", result.Size,
 		"checksum", result.Checksum)
 
-	// For now, download the JAR from the example URL as a workaround
-	// In production, we would copy from the extraction job's volume
-	jarURL := "https://repo1.maven.org/maven2/org/apache/storm/storm-starter/2.4.0/storm-starter-2.4.0.jar"
-	return r.downloadJAR(ctx, jarURL)
+	return result.JarPath, nil
 }
 
-func (r *StormTopologyReconcilerSimple) downloadJAR(ctx context.Context, url string) (string, error) {
-	// Create cache directory
-	if err := os.MkdirAll(jarCacheDir, 0755); err != nil {
-		return "", fmt.Errorf("failed to create JAR cache directory: %w", err)
-	}
-
-	// Generate cache file path
-	jarName := filepath.Base(url)
-	if jarName == "" || jarName == "/" {
-		jarName = "topology.jar"
-	}
-	jarPath := filepath.Join(jarCacheDir, jarName)
-
-	// Check if already cached
-	if _, err := os.Stat(jarPath); err == nil {
-		return jarPath, nil
-	}
-
-	// Download JAR
-	// Get Storm client for downloading
-	stormClient, err := r.getStormClient()
-	if err != nil {
-		return "", err
-	}
-
-	jarData, err := stormClient.DownloadJar(ctx, url)
-	if err != nil {
-		return "", err
-	}
-
-	// Write to cache
-	if err := os.WriteFile(jarPath, jarData, 0644); err != nil {
-		return "", fmt.Errorf("failed to write JAR file: %w", err)
-	}
-
-	return jarPath, nil
-}
-
-func (r *StormTopologyReconcilerSimple) buildSubmitCommand(topology *stormv1beta1.StormTopology, cluster *stormv1beta1.StormCluster, jarPath string) []string {
+// buildSubmitCommand builds the storm submit command
+func (r *StormTopologyReconciler) buildSubmitCommand(topology *stormv1beta1.StormTopology, cluster *stormv1beta1.StormCluster, jarPath string) []string {
 	cmd := []string{
 		"/apache-storm/bin/storm", "jar", jarPath, topology.Spec.Topology.MainClass,
 	}
@@ -443,7 +789,7 @@ func (r *StormTopologyReconcilerSimple) buildSubmitCommand(topology *stormv1beta
 		cmd = append(cmd, topology.Spec.Topology.Args...)
 	}
 
-	// Add nimbus host - build from cluster name
+	// Add nimbus host
 	nimbusHost := fmt.Sprintf("%s-storm-kubernetes-nimbus.%s.svc.cluster.local", cluster.Name, cluster.Namespace)
 	cmd = append(cmd, "-c", fmt.Sprintf("nimbus.seeds=[%q]", nimbusHost))
 
@@ -471,73 +817,8 @@ func (r *StormTopologyReconcilerSimple) buildSubmitCommand(topology *stormv1beta
 	return cmd
 }
 
-func (r *StormTopologyReconcilerSimple) updateStatus(ctx context.Context, topology *stormv1beta1.StormTopology, phase string, message string) error {
-	topology.Status.Phase = phase
-	topology.Status.LastError = message
-	topology.Status.LastUpdateTime = &metav1.Time{Time: time.Now()}
-
-	condition := metav1.Condition{
-		Type:               "Ready",
-		Status:             metav1.ConditionFalse,
-		ObservedGeneration: topology.Generation,
-		Reason:             phase,
-		Message:            message,
-	}
-
-	if phase == "Running" || phase == "Inactive" {
-		condition.Status = metav1.ConditionTrue
-	}
-
-	meta.SetStatusCondition(&topology.Status.Conditions, condition)
-
-	return r.Status().Update(ctx, topology)
-}
-
-// getTopologyVersion extracts the topology version from the config
-func (r *StormTopologyReconcilerSimple) getTopologyVersion(topology *stormv1beta1.StormTopology) string {
-	if topology.Spec.Topology.Config != nil {
-		if version, ok := topology.Spec.Topology.Config["topology.version"]; ok && version != "" {
-			return version
-		}
-	}
-	// Return a default version for unversioned topologies
-	return "unversioned"
-}
-
-// handleVersionUpdate handles topology updates when version changes
-func (r *StormTopologyReconcilerSimple) handleVersionUpdate(ctx context.Context, topology *stormv1beta1.StormTopology, cluster *stormv1beta1.StormCluster, newVersion string, stormClient storm.Client) (ctrl.Result, error) {
-	log := log.FromContext(ctx)
-
-	log.Info("Starting topology version update",
-		"topology", topology.Spec.Topology.Name,
-		"oldVersion", topology.Status.DeployedVersion,
-		"newVersion", newVersion)
-
-	// Step 1: Kill the existing topology
-	log.Info("Killing existing topology for version update", "topology", topology.Spec.Topology.Name)
-	waitSecs := 30
-	if err := stormClient.KillTopology(ctx, topology.Spec.Topology.Name, waitSecs); err != nil {
-		return ctrl.Result{}, err
-	}
-
-	// Update status to indicate update in progress
-	if err := r.updateStatus(ctx, topology, "Updating", fmt.Sprintf("Updating from version %s to %s", topology.Status.DeployedVersion, newVersion)); err != nil {
-		return ctrl.Result{}, err
-	}
-
-	// Step 2: Wait for topology to be fully removed
-	log.Info("Waiting for topology to be removed from Storm", "topology", topology.Spec.Topology.Name)
-	if err := r.waitForTopologyRemoval(ctx, topology.Spec.Topology.Name); err != nil {
-		return ctrl.Result{}, err
-	}
-
-	// Step 3: Submit the new version
-	log.Info("Topology removed, submitting new version", "topology", topology.Spec.Topology.Name, "version", newVersion)
-	return r.submitTopology(ctx, topology, cluster, stormClient)
-}
-
-// waitForTopologyRemoval polls Storm until the topology is fully removed
-func (r *StormTopologyReconcilerSimple) waitForTopologyRemoval(ctx context.Context, topologyName string) error {
+// waitForTopologyRemoval waits for topology to be removed from Storm
+func (r *StormTopologyReconciler) waitForTopologyRemoval(ctx context.Context, topologyCtx *TopologyContext, topologyName string) error {
 	log := log.FromContext(ctx)
 
 	// Poll for up to 2 minutes
@@ -551,18 +832,11 @@ func (r *StormTopologyReconcilerSimple) waitForTopologyRemoval(ctx context.Conte
 			return fmt.Errorf("timeout waiting for topology %s to be removed", topologyName)
 		case <-ticker.C:
 			// Check if topology still exists
-			exists, err := r.topologyExists(ctx, topologyName)
-			if err != nil {
-				log.Error(err, "Error checking topology existence", "topology", topologyName)
-				// Continue polling on error
-				continue
-			}
-
-			if !exists {
+			_, err := topologyCtx.StormClient.GetTopology(ctx, topologyName)
+			if err != nil && strings.Contains(err.Error(), "not found") {
 				log.Info("Topology has been removed from Storm", "topology", topologyName)
 				return nil
 			}
-
 			log.Info("Topology still exists, continuing to wait", "topology", topologyName)
 		case <-ctx.Done():
 			return ctx.Err()
@@ -570,28 +844,54 @@ func (r *StormTopologyReconcilerSimple) waitForTopologyRemoval(ctx context.Conte
 	}
 }
 
-// topologyExists checks if a topology exists in Storm
-func (r *StormTopologyReconcilerSimple) topologyExists(ctx context.Context, topologyName string) (bool, error) {
-	// Get Storm client
-	stormClient, err := r.getStormClient()
-	if err != nil {
-		// If no client available, assume topology doesn't exist
-		return false, nil
+// getTopologyVersion gets the topology version
+func (r *StormTopologyReconciler) getTopologyVersion(topology *stormv1beta1.StormTopology) string {
+	if topology.Spec.Topology.Config != nil {
+		if version, ok := topology.Spec.Topology.Config["topology.version"]; ok && version != "" {
+			return version
+		}
+	}
+	return "unversioned"
+}
+
+// updateTopologyStatusWithDependencies updates topology status with dependency information
+func (r *StormTopologyReconciler) updateTopologyStatusWithDependencies(ctx context.Context, topology *stormv1beta1.StormTopology, dependencyResults []*coordination.DependencyResult) {
+	log := log.FromContext(ctx)
+
+	// Find the first unsatisfied dependency for status message
+	var statusMessage string
+	var statusReason string
+
+	for _, result := range dependencyResults {
+		if result.Status != coordination.DependencyStatusSatisfied {
+			statusReason = string(result.Status)
+			statusMessage = result.Message
+			break
+		}
 	}
 
-	// Get topology from Storm
-	topology, err := stormClient.GetTopology(ctx, topologyName)
-	if err != nil {
-		if strings.Contains(err.Error(), "not found") {
-			return false, nil
-		}
-		return false, err
+	if statusMessage == "" {
+		statusMessage = "All dependencies satisfied"
+		statusReason = "DependenciesSatisfied"
 	}
-	return topology != nil, nil
+
+	// Update condition
+	meta.SetStatusCondition(&topology.Status.Conditions, metav1.Condition{
+		Type:               "DependenciesReady",
+		Status:             metav1.ConditionFalse,
+		ObservedGeneration: topology.Generation,
+		Reason:             statusReason,
+		Message:            statusMessage,
+	})
+
+	// Update status
+	if err := r.Status().Update(ctx, topology); err != nil {
+		log.Error(err, "Failed to update topology status with dependency information")
+	}
 }
 
 // SetupWithManager sets up the controller with the Manager
-func (r *StormTopologyReconcilerSimple) SetupWithManager(mgr ctrl.Manager) error {
+func (r *StormTopologyReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&stormv1beta1.StormTopology{}).
 		Complete(r)

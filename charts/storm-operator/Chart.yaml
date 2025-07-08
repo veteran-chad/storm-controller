@@ -1,0 +1,30 @@
+apiVersion: v2
+name: storm-operator
+description: Apache Storm Kubernetes Operator - manages Storm clusters via CRDs
+type: application
+version: 0.1.0
+appVersion: "0.1.0"
+kubeVersion: ">=1.23.0-0"
+home: https://storm.apache.org/
+sources:
+  - https://github.com/apache/storm
+maintainers:
+  - name: Apache Storm Community
+    email: dev@storm.apache.org
+keywords:
+  - storm
+  - operator
+  - controller
+  - crd
+annotations:
+  category: Analytics
+dependencies:
+  - name: storm-shared
+    version: "0.1.0"
+    repository: "file://../storm-shared"
+  - name: zookeeper
+    version: "13.*"
+    repository: https://charts.bitnami.com/bitnami
+    condition: zookeeper.enabled
+    tags:
+      - storm-database

@@ -284,6 +284,8 @@ func TestClusterStateMachine(t *testing.T) {
 		{Event(EventCreateComplete), State(ClusterStateRunning)},
 		{Event(EventUnhealthy), State(ClusterStateFailed)},
 		{Event(EventRecover), State(ClusterStatePending)},
+		{Event(EventCreate), State(ClusterStateCreating)},
+		{Event(EventCreateComplete), State(ClusterStateRunning)},
 		{Event(EventUpdate), State(ClusterStateUpdating)},
 		{Event(EventUpdateComplete), State(ClusterStateRunning)},
 		{Event(EventTerminate), State(ClusterStateTerminating)},
@@ -309,8 +311,8 @@ func TestWorkerPoolStateMachine(t *testing.T) {
 		event         Event
 		expectedState State
 	}{
-		{Event(EventCreate), State(WorkerPoolStateCreating)},
-		{Event(EventCreateComplete), State(WorkerPoolStateReady)},
+		{Event(EventWPCreate), State(WorkerPoolStateCreating)},
+		{Event(EventWPCreateComplete), State(WorkerPoolStateReady)},
 		{Event(EventScaleUp), State(WorkerPoolStateScaling)},
 		{Event(EventWPScaleComplete), State(WorkerPoolStateReady)},
 		{Event(EventWPUpdateConfig), State(WorkerPoolStateUpdating)},

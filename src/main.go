@@ -58,6 +58,7 @@ func main() {
 	var metricsAddr string
 	var enableLeaderElection bool
 	var probeAddr string
+	var operatorNamespace string
 	var stormClusterName string
 	var stormNamespace string
 	var nimbusHost string
@@ -70,6 +71,8 @@ func main() {
 	flag.BoolVar(&enableLeaderElection, "leader-elect", false,
 		"Enable leader election for controller manager. "+
 			"Enabling this will ensure there is only one active controller manager.")
+	flag.StringVar(&operatorNamespace, "operator-namespace", os.Getenv("OPERATOR_NAMESPACE"),
+		"The namespace where the operator is deployed")
 	flag.StringVar(&stormClusterName, "storm-cluster", "storm-cluster", "Name of the StormCluster resource to manage")
 	flag.StringVar(&stormNamespace, "storm-namespace", "default", "Namespace of the Storm cluster")
 	flag.StringVar(&nimbusHost, "nimbus-host", "", "Nimbus host (defaults to {storm-cluster}-nimbus)")
@@ -121,12 +124,13 @@ func main() {
 	coordinator := coordination.NewResourceCoordinator(mgr.GetClient(), clientManager, mgr.GetScheme())
 	setupLog.Info("Created resource coordinator for cross-controller coordination")
 
-	// Setup StormCluster controller (state machine version)
-	if err = (&controllers.StormClusterReconcilerStateMachine{
-		Client:        mgr.GetClient(),
-		Scheme:        mgr.GetScheme(),
-		ClientManager: clientManager,
-		Coordinator:   coordinator,
+	// Setup StormCluster controller
+	if err = (&controllers.StormClusterReconciler{
+		Client:            mgr.GetClient(),
+		Scheme:            mgr.GetScheme(),
+		ClientManager:     clientManager,
+		Coordinator:       coordinator,
+		OperatorNamespace: operatorNamespace,
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "StormCluster")
 		os.Exit(1)
@@ -135,8 +139,8 @@ func main() {
 	// Create JAR extractor
 	jarExtractor := jarextractor.NewExtractor(mgr.GetClient(), stormNamespace)
 
-	// Setup StormTopology controller (state machine version)
-	if err = (&controllers.StormTopologyReconcilerStateMachine{
+	// Setup StormTopology controller
+	if err = (&controllers.StormTopologyReconciler{
 		Client:        mgr.GetClient(),
 		Scheme:        mgr.GetScheme(),
 		ClientManager: clientManager,
@@ -149,8 +153,8 @@ func main() {
 		os.Exit(1)
 	}
 
-	// Setup StormWorkerPool controller (state machine version)
-	if err = (&controllers.StormWorkerPoolReconcilerStateMachine{
+	// Setup StormWorkerPool controller
+	if err = (&controllers.StormWorkerPoolReconciler{
 		Client:        mgr.GetClient(),
 		Scheme:        mgr.GetScheme(),
 		ClientManager: clientManager,

@@ -1,10 +1,68 @@
 apiVersion: storm.apache.org/v1beta1
 kind: StormCluster
 metadata:
-  name: storm-cluster
+  name: test-cluster
   namespace: storm-system
 spec:
+  # Use "create" mode since controller will create all resources
+  managementMode: create
+  
+  # Storm image configuration
+  image:
+    registry: docker.io
+    repository: storm
+    tag: "2.8.1"
+    pullPolicy: IfNotPresent
+  
+  # Nimbus configuration
   nimbus:
     replicas: 1
+    resources:
+      requests:
+        cpu: 250m
+        memory: 512Mi
+      limits:
+        cpu: 1000m
+        memory: 1Gi
+  
+  # Supervisor configuration
   supervisor:
-    replicas: 2
+    replicas: 1
+    slotsPerSupervisor: 1
+    resources:
+      requests:
+        cpu: 250m
+        memory: 512Mi
+      limits:
+        cpu: 1000m
+        memory: 1Gi
+  
+  # UI configuration
+  ui:
+    enabled: true
+    replicas: 1
+    resources:
+      requests:
+        cpu: 100m
+        memory: 256Mi
+      limits:
+        cpu: 500m
+        memory: 512Mi
+    service:
+      type: ClusterIP
+      port: 8080
+  
+  # Zookeeper configuration (reference existing Zookeeper deployed by operator)
+  zookeeper:
+    servers:
+      - "storm-operator-zookeeper-headless.storm-system.svc.cluster.local"
+    root: "/storm"
+    connectionTimeout: 15000
+    sessionTimeout: 20000
+  
+  # Storm configuration
+  config:
+    "storm.log.dir": "/logs"
+    "storm.local.dir": "/storm/data"
+    "supervisor.worker.timeout.secs": "30"
+    "topology.message.timeout.secs": "30"

@@ -12,12 +12,8 @@ data:
   storm.yaml: |
     # Storm configuration
     storm.zookeeper.servers:
-    {{- if .Values.zookeeper.enabled }}
-    - "{{ include "storm.zookeeper.connect" . }}"
-    {{- else }}
     {{- range .Values.externalZookeeper.servers }}
     - {{ . | quote }}
-    {{- end }}
     {{- end }}
     
     nimbus.seeds:
@@ -39,9 +35,11 @@ data:
     storm.cluster.metrics.consumer.register:
     - class: "org.apache.storm.metric.LoggingMetricsConsumer"
     
-    # Additional Storm configuration
-    {{- if .Values.stormConf }}
-    {{- toYaml .Values.stormConf | nindent 4 }}
+    # Additional Storm configuration from values
+    {{- if .Values.storm.config }}
+    {{- range $key, $value := .Values.storm.config }}
+    {{ $key }}: {{ $value | toJson }}
+    {{- end }}
     {{- end }}
     
   log4j2.xml: |

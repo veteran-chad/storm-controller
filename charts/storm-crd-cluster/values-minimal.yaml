@@ -1,0 +1,61 @@
+# Minimal configuration for Storm CRD Cluster
+# This creates a basic Storm cluster with minimal resources
+# Suitable for development or testing environments
+
+# Storm configuration
+storm:
+  image:
+    registry: docker.io
+    repository: storm
+    tag: 2.8.1
+    pullPolicy: IfNotPresent
+  
+  # Minimal Storm configuration
+  config:
+    storm.log.level: "WARN"
+    topology.message.timeout.secs: "30"
+    supervisor.worker.timeout.secs: "30"
+
+# Nimbus - Single instance with minimal resources
+nimbus:
+  replicas: 1
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+
+# Supervisor - Single instance with minimal resources
+supervisor:
+  replicas: 1
+  slotsPerSupervisor: 1
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: 1000m
+      memory: 1Gi
+
+# UI - Disabled for minimal setup
+ui:
+  enabled: false
+
+# Use default Zookeeper from operator
+zookeeper:
+  external:
+    enabled: false
+  default:
+    enabled: true
+    operatorNamespace: "storm-system"
+    serviceName: "storm-operator-zookeeper-headless"
+
+# No persistence for minimal setup
+persistence:
+  enabled: false
+
+# No monitoring for minimal setup
+monitoring:
+  enabled: false

@@ -1,0 +1,233 @@
+# Default values for storm-operator
+
+## @section Global parameters
+global:
+  # -- Global Docker image registry
+  imageRegistry: ""
+  # -- Global Docker registry secret names as an array
+  imagePullSecrets: []
+  # -- Global StorageClass for Persistent Volume(s)
+  storageClass: ""
+
+## @section Common parameters
+nameOverride: ""
+fullnameOverride: ""
+clusterDomain: cluster.local
+commonAnnotations: {}
+commonLabels: {}
+
+## @section CRD parameters
+crds:
+  # -- Install Storm CRDs
+  install: true
+  # -- Keep CRDs on chart uninstall
+  keep: true
+
+## @section Storm Operator parameters
+operator:
+  # -- Number of Storm Operator replicas
+  replicaCount: 1
+  
+  image:
+    registry: docker.io
+    repository: storm-controller
+    tag: latest
+    digest: ""
+    pullPolicy: IfNotPresent
+    pullSecrets: []
+  
+  # -- Operator configuration
+  configuration: ""
+  existingConfigmap: ""
+  extraEnvVars: []
+  extraEnvVarsCM: ""
+  extraEnvVarsSecret: ""
+  
+  # Controller default settings for Storm clusters
+  defaults:
+    storm:
+      image:
+        repository: storm
+        tag: 2.8.1
+      config:
+        nimbus.seeds: ["nimbus"]
+        storm.local.dir: "/storm/data"
+        storm.log.dir: "/storm/logs"
+    cluster:
+      nimbus:
+        replicas: 1
+      supervisor:
+        replicas: 1
+        slots: 1
+      ui:
+        enabled: true
+    # Default Zookeeper connection
+    zookeeper:
+      # Use the included Zookeeper by default
+      servers: ["{{ .Release.Name }}-zookeeper-headless:2181"]
+      connectionTimeout: 15000
+      sessionTimeout: 20000
+  
+  command: []
+  args: []
+  lifecycleHooks: {}
+  extraVolumes: []
+  extraVolumeMounts: []
+  
+  podSecurityContext:
+    enabled: true
+    fsGroup: 1000
+    fsGroupChangePolicy: Always
+    sysctls: []
+    supplementalGroups: []
+  
+  containerSecurityContext:
+    enabled: true
+    seLinuxOptions: null
+    runAsUser: 1000
+    runAsNonRoot: true
+    privileged: false
+    readOnlyRootFilesystem: false
+    allowPrivilegeEscalation: false
+    capabilities:
+      drop: ["ALL"]
+    seccompProfile:
+      type: "RuntimeDefault"
+  
+  resources:
+    limits:
+      cpu: 500m
+      memory: 512Mi
+    requests:
+      cpu: 100m
+      memory: 256Mi
+  
+  livenessProbe:
+    enabled: true
+    initialDelaySeconds: 30
+    periodSeconds: 10
+    timeoutSeconds: 5
+    failureThreshold: 6
+    successThreshold: 1
+  
+  readinessProbe:
+    enabled: true
+    initialDelaySeconds: 15
+    periodSeconds: 10
+    timeoutSeconds: 5
+    failureThreshold: 6
+    successThreshold: 1
+  
+  startupProbe:
+    enabled: false
+  
+  customLivenessProbe: {}
+  customReadinessProbe: {}
+  customStartupProbe: {}
+  
+  hostAliases: []
+  podLabels: {}
+  podAnnotations: {}
+  
+  podAffinityPreset: ""
+  podAntiAffinityPreset: soft
+  nodeAffinityPreset:
+    type: ""
+    key: ""
+    values: []
+  
+  affinity: {}
+  nodeSelector: {}
+  tolerations: []
+  topologySpreadConstraints: []
+  priorityClassName: ""
+  schedulerName: ""
+  terminationGracePeriodSeconds: ""
+  
+  updateStrategy:
+    type: RollingUpdate
+    rollingUpdate: {}
+  
+  extraPodSpec: {}
+  sidecars: []
+  initContainers: []
+  
+  service:
+    type: ClusterIP
+    ports:
+      metrics: 8080
+    clusterIP: ""
+    loadBalancerIP: ""
+    loadBalancerSourceRanges: []
+    externalTrafficPolicy: Cluster
+    annotations: {}
+    extraPorts: []
+    sessionAffinity: None
+    sessionAffinityConfig: {}
+  
+  pdb:
+    create: false
+    minAvailable: 1
+    maxUnavailable: ""
+  
+  serviceMonitor:
+    enabled: false
+    namespace: ""
+    interval: 30s
+    scrapeTimeout: 10s
+    selector: {}
+    labels: {}
+    relabelings: []
+    metricRelabelings: []
+    honorLabels: false
+    jobLabel: ""
+
+## @section Zookeeper parameters
+zookeeper:
+  # -- Enable Zookeeper deployment
+  enabled: true
+  # -- Number of Zookeeper replicas
+  replicaCount: 3
+  auth:
+    # -- Enable Zookeeper authentication
+    enabled: false
+  persistence:
+    # -- Enable persistence on Zookeeper using PVC(s)
+    enabled: true
+    # -- Persistent Volume storage class
+    storageClass: ""
+    # -- Persistent Volume size
+    size: 8Gi
+  resources:
+    requests:
+      cpu: 250m
+      memory: 256Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+  # -- Node labels for Zookeeper pods assignment
+  nodeSelector: {}
+  # -- Tolerations for Zookeeper pods assignment
+  tolerations: []
+
+## @section External Zookeeper parameters
+externalZookeeper:
+  # -- List of external Zookeeper servers to use
+  servers: []
+
+## @section RBAC parameters
+serviceAccount:
+  # -- Enable creation of ServiceAccount for operator pods
+  create: true
+  # -- The name of the ServiceAccount to use
+  name: ""
+  # -- Allows auto mount of ServiceAccountToken on the serviceAccount created
+  automountServiceAccountToken: true
+  # -- Additional custom annotations for the ServiceAccount
+  annotations: {}
+
+rbac:
+  # -- Whether to create RBAC resources
+  create: true
+  # -- Custom RBAC rules to set
+  rules: []
