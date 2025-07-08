@@ -569,7 +569,7 @@ go test ./...
 - 📖 **Documentation**: [Apache Storm Kubernetes Guide](https://storm.apache.org/kubernetes)
 - 🐛 **Issues**: [GitHub Issues](https://github.com/apache/storm/issues)
 - 💬 **Community**: [Apache Storm Mailing List](https://storm.apache.org/community.html)
-- 📊 **Metrics**: [Monitoring Guide](./docs/monitoring.md)
+- 📊 **Metrics**: See the monitoring/ directory for Prometheus and Grafana configurations
 
 ## License
 

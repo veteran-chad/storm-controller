@@ -165,7 +165,6 @@ storm-mcp-server/
 
 ### Implementation Status
 
-See [IMPLEMENTATION_STATUS.md](IMPLEMENTATION_STATUS.md) for detailed progress.
 
 ## License
 

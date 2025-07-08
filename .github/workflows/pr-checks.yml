@@ -116,6 +116,7 @@ jobs:
         run: |
           helm dependency build charts/storm-operator
           helm dependency build charts/storm-kubernetes
+          helm dependency build charts/storm-crd-cluster
           
       - name: Lint all Helm charts
         run: |
@@ -213,8 +214,8 @@ jobs:
           push: false
           tags: |
             storm-${{ matrix.component.name }}:pr-${{ github.event.pull_request.number }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          cache-from: type=gha,scope=buildkit
+          cache-to: type=gha,mode=max,scope=buildkit
           
   validate-examples:
     name: Validate Examples
@@ -255,6 +256,10 @@ jobs:
         with:
           use-quiet-mode: 'yes'
           config-file: '.github/markdown-link-check-config.json'
+          folder-path: './'
+          file-extension: '.md'
+          max-depth: -1
+          disable-pattern: '.markdown-link-check-disable-patterns'
           
       - name: Check required documentation
         run: |
