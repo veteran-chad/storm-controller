@@ -255,6 +255,14 @@ jobs:
               sed -i "s/appVersion: .*/appVersion: ${GITHUB_REF#refs/tags/}/" charts/$chart/Chart.yaml
             fi
           done
+          
+          # For PR builds, don't update dependency versions since we won't push storm-shared
+          if [[ "${{ github.event_name }}" != "pull_request" ]]; then
+            # Update storm-shared dependency version in dependent charts
+            for chart in storm-operator storm-crd-cluster storm-kubernetes; do
+              sed -i "/name: storm-shared/,/version:/ s/version: .*/version: \"${VERSION}\"/" charts/$chart/Chart.yaml
+            done
+          fi
 
       - name: Log in to Docker Hub Registry for Helm
         run: |
@@ -262,10 +270,17 @@ jobs:
 
       - name: Build dependencies
         run: |
-          # Update dependencies to ensure Chart.lock is in sync after version changes
-          helm dependency update charts/storm-operator
-          helm dependency update charts/storm-kubernetes
-          helm dependency update charts/storm-crd-cluster
+          if [[ "${{ github.event_name }}" == "pull_request" ]]; then
+            # For PRs, just build without updating to avoid version mismatch
+            helm dependency build charts/storm-operator
+            helm dependency build charts/storm-kubernetes
+            helm dependency build charts/storm-crd-cluster
+          else
+            # For main/tag builds, update dependencies
+            helm dependency update charts/storm-operator
+            helm dependency update charts/storm-kubernetes
+            helm dependency update charts/storm-crd-cluster
+          fi
 
       - name: Package charts
         run: |
