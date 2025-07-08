@@ -17,6 +17,9 @@
     },
     {
       "pattern": "^https://storm\\.apache\\.org"
+    },
+    {
+      "pattern": "\\{.*\\}"
     }
   ],
   "replacementPatterns": [

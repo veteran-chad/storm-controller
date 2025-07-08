@@ -136,5 +136,6 @@ helm install storm-kubernetes oci://ghcr.io/veteran-chad/charts/storm-kubernetes
 - @username
 
 ### Full Changelog
-https://github.com/veteran-chad/storm-controller/compare/v0.9.0...v1.0.0
+<!-- Replace with actual compare URL -->
+https://github.com/{owner}/{repo}/compare/{previous_version}...{new_version}
 ```
