@@ -7,16 +7,16 @@
       "pattern": "^https://localhost"
     },
     {
-      "pattern": "^http://localhost:\\d+"
-    },
-    {
-      "pattern": "^https://localhost:\\d+"
-    },
-    {
       "pattern": "^http://127\\.0\\.0\\.1"
     },
     {
       "pattern": "^https://127\\.0\\.0\\.1"
+    },
+    {
+      "pattern": "^http://storm\\.apache\\.org"
+    },
+    {
+      "pattern": "^https://storm\\.apache\\.org"
     }
   ],
   "replacementPatterns": [

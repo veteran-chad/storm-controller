@@ -259,7 +259,6 @@ jobs:
           folder-path: './'
           file-extension: '.md'
           max-depth: -1
-          disable-pattern: '.markdown-link-check-disable-patterns'
           
       - name: Check required documentation
         run: |
