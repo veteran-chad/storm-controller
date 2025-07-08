@@ -1,6 +1,9 @@
 dependencies:
+- name: storm-shared
+  repository: file://../storm-shared
+  version: 0.1.0
 - name: zookeeper
   repository: https://charts.bitnami.com/bitnami
-  version: 13.8.4
-digest: sha256:78b577945253f8049ae6a826f9ee7f3d9eddf1fe154ee791dc35df8923ca8c33
-generated: "2025-07-02T00:40:22.576137363Z"
+  version: 13.0.1
+digest: sha256:d608197432992a54f7aa17fa01e989453d41c401844361f146fb275dea37c36e
+generated: "2025-07-08T13:06:58.693541864Z"

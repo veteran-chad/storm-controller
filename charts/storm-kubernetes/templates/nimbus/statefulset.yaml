@@ -15,11 +15,13 @@ spec:
   selector:
     matchLabels: {{- include "storm.selectorLabels" . | nindent 6 }}
       app.kubernetes.io/component: nimbus
+  {{- if .Values.nimbus.updateStrategy }}
   updateStrategy:
     type: {{ .Values.nimbus.updateStrategy.type }}
     {{- if (eq "RollingUpdate" .Values.nimbus.updateStrategy.type) }}
     rollingUpdate: {{- toYaml .Values.nimbus.updateStrategy.rollingUpdate | nindent 6 }}
     {{- end }}
+  {{- end }}
   template:
     metadata:
       labels: {{- include "storm.labels" . | nindent 8 }}
@@ -67,7 +69,7 @@ spec:
         podAntiAffinity:
           {{- include "storm.podAntiAffinityPreset" (dict "component" "nimbus" "context" $ "preset" .Values.nimbus.podAntiAffinityPreset) | nindent 10 }}
         {{- end }}
-        {{- if .Values.nimbus.nodeAffinityPreset.type }}
+        {{- if and .Values.nimbus.nodeAffinityPreset .Values.nimbus.nodeAffinityPreset.type }}
         nodeAffinity:
           {{- include "storm.nodeAffinityPreset" .Values.nimbus.nodeAffinityPreset | nindent 10 }}
         {{- end }}
@@ -125,7 +127,7 @@ spec:
           {{- end }}
           ports:
             {{- include "storm.containerPorts" "nimbus" | nindent 12 }}
-          {{- if .Values.nimbus.livenessProbe.enabled }}
+          {{- if and .Values.nimbus.livenessProbe .Values.nimbus.livenessProbe.enabled }}
           livenessProbe:
             tcpSocket:
               port: thrift
@@ -137,7 +139,7 @@ spec:
           {{- else if .Values.nimbus.customLivenessProbe }}
           livenessProbe: {{- toYaml .Values.nimbus.customLivenessProbe | nindent 12 }}
           {{- end }}
-          {{- if .Values.nimbus.readinessProbe.enabled }}
+          {{- if and .Values.nimbus.readinessProbe .Values.nimbus.readinessProbe.enabled }}
           readinessProbe:
             tcpSocket:
               port: thrift
@@ -149,7 +151,7 @@ spec:
           {{- else if .Values.nimbus.customReadinessProbe }}
           readinessProbe: {{- toYaml .Values.nimbus.customReadinessProbe | nindent 12 }}
           {{- end }}
-          {{- if .Values.nimbus.startupProbe.enabled }}
+          {{- if and .Values.nimbus.startupProbe .Values.nimbus.startupProbe.enabled }}
           startupProbe:
             tcpSocket:
               port: thrift

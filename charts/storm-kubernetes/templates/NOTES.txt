@@ -56,7 +56,7 @@ To access Storm UI:
 
 {{- end }}
 
-{{- if .Values.ui.auth.enabled }}
+{{- if and .Values.ui.auth .Values.ui.auth.enabled }}
 
 2. Login credentials:
 {{- if eq .Values.ui.auth.type "simple" }}
@@ -90,10 +90,10 @@ To deploy a Storm topology:
 For automated topology management with Kubernetes CRDs, consider installing the Storm Operator:
   https://github.com/apache/storm/tree/master/charts/storm-operator
 
-{{- if .Values.metrics.enabled }}
+{{- if and .Values.metrics .Values.metrics.enabled }}
 
 Metrics are exposed for Prometheus scraping.
-{{- if .Values.metrics.serviceMonitor.enabled }}
+{{- if and .Values.metrics.serviceMonitor .Values.metrics.serviceMonitor.enabled }}
 A ServiceMonitor resource has been created for automatic discovery by Prometheus Operator.
 {{- else }}
 To enable automatic discovery by Prometheus Operator, set metrics.serviceMonitor.enabled=true

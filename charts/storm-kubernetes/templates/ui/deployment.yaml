@@ -26,7 +26,7 @@ spec:
         {{- end }}
       annotations:
         checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}
-        {{- if and .Values.ui.auth.enabled (include "storm.ui.auth.createSecret" .) }}
+        {{- if and .Values.ui.auth (and .Values.ui.auth.enabled (include "storm.ui.auth.createSecret" .)) }}
         checksum/auth: {{ include (print $.Template.BasePath "/ui/auth-secret.yaml") . | sha256sum }}
         {{- end }}
         {{- if .Values.ui.podAnnotations }}
@@ -67,7 +67,7 @@ spec:
         podAntiAffinity:
           {{- include "storm.podAntiAffinityPreset" (dict "component" "ui" "context" $ "preset" .Values.ui.podAntiAffinityPreset) | nindent 10 }}
         {{- end }}
-        {{- if .Values.ui.nodeAffinityPreset.type }}
+        {{- if and .Values.ui.nodeAffinityPreset .Values.ui.nodeAffinityPreset.type }}
         nodeAffinity:
           {{- include "storm.nodeAffinityPreset" .Values.ui.nodeAffinityPreset | nindent 10 }}
         {{- end }}
@@ -112,7 +112,7 @@ spec:
             {{- include "storm.commonEnv" . | nindent 12 }}
             - name: STORM_CONF_DIR
               value: "/conf"
-            {{- if .Values.ui.auth.enabled }}
+            {{- if and .Values.ui.auth .Values.ui.auth.enabled }}
             - name: UI_FILTER
               value: "org.apache.storm.security.auth.SimpleWhitelistAuthorizer"
             - name: UI_USERS_FILE
@@ -134,7 +134,7 @@ spec:
           {{- end }}
           ports:
             {{- include "storm.containerPorts" "ui" | nindent 12 }}
-          {{- if .Values.ui.livenessProbe.enabled }}
+          {{- if and .Values.ui.livenessProbe .Values.ui.livenessProbe.enabled }}
           livenessProbe:
             httpGet:
               path: /
@@ -147,7 +147,7 @@ spec:
           {{- else if .Values.ui.customLivenessProbe }}
           livenessProbe: {{- toYaml .Values.ui.customLivenessProbe | nindent 12 }}
           {{- end }}
-          {{- if .Values.ui.readinessProbe.enabled }}
+          {{- if and .Values.ui.readinessProbe .Values.ui.readinessProbe.enabled }}
           readinessProbe:
             httpGet:
               path: /
@@ -160,7 +160,7 @@ spec:
           {{- else if .Values.ui.customReadinessProbe }}
           readinessProbe: {{- toYaml .Values.ui.customReadinessProbe | nindent 12 }}
           {{- end }}
-          {{- if .Values.ui.startupProbe.enabled }}
+          {{- if and .Values.ui.startupProbe .Values.ui.startupProbe.enabled }}
           startupProbe:
             httpGet:
               path: /
@@ -184,7 +184,7 @@ spec:
               mountPath: /conf
             - name: storm-logs
               mountPath: /logs
-            {{- if .Values.ui.auth.enabled }}
+            {{- if and .Values.ui.auth .Values.ui.auth.enabled }}
             - name: auth
               mountPath: /auth
               readOnly: true
@@ -201,7 +201,7 @@ spec:
             name: {{ include "storm.configmapName" . }}
         - name: storm-logs
           emptyDir: {}
-        {{- if .Values.ui.auth.enabled }}
+        {{- if and .Values.ui.auth .Values.ui.auth.enabled }}
         - name: auth
           secret:
             secretName: {{ include "storm.ui.auth.secretName" . }}

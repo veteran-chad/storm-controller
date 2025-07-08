@@ -147,7 +147,7 @@ storm: Zookeeper
 Validate values of Storm - Authentication
 */}}
 {{- define "storm.validateValues.auth" -}}
-{{- if and .Values.ui.auth.enabled (eq .Values.ui.auth.type "simple") (empty .Values.ui.auth.users) (empty .Values.ui.auth.existingSecret) -}}
+{{- if and .Values.ui.auth (and .Values.ui.auth.enabled (and (eq .Values.ui.auth.type "simple") (and (empty .Values.ui.auth.users) (empty .Values.ui.auth.existingSecret)))) -}}
 storm: UI Authentication
     When simple authentication is enabled, you must provide either users or an existing secret.
     Please set either `ui.auth.users` or `ui.auth.existingSecret`.

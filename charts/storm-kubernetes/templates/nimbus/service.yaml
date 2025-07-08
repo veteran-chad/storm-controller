@@ -57,9 +57,9 @@ metadata:
   namespace: {{ .Release.Namespace | quote }}
   labels: {{- include "storm.labels" . | nindent 4 }}
     app.kubernetes.io/component: nimbus
-  {{- if or .Values.nimbus.service.headless.annotations .Values.commonAnnotations }}
+  {{- if or (and .Values.nimbus.service.headless .Values.nimbus.service.headless.annotations) .Values.commonAnnotations }}
   annotations:
-    {{- if .Values.nimbus.service.headless.annotations }}
+    {{- if and .Values.nimbus.service.headless .Values.nimbus.service.headless.annotations }}
     {{- toYaml .Values.nimbus.service.headless.annotations | nindent 4 }}
     {{- end }}
     {{- if .Values.commonAnnotations }}

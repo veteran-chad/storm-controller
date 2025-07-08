@@ -199,9 +199,6 @@ jobs:
           - name: controller
             context: src
             dockerfile: Dockerfile
-          - name: mcp-server
-            context: src/storm-mcp-server
-            dockerfile: Dockerfile
     steps:
       - uses: actions/checkout@v4
       

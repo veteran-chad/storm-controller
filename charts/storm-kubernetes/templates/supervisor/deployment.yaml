@@ -64,7 +64,7 @@ spec:
         podAntiAffinity:
           {{- include "storm.podAntiAffinityPreset" (dict "component" "supervisor" "context" $ "preset" .Values.supervisor.podAntiAffinityPreset) | nindent 10 }}
         {{- end }}
-        {{- if .Values.supervisor.nodeAffinityPreset.type }}
+        {{- if and .Values.supervisor.nodeAffinityPreset .Values.supervisor.nodeAffinityPreset.type }}
         nodeAffinity:
           {{- include "storm.nodeAffinityPreset" .Values.supervisor.nodeAffinityPreset | nindent 10 }}
         {{- end }}
@@ -130,7 +130,7 @@ spec:
               containerPort: {{ add 6700 $i }}
               protocol: TCP
             {{- end }}
-          {{- if .Values.supervisor.livenessProbe.enabled }}
+          {{- if and .Values.supervisor.livenessProbe .Values.supervisor.livenessProbe.enabled }}
           livenessProbe:
             exec:
               command:
@@ -145,7 +145,7 @@ spec:
           {{- else if .Values.supervisor.customLivenessProbe }}
           livenessProbe: {{- toYaml .Values.supervisor.customLivenessProbe | nindent 12 }}
           {{- end }}
-          {{- if .Values.supervisor.readinessProbe.enabled }}
+          {{- if and .Values.supervisor.readinessProbe .Values.supervisor.readinessProbe.enabled }}
           readinessProbe:
             exec:
               command:
@@ -159,7 +159,7 @@ spec:
           {{- else if .Values.supervisor.customReadinessProbe }}
           readinessProbe: {{- toYaml .Values.supervisor.customReadinessProbe | nindent 12 }}
           {{- end }}
-          {{- if .Values.supervisor.startupProbe.enabled }}
+          {{- if and .Values.supervisor.startupProbe .Values.supervisor.startupProbe.enabled }}
           startupProbe:
             httpGet:
               path: /

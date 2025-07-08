@@ -1,4 +1,4 @@
-{{- if and .Values.rbac.create (or .Values.controller.enabled .Values.rbac.rules) }}
+{{- if and .Values.rbac.create (or (and .Values.controller .Values.controller.enabled) .Values.rbac.rules) }}
 apiVersion: rbac.authorization.k8s.io/v1
 kind: Role
 metadata:
