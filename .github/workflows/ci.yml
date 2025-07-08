@@ -262,10 +262,6 @@ jobs:
 
       - name: Build dependencies
         run: |
-          # Remove Chart.lock files to avoid version mismatch errors
-          rm -f charts/*/Chart.lock
-          
-          # Build dependencies fresh
           helm dependency build charts/storm-operator
           helm dependency build charts/storm-kubernetes
           helm dependency build charts/storm-crd-cluster
