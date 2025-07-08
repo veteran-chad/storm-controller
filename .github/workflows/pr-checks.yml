@@ -1,7 +1,11 @@
 name: PR Checks
+
 on:
   pull_request:
     branches: [main]
+
+env:
+  GO_VERSION: '1.23'
 
 jobs:
   lint:
@@ -12,7 +16,7 @@ jobs:
       
       - uses: actions/setup-go@v5
         with:
-          go-version: '1.23'
+          go-version: ${{ env.GO_VERSION }}
           cache-dependency-path: src/go.sum
           
       - name: Run go fmt check
@@ -27,6 +31,13 @@ jobs:
         working-directory: src
         run: go vet ./...
         
+      - name: golangci-lint
+        uses: golangci/golangci-lint-action@v4
+        with:
+          version: latest
+          working-directory: src
+          args: --timeout=5m
+        
   test:
     name: Run Tests
     runs-on: ubuntu-latest
@@ -35,17 +46,21 @@ jobs:
       
       - uses: actions/setup-go@v5
         with:
-          go-version: '1.23'
+          go-version: ${{ env.GO_VERSION }}
           cache-dependency-path: src/go.sum
           
       - name: Run tests
         working-directory: src
-        run: go test -v -race -coverprofile=coverage.out ./...
+        run: |
+          make test
+          go test -v -race -coverprofile=coverage.out ./...
         
       - name: Upload coverage
-        uses: codecov/codecov-action@v3
+        uses: codecov/codecov-action@v4
         with:
+          token: ${{ secrets.CODECOV_TOKEN }}
           file: src/coverage.out
+          flags: unittests
           
   security-scan:
     name: Security Scanning
@@ -55,7 +70,7 @@ jobs:
       
       - uses: actions/setup-go@v5
         with:
-          go-version: '1.23'
+          go-version: ${{ env.GO_VERSION }}
           cache-dependency-path: src/go.sum
           
       # Go vulnerability scanning
@@ -88,10 +103,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       
-      - uses: azure/setup-helm@v3
+      - uses: azure/setup-helm@v4
         with:
           version: 'latest'
-          token: ${{ secrets.GITHUB_TOKEN }}
           
       - name: Add Helm repositories
         run: |
@@ -100,15 +114,32 @@ jobs:
           
       - name: Build Helm dependencies
         run: |
+          helm dependency build charts/storm-operator
           helm dependency build charts/storm-kubernetes
           
-      - name: Lint Helm charts
+      - name: Lint all Helm charts
         run: |
-          helm lint charts/storm-kubernetes
+          for chart in storm-operator storm-crd-cluster storm-kubernetes storm-shared; do
+            echo "Linting $chart..."
+            helm lint charts/$chart
+          done
           
       - name: Template Helm charts
         run: |
-          helm template test charts/storm-kubernetes > /dev/null
+          helm template test-operator charts/storm-operator > /dev/null
+          helm template test-cluster charts/storm-crd-cluster > /dev/null
+          helm template test-traditional charts/storm-kubernetes > /dev/null
+          
+      - name: Validate chart structure
+        run: |
+          for chart in storm-operator storm-crd-cluster storm-kubernetes storm-shared; do
+            echo "Validating $chart Chart.yaml..."
+            yq eval '.' charts/$chart/Chart.yaml > /dev/null
+            if [ -f charts/$chart/values.yaml ]; then
+              echo "Validating $chart values.yaml..."
+              yq eval '.' charts/$chart/values.yaml > /dev/null
+            fi
+          done
           
   validate-manifests:
     name: Validate Kubernetes Manifests
@@ -118,15 +149,133 @@ jobs:
       
       - uses: actions/setup-go@v5
         with:
-          go-version: '1.23'
+          go-version: ${{ env.GO_VERSION }}
           cache-dependency-path: src/go.sum
           
-      - name: Validate generated manifests are up to date
+      - name: Generate and validate manifests
         working-directory: src
         run: |
-          make manifests
+          make manifests generate
+          
+          # Check for uncommitted changes
+          if [[ -n $(git status -s) ]]; then
+            echo "ERROR: Uncommitted changes after code generation. Please run 'make manifests generate' and commit."
+            git status -s
+            git diff
+            exit 1
+          fi
+          
+      - name: Validate CRDs
+        run: |
           # Check if CRDs are valid YAML
-          for f in deploy/*.yaml; do
+          for f in src/config/crd/bases/*.yaml; do
             echo "Validating $f"
             yq eval '.' "$f" > /dev/null
+          done
+          
+      - name: Check CRD sync with Helm charts
+        run: |
+          echo "Checking if CRDs are synced to Helm charts..."
+          cd src
+          make manifests
+          cd ..
+          
+          # Run the sync script
+          bash scripts/sync-crds.sh
+          
+          # Check for changes
+          if [[ -n $(git status -s charts/storm-operator/crds/) ]]; then
+            echo "ERROR: CRDs are not synced to Helm charts. Please run 'scripts/sync-crds.sh' and commit."
+            git status -s charts/storm-operator/crds/
+            exit 1
+          fi
+          
+  docker-build:
+    name: Docker Build Test
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        component:
+          - name: controller
+            context: src
+            dockerfile: Dockerfile
+          - name: mcp-server
+            context: src/storm-mcp-server
+            dockerfile: Dockerfile
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+        
+      - name: Build ${{ matrix.component.name }} image
+        uses: docker/build-push-action@v5
+        with:
+          context: ${{ matrix.component.context }}
+          file: ${{ matrix.component.context }}/${{ matrix.component.dockerfile }}
+          push: false
+          tags: |
+            storm-${{ matrix.component.name }}:pr-${{ github.event.pull_request.number }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          
+  validate-examples:
+    name: Validate Examples
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Validate example YAMLs
+        run: |
+          for f in examples/*.yaml; do
+            echo "Validating $f"
+            yq eval '.' "$f" > /dev/null
+          done
+          
+      - name: Check example completeness
+        run: |
+          required_examples=(
+            "wordcount-topology.yaml"
+            "wordcount-container-topology.yaml"
+            "custom-topology-container.yaml"
+          )
+          
+          for example in "${required_examples[@]}"; do
+            if [ ! -f "examples/$example" ]; then
+              echo "ERROR: Missing required example: $example"
+              exit 1
+            fi
+          done
+          
+  validate-docs:
+    name: Validate Documentation
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Check for broken links in markdown
+        uses: gaurav-nelson/github-action-markdown-link-check@v1
+        with:
+          use-quiet-mode: 'yes'
+          config-file: '.github/markdown-link-check-config.json'
+          
+      - name: Check required documentation
+        run: |
+          required_docs=(
+            "README.md"
+            "CLAUDE.md"
+            "KNOWN_ISSUES.md"
+            "charts/storm-operator/README.md"
+            "charts/storm-crd-cluster/README.md"
+            "charts/storm-kubernetes/README.md"
+            "monitoring/README.md"
+            "examples/CONTAINER_DEPLOYMENTS.md"
+            "examples/TESTING_GUIDE.md"
+          )
+          
+          for doc in "${required_docs[@]}"; do
+            if [ ! -f "$doc" ]; then
+              echo "ERROR: Missing required documentation: $doc"
+              exit 1
+            fi
           done

@@ -1,0 +1,406 @@
+name: CI
+
+on:
+  push:
+    branches: [ main, feature/* ]
+    tags: [ 'v*' ]
+  pull_request:
+    branches: [ main ]
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}
+  GO_VERSION: '1.23'
+
+jobs:
+  test:
+    name: Test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+
+      - name: Cache Go modules
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cache/go-build
+            ~/go/pkg/mod
+          key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
+          restore-keys: |
+            ${{ runner.os }}-go-
+
+      - name: Run tests
+        working-directory: src
+        run: |
+          make test
+          
+      - name: Run vet
+        working-directory: src
+        run: |
+          make vet
+
+      - name: Upload coverage
+        uses: codecov/codecov-action@v4
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          file: ./src/cover.out
+          flags: unittests
+          name: codecov-umbrella
+
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+
+      - name: golangci-lint
+        uses: golangci/golangci-lint-action@v4
+        with:
+          version: latest
+          working-directory: src
+          args: --timeout=5m
+
+  build-binaries:
+    name: Build Binaries
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        include:
+          - os: linux
+            arch: amd64
+          - os: linux
+            arch: arm64
+          - os: darwin
+            arch: amd64
+          - os: darwin
+            arch: arm64
+          - os: windows
+            arch: amd64
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+
+      - name: Build binary
+        working-directory: src
+        env:
+          GOOS: ${{ matrix.os }}
+          GOARCH: ${{ matrix.arch }}
+        run: |
+          make build
+          mkdir -p ../dist
+          if [ "${{ matrix.os }}" = "windows" ]; then
+            mv bin/manager ../dist/storm-controller-${{ matrix.os }}-${{ matrix.arch }}.exe
+          else
+            mv bin/manager ../dist/storm-controller-${{ matrix.os }}-${{ matrix.arch }}
+          fi
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: storm-controller-${{ matrix.os }}-${{ matrix.arch }}
+          path: dist/storm-controller-*
+
+  build-controller-images:
+    name: Build Controller Images
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    strategy:
+      matrix:
+        storm-version: ["2.6.4", "2.7.0", "2.8.1"]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to Container Registry
+        if: github.event_name != 'pull_request'
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Determine version
+        id: version
+        run: |
+          if [[ $GITHUB_REF == refs/tags/v* ]]; then
+            VERSION=${GITHUB_REF#refs/tags/}
+          elif [[ $GITHUB_REF == refs/heads/main ]]; then
+            VERSION=main
+          else
+            VERSION=pr-${{ github.event.pull_request.number }}
+          fi
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "storm_tag=$VERSION-storm${{ matrix.storm-version }}" >> $GITHUB_OUTPUT
+
+      - name: Build and push controller image
+        uses: docker/build-push-action@v5
+        with:
+          context: src
+          platforms: linux/amd64,linux/arm64
+          push: ${{ github.event_name != 'pull_request' }}
+          build-args: |
+            STORM_VERSION=${{ matrix.storm-version }}
+          tags: |
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.version.outputs.storm_tag }}
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:storm${{ matrix.storm-version }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          labels: |
+            org.opencontainers.image.title=Storm Controller
+            org.opencontainers.image.description=Kubernetes controller for Apache Storm
+            org.opencontainers.image.version=${{ steps.version.outputs.version }}
+            org.opencontainers.image.storm.version=${{ matrix.storm-version }}
+
+  build-default-image:
+    name: Build Default Image
+    runs-on: ubuntu-latest
+    needs: [test, lint]
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to Container Registry
+        if: github.event_name != 'pull_request'
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Determine version
+        id: version
+        run: |
+          if [[ $GITHUB_REF == refs/tags/v* ]]; then
+            VERSION=${GITHUB_REF#refs/tags/}
+          elif [[ $GITHUB_REF == refs/heads/main ]]; then
+            VERSION=main
+          else
+            VERSION=pr-${{ github.event.pull_request.number }}
+          fi
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+
+      - name: Build and push controller image
+        uses: docker/build-push-action@v5
+        with:
+          context: src
+          platforms: linux/amd64,linux/arm64
+          push: ${{ github.event_name != 'pull_request' }}
+          tags: |
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.version.outputs.version }}
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          labels: |
+            org.opencontainers.image.title=Storm Controller
+            org.opencontainers.image.description=Kubernetes controller for Apache Storm
+            org.opencontainers.image.version=${{ steps.version.outputs.version }}
+
+  lint-helm-charts:
+    name: Lint Helm Charts
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: azure/setup-helm@v4
+        with:
+          version: 'latest'
+
+      - name: Lint charts
+        run: |
+          helm lint charts/storm-operator
+          helm lint charts/storm-crd-cluster
+          helm lint charts/storm-kubernetes
+          helm lint charts/storm-shared
+
+  package-helm-charts:
+    name: Package Helm Charts
+    runs-on: ubuntu-latest
+    needs: [lint-helm-charts]
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: azure/setup-helm@v4
+        with:
+          version: 'latest'
+
+      - name: Add Helm repositories
+        run: |
+          helm repo add bitnami https://charts.bitnami.com/bitnami
+          helm repo update
+
+      - name: Determine version
+        id: version
+        run: |
+          if [[ $GITHUB_REF == refs/tags/v* ]]; then
+            VERSION=${GITHUB_REF#refs/tags/v}
+          else
+            VERSION=0.0.0-$(git rev-parse --short HEAD)
+          fi
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+
+      - name: Update chart versions
+        run: |
+          VERSION=${{ steps.version.outputs.version }}
+          for chart in storm-operator storm-crd-cluster storm-kubernetes storm-shared; do
+            sed -i "s/version: .*/version: ${VERSION}/" charts/$chart/Chart.yaml
+            if [[ $GITHUB_REF == refs/tags/v* ]]; then
+              sed -i "s/appVersion: .*/appVersion: ${GITHUB_REF#refs/tags/}/" charts/$chart/Chart.yaml
+            fi
+          done
+
+      - name: Build dependencies
+        run: |
+          helm dependency build charts/storm-operator
+          helm dependency build charts/storm-kubernetes
+
+      - name: Package charts
+        run: |
+          mkdir -p .cr-release-packages
+          for chart in storm-operator storm-crd-cluster storm-kubernetes storm-shared; do
+            helm package charts/$chart --destination .cr-release-packages
+          done
+
+      - name: Upload chart artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: helm-charts
+          path: .cr-release-packages/*.tgz
+
+      - name: Log in to Container Registry
+        if: github.event_name != 'pull_request'
+        run: |
+          echo ${{ secrets.GITHUB_TOKEN }} | helm registry login ${{ env.REGISTRY }} --username ${{ github.actor }} --password-stdin
+
+      - name: Push to OCI registry
+        if: github.event_name != 'pull_request'
+        run: |
+          for chart in .cr-release-packages/*.tgz; do
+            helm push $chart oci://${{ env.REGISTRY }}/${{ github.repository_owner }}/charts
+          done
+
+  build-storm-mcp-server:
+    name: Build Storm MCP Server
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to Container Registry
+        if: github.event_name != 'pull_request'
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Determine version
+        id: version
+        run: |
+          if [[ $GITHUB_REF == refs/tags/v* ]]; then
+            VERSION=${GITHUB_REF#refs/tags/}
+          elif [[ $GITHUB_REF == refs/heads/main ]]; then
+            VERSION=main
+          else
+            VERSION=pr-${{ github.event.pull_request.number }}
+          fi
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+
+      - name: Build and push MCP server image
+        uses: docker/build-push-action@v5
+        with:
+          context: src/storm-mcp-server
+          platforms: linux/amd64,linux/arm64
+          push: ${{ github.event_name != 'pull_request' }}
+          tags: |
+            ${{ env.REGISTRY }}/${{ github.repository_owner }}/storm-mcp-server:${{ steps.version.outputs.version }}
+            ${{ env.REGISTRY }}/${{ github.repository_owner }}/storm-mcp-server:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  generate-manifests:
+    name: Generate Kubernetes Manifests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+
+      - name: Generate manifests
+        working-directory: src
+        run: |
+          make manifests
+          make generate
+
+      - name: Check for uncommitted changes
+        run: |
+          if [[ -n $(git status -s) ]]; then
+            echo "ERROR: Uncommitted changes after code generation. Please run 'make manifests generate' and commit."
+            git status -s
+            exit 1
+          fi
+
+  security-scan:
+    name: Security Scan
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Run Trivy vulnerability scanner in repo mode
+        uses: aquasecurity/trivy-action@master
+        with:
+          scan-type: 'fs'
+          ignore-unfixed: true
+          format: 'sarif'
+          output: 'trivy-results.sarif'
+          severity: 'CRITICAL,HIGH'
+
+      - name: Upload Trivy scan results to GitHub Security tab
+        uses: github/codeql-action/upload-sarif@v3
+        if: always()
+        with:
+          sarif_file: 'trivy-results.sarif'
