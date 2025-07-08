@@ -59,6 +59,7 @@ var _ = Describe("StormWorkerPool State Machine Controller", func() {
 		// Create fake client
 		fakeClient = fake.NewClientBuilder().
 			WithScheme(scheme).
+			WithStatusSubresource(&stormv1beta1.StormWorkerPool{}, &appsv1.Deployment{}).
 			Build()
 
 		// Create mocks
@@ -529,9 +530,9 @@ var _ = Describe("StormWorkerPool State Machine Controller", func() {
 			// Create worker pool
 			Expect(fakeClient.Create(ctx, workerPool)).To(Succeed())
 
-			// Add finalizer (simulating what the reconciler would do)
-			workerPool.Finalizers = []string{"storm.apache.org/workerpool-finalizer"}
-			Expect(fakeClient.Update(ctx, workerPool)).To(Succeed())
+			// Verify creation
+			createdWorkerPool := &stormv1beta1.StormWorkerPool{}
+			Expect(fakeClient.Get(ctx, client.ObjectKeyFromObject(workerPool), createdWorkerPool)).To(Succeed())
 
 			// First reconciliation - should start creating
 			req := reconcile.Request{
