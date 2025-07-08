@@ -790,7 +790,7 @@ func (r *StormTopologyReconciler) buildSubmitCommand(topology *stormv1beta1.Stor
 	}
 
 	// Add nimbus host
-	nimbusHost := fmt.Sprintf("%s-storm-kubernetes-nimbus.%s.svc.cluster.local", cluster.Name, cluster.Namespace)
+	nimbusHost := fmt.Sprintf("%s-nimbus.%s.svc.cluster.local", cluster.Name, cluster.Namespace)
 	cmd = append(cmd, "-c", fmt.Sprintf("nimbus.seeds=[%q]", nimbusHost))
 
 	// Add configuration
