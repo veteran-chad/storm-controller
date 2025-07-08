@@ -206,9 +206,9 @@ jobs:
 
       - name: Build Helm dependencies
         run: |
-          helm dependency build charts/storm-operator
-          helm dependency build charts/storm-kubernetes
-          helm dependency build charts/storm-crd-cluster
+          helm dependency update charts/storm-operator
+          helm dependency update charts/storm-kubernetes
+          helm dependency update charts/storm-crd-cluster
 
       - name: Lint charts
         run: |
@@ -262,9 +262,10 @@ jobs:
 
       - name: Build dependencies
         run: |
-          helm dependency build charts/storm-operator
-          helm dependency build charts/storm-kubernetes
-          helm dependency build charts/storm-crd-cluster
+          # Update dependencies to ensure Chart.lock is in sync after version changes
+          helm dependency update charts/storm-operator
+          helm dependency update charts/storm-kubernetes
+          helm dependency update charts/storm-crd-cluster
 
       - name: Package charts
         run: |
