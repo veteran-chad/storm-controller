@@ -20,6 +20,12 @@
     },
     {
       "pattern": "\\{.*\\}"
+    },
+    {
+      "pattern": "^https://hub\\.docker\\.com/settings"
+    },
+    {
+      "pattern": "^https://app\\.codecov\\.io"
     }
   ],
   "replacementPatterns": [
