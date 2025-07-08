@@ -20,7 +20,7 @@ jobs:
       packages: write
     strategy:
       matrix:
-        storm-version: ["2.6.4", "2.7.0", "2.8.1"]
+        storm-version: ["2.8.1"]
     steps:
       - uses: actions/checkout@v4
 
@@ -37,11 +37,6 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Log in to Docker Hub
-        uses: docker/login-action@v3
-        with:
-          username: ${{ secrets.DOCKERHUB_USERNAME }}
-          password: ${{ secrets.DOCKERHUB_TOKEN }}
 
       - name: Determine version
         id: version
@@ -61,8 +56,6 @@ jobs:
           tags: |
             ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.version.outputs.storm_tag }}
             ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:storm${{ matrix.storm-version }}
-            docker.io/${{ github.repository }}:${{ steps.version.outputs.storm_tag }}
-            docker.io/${{ github.repository }}:storm${{ matrix.storm-version }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
@@ -89,11 +82,6 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Log in to Docker Hub
-        uses: docker/login-action@v3
-        with:
-          username: ${{ secrets.DOCKERHUB_USERNAME }}
-          password: ${{ secrets.DOCKERHUB_TOKEN }}
 
       - name: Determine version
         id: version
@@ -110,8 +98,6 @@ jobs:
           tags: |
             ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.version.outputs.version }}
             ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
-            docker.io/${{ github.repository }}:${{ steps.version.outputs.version }}
-            docker.io/${{ github.repository }}:latest
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
@@ -232,17 +218,9 @@ jobs:
           
           ### Container Images
           
-          Controller images with multiple Storm versions:
-          - `ghcr.io/${{ github.repository }}:${VERSION}` (Storm 2.8.1 - default)
-          - `ghcr.io/${{ github.repository }}:${VERSION}-storm2.6.4`
-          - `ghcr.io/${{ github.repository }}:${VERSION}-storm2.7.0`
-          - `ghcr.io/${{ github.repository }}:${VERSION}-storm2.8.1`
-          
-          Also available on Docker Hub:
-          - `docker.io/${{ github.repository }}:${VERSION}`
-          - `docker.io/${{ github.repository }}:storm2.6.4`
-          - `docker.io/${{ github.repository }}:storm2.7.0`
-          - `docker.io/${{ github.repository }}:storm2.8.1`
+          Controller images with Storm 2.8.1:
+          - `ghcr.io/${{ github.repository }}:${VERSION}` (Storm 2.8.1)
+          - `ghcr.io/${{ github.repository }}:storm2.8.1`
           
           ### Helm Charts
           

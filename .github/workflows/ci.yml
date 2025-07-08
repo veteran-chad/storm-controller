@@ -79,7 +79,7 @@ jobs:
       packages: write
     strategy:
       matrix:
-        storm-version: ["2.6.4", "2.7.0", "2.8.1"]
+        storm-version: ["2.8.1"]
     steps:
       - uses: actions/checkout@v4
 
@@ -190,6 +190,16 @@ jobs:
       - uses: azure/setup-helm@v4
         with:
           version: 'latest'
+
+      - name: Add Helm repositories
+        run: |
+          helm repo add bitnami https://charts.bitnami.com/bitnami
+          helm repo update
+
+      - name: Build Helm dependencies
+        run: |
+          helm dependency build charts/storm-operator
+          helm dependency build charts/storm-kubernetes
 
       - name: Lint charts
         run: |
