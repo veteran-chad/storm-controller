@@ -271,16 +271,14 @@ jobs:
       - name: Build dependencies
         run: |
           if [[ "${{ github.event_name }}" == "pull_request" ]]; then
-            # For PRs, just build without updating to avoid version mismatch
-            helm dependency build charts/storm-operator
-            helm dependency build charts/storm-kubernetes
-            helm dependency build charts/storm-crd-cluster
-          else
-            # For main/tag builds, update dependencies
-            helm dependency update charts/storm-operator
-            helm dependency update charts/storm-kubernetes
-            helm dependency update charts/storm-crd-cluster
+            # For PRs, remove lock files and update dependencies
+            rm -f charts/*/Chart.lock
           fi
+          
+          # Always update dependencies to ensure consistency
+          helm dependency update charts/storm-operator
+          helm dependency update charts/storm-kubernetes
+          helm dependency update charts/storm-crd-cluster
 
       - name: Package charts
         run: |
