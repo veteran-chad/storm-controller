@@ -1,0 +1,194 @@
+groups:
+  - name: storm_cluster_alerts
+    interval: 30s
+    rules:
+      # Cluster Health Alerts
+      - alert: StormClusterDown
+        expr: up{job="storm-cluster"} == 0
+        for: 5m
+        labels:
+          severity: critical
+          component: storm
+        annotations:
+          summary: "Storm cluster {{ $labels.instance }} is down"
+          description: "Storm cluster {{ $labels.instance }} has been down for more than 5 minutes."
+
+      - alert: StormNimbusNotReady
+        expr: storm_cluster_supervisors_total{component="nimbus"} < 1
+        for: 5m
+        labels:
+          severity: critical
+          component: storm
+        annotations:
+          summary: "Storm Nimbus not ready in cluster {{ $labels.cluster }}"
+          description: "Storm Nimbus has less than 1 ready instance in cluster {{ $labels.cluster }}."
+
+      - alert: StormSupervisorNotReady
+        expr: |
+          (storm_cluster_supervisors_total - storm_cluster_supervisors_total{state="ready"}) 
+          / storm_cluster_supervisors_total > 0.5
+        for: 10m
+        labels:
+          severity: warning
+          component: storm
+        annotations:
+          summary: "More than 50% of Storm supervisors not ready"
+          description: "{{ $value | humanizePercentage }} of supervisors are not ready in cluster {{ $labels.cluster }}."
+
+      - alert: StormNoAvailableSlots
+        expr: storm_cluster_slots_total{state="free"} == 0
+        for: 5m
+        labels:
+          severity: warning
+          component: storm
+        annotations:
+          summary: "No available slots in Storm cluster {{ $labels.cluster }}"
+          description: "Storm cluster {{ $labels.cluster }} has no free worker slots available."
+
+  - name: storm_topology_alerts
+    interval: 30s
+    rules:
+      # Topology State Alerts
+      - alert: StormTopologyFailed
+        expr: storm_topology_info{status="Failed"} == 1
+        for: 5m
+        labels:
+          severity: critical
+          component: storm
+        annotations:
+          summary: "Storm topology {{ $labels.topology }} failed"
+          description: "Storm topology {{ $labels.topology }} in namespace {{ $labels.namespace }} is in Failed state."
+
+      - alert: StormTopologySubmissionFailed
+        expr: |
+          increase(storm_topology_submissions_total{result="failure"}[5m]) > 0
+        labels:
+          severity: warning
+          component: storm
+        annotations:
+          summary: "Storm topology submission failures detected"
+          description: "{{ $value }} topology submission failures in namespace {{ $labels.namespace }} in the last 5 minutes."
+
+      - alert: StormTopologyHighLatency
+        expr: storm_topology_latency_ms > 1000
+        for: 10m
+        labels:
+          severity: warning
+          component: storm
+        annotations:
+          summary: "High latency in Storm topology {{ $labels.topology }}"
+          description: "Storm topology {{ $labels.topology }} has latency of {{ $value }}ms (threshold: 1000ms)."
+
+      - alert: StormTopologyErrorRate
+        expr: |
+          rate(storm_topology_errors_total[5m]) > 10
+        for: 5m
+        labels:
+          severity: warning
+          component: storm
+        annotations:
+          summary: "High error rate in Storm topology {{ $labels.topology }}"
+          description: "Storm topology {{ $labels.topology }} component {{ $labels.component }} has error rate of {{ $value }} errors/sec."
+
+      # Resource Usage Alerts
+      - alert: StormTopologyHighMemoryUsage
+        expr: |
+          storm_topology_memory_usage_bytes / (2 * 1024 * 1024 * 1024) > 0.9
+        for: 10m
+        labels:
+          severity: warning
+          component: storm
+        annotations:
+          summary: "High memory usage in Storm topology {{ $labels.topology }}"
+          description: "Storm topology {{ $labels.topology }} worker {{ $labels.worker }} is using {{ $value | humanizePercentage }} of allocated memory."
+
+      - alert: StormTopologyHighCPUUsage
+        expr: storm_topology_cpu_usage_cores > 1.8
+        for: 10m
+        labels:
+          severity: warning
+          component: storm
+        annotations:
+          summary: "High CPU usage in Storm topology {{ $labels.topology }}"
+          description: "Storm topology {{ $labels.topology }} worker {{ $labels.worker }} is using {{ $value }} CPU cores."
+
+  - name: storm_controller_alerts
+    interval: 30s
+    rules:
+      # Controller Health Alerts
+      - alert: StormControllerDown
+        expr: up{job="storm-controller"} == 0
+        for: 5m
+        labels:
+          severity: critical
+          component: storm-controller
+        annotations:
+          summary: "Storm controller is down"
+          description: "Storm controller has been down for more than 5 minutes."
+
+      - alert: StormControllerReconciliationSlow
+        expr: |
+          histogram_quantile(0.95, 
+            sum(rate(storm_controller_reconciliation_duration_seconds_bucket[5m])) 
+            by (controller, le)
+          ) > 30
+        for: 10m
+        labels:
+          severity: warning
+          component: storm-controller
+        annotations:
+          summary: "Slow reconciliation in Storm {{ $labels.controller }} controller"
+          description: "95th percentile reconciliation time for {{ $labels.controller }} is {{ $value }}s (threshold: 30s)."
+
+      - alert: StormControllerReconciliationErrors
+        expr: |
+          increase(storm_controller_reconciliation_errors_total[5m]) > 5
+        labels:
+          severity: warning
+          component: storm-controller
+        annotations:
+          summary: "Storm controller reconciliation errors"
+          description: "{{ $value }} reconciliation errors for {{ $labels.controller }} in namespace {{ $labels.namespace }} in the last 5 minutes."
+
+      - alert: StormJarDownloadSlow
+        expr: |
+          histogram_quantile(0.95,
+            sum(rate(storm_topology_jar_download_duration_seconds_bucket[5m]))
+            by (le)
+          ) > 60
+        for: 10m
+        labels:
+          severity: warning
+          component: storm-controller
+        annotations:
+          summary: "Slow JAR downloads detected"
+          description: "95th percentile JAR download time is {{ $value }}s (threshold: 60s)."
+
+  - name: storm_api_alerts
+    interval: 30s
+    rules:
+      - alert: StormAPIHighErrorRate
+        expr: |
+          sum(rate(storm_api_requests_total{status=~"5.."}[5m])) 
+          / sum(rate(storm_api_requests_total[5m])) > 0.1
+        for: 5m
+        labels:
+          severity: warning
+          component: storm
+        annotations:
+          summary: "High Storm API error rate"
+          description: "Storm API error rate is {{ $value | humanizePercentage }} (threshold: 10%)."
+
+      - alert: StormAPIHighLatency
+        expr: |
+          histogram_quantile(0.95,
+            sum(rate(storm_api_request_duration_seconds_bucket[5m]))
+            by (endpoint, le)
+          ) > 5
+        for: 10m
+        labels:
+          severity: warning
+          component: storm
+        annotations:
+          summary: "High Storm API latency for {{ $labels.endpoint }}"
+          description: "95th percentile API latency for {{ $labels.endpoint }} is {{ $value }}s (threshold: 5s)."

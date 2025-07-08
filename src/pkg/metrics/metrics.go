@@ -113,6 +113,121 @@ var (
 		},
 		[]string{"namespace", "result"},
 	)
+
+	// Topology lifecycle metrics
+	StormTopologyStateTransitions = prometheus.NewCounterVec(
+		prometheus.CounterOpts{
+			Name: "storm_topology_state_transitions_total",
+			Help: "Total number of topology state transitions",
+		},
+		[]string{"namespace", "topology", "from", "to"},
+	)
+
+	StormTopologyStateTime = prometheus.NewHistogramVec(
+		prometheus.HistogramOpts{
+			Name:    "storm_topology_state_duration_seconds",
+			Help:    "Time spent in each topology state",
+			Buckets: prometheus.ExponentialBuckets(1, 2, 10), // 1s to ~17min
+		},
+		[]string{"namespace", "topology", "state"},
+	)
+
+	// JAR download/extraction metrics
+	StormTopologyJarDownloadTime = prometheus.NewHistogramVec(
+		prometheus.HistogramOpts{
+			Name:    "storm_topology_jar_download_duration_seconds",
+			Help:    "Time taken to download topology JAR",
+			Buckets: prometheus.ExponentialBuckets(0.1, 2, 10), // 100ms to ~100s
+		},
+		[]string{"namespace", "topology", "source_type"},
+	)
+
+	StormTopologyJarSize = prometheus.NewHistogramVec(
+		prometheus.HistogramOpts{
+			Name:    "storm_topology_jar_size_bytes",
+			Help:    "Size of topology JAR files",
+			Buckets: prometheus.ExponentialBuckets(1048576, 2, 10), // 1MB to ~1GB
+		},
+		[]string{"namespace", "topology"},
+	)
+
+	// Performance metrics
+	StormTopologyLatency = prometheus.NewGaugeVec(
+		prometheus.GaugeOpts{
+			Name: "storm_topology_latency_ms",
+			Help: "Average latency of topology in milliseconds",
+		},
+		[]string{"topology", "namespace", "cluster"},
+	)
+
+	StormTopologyThroughput = prometheus.NewGaugeVec(
+		prometheus.GaugeOpts{
+			Name: "storm_topology_throughput_tuples_per_second",
+			Help: "Throughput of topology in tuples per second",
+		},
+		[]string{"topology", "namespace", "cluster", "component"},
+	)
+
+	StormTopologyErrors = prometheus.NewCounterVec(
+		prometheus.CounterOpts{
+			Name: "storm_topology_errors_total",
+			Help: "Total number of errors in topology",
+		},
+		[]string{"topology", "namespace", "cluster", "component", "error_type"},
+	)
+
+	// Resource usage metrics
+	StormTopologyMemoryUsage = prometheus.NewGaugeVec(
+		prometheus.GaugeOpts{
+			Name: "storm_topology_memory_usage_bytes",
+			Help: "Memory usage of topology workers",
+		},
+		[]string{"topology", "namespace", "cluster", "worker"},
+	)
+
+	StormTopologyCPUUsage = prometheus.NewGaugeVec(
+		prometheus.GaugeOpts{
+			Name: "storm_topology_cpu_usage_cores",
+			Help: "CPU usage of topology workers",
+		},
+		[]string{"topology", "namespace", "cluster", "worker"},
+	)
+
+	// Controller reconciliation metrics
+	ReconciliationDuration = prometheus.NewHistogramVec(
+		prometheus.HistogramOpts{
+			Name:    "storm_controller_reconciliation_duration_seconds",
+			Help:    "Time taken to reconcile resources",
+			Buckets: prometheus.DefBuckets,
+		},
+		[]string{"controller", "namespace", "name", "result"},
+	)
+
+	ReconciliationErrors = prometheus.NewCounterVec(
+		prometheus.CounterOpts{
+			Name: "storm_controller_reconciliation_errors_total",
+			Help: "Total number of reconciliation errors",
+		},
+		[]string{"controller", "namespace", "name", "error_type"},
+	)
+
+	// Storm API metrics
+	StormAPIRequests = prometheus.NewCounterVec(
+		prometheus.CounterOpts{
+			Name: "storm_api_requests_total",
+			Help: "Total number of Storm API requests",
+		},
+		[]string{"method", "endpoint", "status"},
+	)
+
+	StormAPIRequestDuration = prometheus.NewHistogramVec(
+		prometheus.HistogramOpts{
+			Name:    "storm_api_request_duration_seconds",
+			Help:    "Storm API request duration",
+			Buckets: prometheus.DefBuckets,
+		},
+		[]string{"method", "endpoint"},
+	)
 )
 
 func init() {
@@ -129,5 +244,18 @@ func init() {
 		StormWorkerPoolReplicas,
 		StormTopologySubmissions,
 		StormTopologyDeletions,
+		StormTopologyStateTransitions,
+		StormTopologyStateTime,
+		StormTopologyJarDownloadTime,
+		StormTopologyJarSize,
+		StormTopologyLatency,
+		StormTopologyThroughput,
+		StormTopologyErrors,
+		StormTopologyMemoryUsage,
+		StormTopologyCPUUsage,
+		ReconciliationDuration,
+		ReconciliationErrors,
+		StormAPIRequests,
+		StormAPIRequestDuration,
 	)
 }

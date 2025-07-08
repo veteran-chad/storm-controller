@@ -165,6 +165,29 @@ operator:
     sessionAffinity: None
     sessionAffinityConfig: {}
   
+  # -- Metrics configuration
+  metrics:
+    # -- Enable metrics endpoint
+    enabled: true
+    # -- ServiceMonitor configuration
+    serviceMonitor:
+      # -- Enable ServiceMonitor for Prometheus Operator
+      enabled: false
+      # -- Interval at which metrics should be scraped
+      interval: 30s
+      # -- Timeout for metric scraping
+      scrapeTimeout: 10s
+      # -- Path to scrape metrics from
+      path: /metrics
+      # -- Additional labels for ServiceMonitor
+      labels: {}
+      # -- Metric relabeling configuration
+      metricRelabelings: []
+      # -- Relabeling configuration
+      relabelings: []
+      # -- Namespace selector
+      namespaceSelector: {}
+  
   pdb:
     create: false
     minAvailable: 1
