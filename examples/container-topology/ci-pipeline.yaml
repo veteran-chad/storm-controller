@@ -13,7 +13,7 @@ on:
     - 'src/topologies/**'
 
 env:
-  REGISTRY: ghcr.io
+  REGISTRY: docker.io
   IMAGE_NAME: storm-topologies
 
 jobs:
@@ -57,18 +57,18 @@ jobs:
     - name: Set up Docker Buildx
       uses: docker/setup-buildx-action@v3
     
-    - name: Log in to Container Registry
+    - name: Log in to Docker Hub
       uses: docker/login-action@v3
       with:
         registry: ${{ env.REGISTRY }}
-        username: ${{ github.actor }}
-        password: ${{ secrets.GITHUB_TOKEN }}
+        username: ${{ secrets.DOCKERHUB_USERNAME }}
+        password: ${{ secrets.DOCKERHUB_TOKEN }}
     
     - name: Extract metadata
       id: meta
       uses: docker/metadata-action@v5
       with:
-        images: ${{ env.REGISTRY }}/${{ github.repository }}/${{ env.IMAGE_NAME }}/${{ matrix.topology }}
+        images: ${{ env.REGISTRY }}/veteranchad/${{ env.IMAGE_NAME }}/${{ matrix.topology }}
         tags: |
           type=ref,event=branch
           type=ref,event=pr
@@ -92,7 +92,7 @@ jobs:
     - name: Update topology YAML with new image
       if: github.ref == 'refs/heads/main'
       run: |
-        IMAGE_TAG="${{ env.REGISTRY }}/${{ github.repository }}/${{ env.IMAGE_NAME }}/${{ matrix.topology }}:${{ github.sha }}"
+        IMAGE_TAG="${{ env.REGISTRY }}/veteranchad/${{ env.IMAGE_NAME }}/${{ matrix.topology }}:${{ github.sha }}"
         sed -i "s|image: .*|image: \"$IMAGE_TAG\"|g" examples/container-topology/${{ matrix.topology }}-topology.yaml
         sed -i "s|value: \".*\"|value: \"${{ steps.checksum.outputs.jar-checksum }}\"|g" examples/container-topology/${{ matrix.topology }}-topology.yaml
     

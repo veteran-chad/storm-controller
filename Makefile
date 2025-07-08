@@ -6,11 +6,11 @@ STORM_VERSIONS := 2.6.4 2.8.1
 DEFAULT_STORM_VERSION := 2.8.1
 
 # Registry and image names
-REGISTRY ?= ghcr.io
-ORG ?= veteran-chad
+REGISTRY ?= docker.io
+ORG ?= veteranchad
 CONTROLLER_IMAGE := $(REGISTRY)/$(ORG)/storm-controller
 JAR_IMAGE := $(REGISTRY)/$(ORG)/storm-controller-jar
-CHART_REPO := $(REGISTRY)/$(ORG)/charts
+CHART_REPO := registry-1.docker.io/veteranchad
 
 # Build variables
 GOARCH ?= amd64
@@ -100,7 +100,8 @@ helm-package: ## Package Helm chart
 	mv charts/storm-kubernetes/Chart.yaml.bak charts/storm-kubernetes/Chart.yaml
 
 .PHONY: helm-push
-helm-push: helm-package ## Push Helm chart to OCI registry
+helm-push: helm-package ## Push Helm chart to OCI registry  
+	@echo "Note: You must be logged in to Docker Hub with 'helm registry login registry-1.docker.io'"
 	@VERSION=$${VERSION#v}; \
 	helm push storm-kubernetes-$$VERSION.tgz oci://$(CHART_REPO)
 

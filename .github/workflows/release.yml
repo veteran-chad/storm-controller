@@ -6,8 +6,8 @@ on:
       - 'v*'
 
 env:
-  REGISTRY: ghcr.io
-  IMAGE_NAME: ${{ github.repository }}
+  REGISTRY: docker.io
+  IMAGE_NAME: veteranchad/storm-controller
   GO_VERSION: '1.23'
 
 jobs:
@@ -30,12 +30,12 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      - name: Log in to Container Registry
+      - name: Log in to Docker Hub
         uses: docker/login-action@v3
         with:
           registry: ${{ env.REGISTRY }}
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
 
 
       - name: Determine version
@@ -77,12 +77,12 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      - name: Log in to Container Registry
+      - name: Log in to Docker Hub
         uses: docker/login-action@v3
         with:
           registry: ${{ env.REGISTRY }}
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
 
 
       - name: Determine version
@@ -162,14 +162,14 @@ jobs:
             .release/*.tgz
             .release/index.yaml
 
-      - name: Log in to Container Registry
+      - name: Log in to Docker Hub Registry
         run: |
-          echo ${{ secrets.GITHUB_TOKEN }} | helm registry login ${{ env.REGISTRY }} --username ${{ github.actor }} --password-stdin
+          echo ${{ secrets.DOCKERHUB_TOKEN }} | helm registry login registry-1.docker.io --username ${{ secrets.DOCKERHUB_USERNAME }} --password-stdin
 
       - name: Push to OCI registry
         run: |
           for chart in .release/*.tgz; do
-            helm push $chart oci://${{ env.REGISTRY }}/${{ github.repository_owner }}/charts
+            helm push $chart oci://registry-1.docker.io/veteranchad
           done
 
 
@@ -220,7 +220,7 @@ jobs:
           
           ```bash
           # Install Storm Operator
-          helm install storm-operator oci://ghcr.io/${{ github.repository_owner }}/charts/storm-operator \
+          helm install storm-operator oci://registry-1.docker.io/veteranchad/storm-operator \
             --version ${VERSION#v} \
             --namespace storm-operator --create-namespace
           ```
@@ -228,8 +228,8 @@ jobs:
           ### Container Images
           
           Controller images with Storm 2.8.1:
-          - `ghcr.io/${{ github.repository }}:${VERSION}` (Storm 2.8.1)
-          - `ghcr.io/${{ github.repository }}:storm2.8.1`
+          - `docker.io/veteranchad/storm-controller:${VERSION}` (Storm 2.8.1)
+          - `docker.io/veteranchad/storm-controller:storm2.8.1`
           
           ### Helm Charts
           

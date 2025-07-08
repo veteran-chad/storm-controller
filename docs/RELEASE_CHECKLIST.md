@@ -60,14 +60,14 @@ Monitor GitHub Actions for:
 
 - [ ] Pull and test controller images:
   ```bash
-  docker pull ghcr.io/veteran-chad/storm-controller:v1.0.0
-  docker pull ghcr.io/veteran-chad/storm-controller:v1.0.0-storm2.6.4
-  docker pull ghcr.io/veteran-chad/storm-controller:v1.0.0-storm2.8.1
+  docker pull docker.io/veteranchad/storm-controller:v1.0.0
+  docker pull docker.io/veteranchad/storm-controller:v1.0.0-storm2.6.4
+  docker pull docker.io/veteranchad/storm-controller:v1.0.0-storm2.8.1
   ```
 
 - [ ] Install Helm chart:
   ```bash
-  helm install test oci://ghcr.io/veteran-chad/charts/storm-kubernetes --version 1.0.0
+  helm install test oci://docker.io/veteranchad/charts/storm-kubernetes --version 1.0.0
   ```
 
 - [ ] Verify GitHub release page has correct release notes
@@ -111,18 +111,18 @@ For urgent fixes:
 - Brief summary of major changes
 
 ### Container Images
-- `ghcr.io/veteran-chad/storm-controller:v1.0.0` (Storm 2.8.1)
-- `ghcr.io/veteran-chad/storm-controller:v1.0.0-storm2.6.4`
-- `ghcr.io/veteran-chad/storm-controller:v1.0.0-storm2.8.1`
+- `docker.io/veteranchad/storm-controller:v1.0.0` (Storm 2.8.1)
+- `docker.io/veteranchad/storm-controller:v1.0.0-storm2.6.4`
+- `docker.io/veteranchad/storm-controller:v1.0.0-storm2.8.1`
 
 ### Installation
 
 ```bash
 # Helm
-helm install storm-kubernetes oci://ghcr.io/veteran-chad/charts/storm-kubernetes --version 1.0.0
+helm install storm-kubernetes oci://docker.io/veteranchad/charts/storm-kubernetes --version 1.0.0
 
 # Or with specific Storm version
-helm install storm-kubernetes oci://ghcr.io/veteran-chad/charts/storm-kubernetes \
+helm install storm-kubernetes oci://docker.io/veteranchad/charts/storm-kubernetes \
   --version 1.0.0 \
   --set image.tag=v1.0.0-storm2.6.4
 ```

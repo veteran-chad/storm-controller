@@ -1,7 +1,7 @@
 # Makefile for Storm Topology JAR Container
 
 # Variables
-REGISTRY ?= ghcr.io/veteran-chad
+REGISTRY ?= docker.io/veteranchad
 IMAGE_NAME ?= storm-controller-topology-jar
 VERSION ?= latest
 FULL_IMAGE = $(REGISTRY)/$(IMAGE_NAME):$(VERSION)

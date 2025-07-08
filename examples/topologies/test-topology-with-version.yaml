@@ -9,7 +9,7 @@ spec:
     name: wordcount-versioned
     jar:
       container:
-        image: "ghcr.io/apache/storm-topology-example:latest"
+        image: "docker.io/veteranchad/storm-topology-example:latest"
         path: "/storm-starter.jar"
         pullPolicy: IfNotPresent
         extractionMode: "job"

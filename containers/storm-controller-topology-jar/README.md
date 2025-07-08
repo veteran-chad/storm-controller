@@ -21,7 +21,7 @@ The Storm controller supports extracting topology JARs from container images as 
 Create a `Dockerfile` in your topology project:
 
 ```dockerfile
-FROM ghcr.io/veteran-chad/storm-controller-topology-jar:latest
+FROM docker.io/veteranchad/storm-controller-topology-jar:latest
 
 # Copy your topology JAR
 COPY --chown=storm:storm target/my-topology-1.0.0.jar /storm/jars/topology.jar
@@ -51,7 +51,7 @@ COPY src ./src
 RUN mvn clean package
 
 # Runtime stage
-FROM ghcr.io/veteran-chad/storm-controller-topology-jar:latest
+FROM docker.io/veteranchad/storm-controller-topology-jar:latest
 COPY --from=builder --chown=storm:storm /build/target/my-topology-*.jar /storm/jars/topology.jar
 ```
 

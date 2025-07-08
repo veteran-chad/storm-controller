@@ -1,6 +1,6 @@
 dependencies:
 - name: storm-shared
-  repository: file://../storm-shared
+  repository: oci://registry-1.docker.io/veteranchad
   version: 0.1.0
-digest: sha256:f45ca558576b42b52e02159d3e2a9e7ab370cb81bf0bfc8a7df83d0b0db5125d
-generated: "2025-07-07T22:59:32.686127895Z"
+digest: sha256:a926b0ad9b2d62ca63e14f7a3ae6c2383333c2d18eb2e3792407885e8c4835f5
+generated: "2025-07-08T16:31:11.06568677Z"

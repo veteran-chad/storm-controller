@@ -1,9 +1,9 @@
 dependencies:
 - name: storm-shared
-  repository: file://../storm-shared
+  repository: oci://registry-1.docker.io/veteranchad
   version: 0.1.0
 - name: zookeeper
-  repository: https://charts.bitnami.com/bitnami
+  repository: oci://registry-1.docker.io/bitnamicharts
   version: 13.0.1
-digest: sha256:d608197432992a54f7aa17fa01e989453d41c401844361f146fb275dea37c36e
-generated: "2025-07-08T13:06:58.693541864Z"
+digest: sha256:b799a9bf876169b61cf835ee4be7bc5edbdb4987c133aa97b21f364c6c973a6a
+generated: "2025-07-08T16:30:56.786828945Z"

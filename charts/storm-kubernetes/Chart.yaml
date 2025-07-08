@@ -26,8 +26,8 @@ annotations:
 dependencies:
   - name: storm-shared
     version: "0.1.0"
-    repository: "file://../storm-shared"
+    repository: "oci://registry-1.docker.io/veteranchad"
   - name: zookeeper
     version: "~13.0.0"
-    repository: "https://charts.bitnami.com/bitnami"
+    repository: "oci://registry-1.docker.io/bitnamicharts"
     condition: zookeeper.enabled

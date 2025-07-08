@@ -51,7 +51,7 @@ v1.0.0-storm2.6.4-rc.1
 
 #### Storm Controller Image
 ```
-ghcr.io/veteran-chad/storm-controller:<tag>
+docker.io/veteranchad/storm-controller:<tag>
 ```
 
 Tags:
@@ -64,14 +64,14 @@ Tags:
 
 #### Storm Controller JAR Image
 ```
-ghcr.io/veteran-chad/storm-controller-jar:<tag>
+docker.io/veteranchad/storm-controller-jar:<tag>
 ```
 
 Same tagging pattern as controller image.
 
 #### Helm Chart
 ```
-oci://ghcr.io/veteran-chad/charts/storm-kubernetes:<tag>
+oci://docker.io/veteranchad/charts/storm-kubernetes:<tag>
 ```
 
 Tags:
@@ -349,14 +349,14 @@ jobs:
           ### Container Images
           
           Controller images with Storm versions:
-          - \`ghcr.io/veteran-chad/storm-controller:${VERSION}\` (Storm 2.8.1 - default)
-          - \`ghcr.io/veteran-chad/storm-controller:${VERSION}-storm2.6.4\`
-          - \`ghcr.io/veteran-chad/storm-controller:${VERSION}-storm2.8.1\`
+          - \`docker.io/veteranchad/storm-controller:${VERSION}\` (Storm 2.8.1 - default)
+          - \`docker.io/veteranchad/storm-controller:${VERSION}-storm2.6.4\`
+          - \`docker.io/veteranchad/storm-controller:${VERSION}-storm2.8.1\`
           
           ### Helm Chart
           
           \`\`\`bash
-          helm install storm-kubernetes oci://ghcr.io/veteran-chad/charts/storm-kubernetes --version ${VERSION#v}
+          helm install storm-kubernetes oci://docker.io/veteranchad/charts/storm-kubernetes --version ${VERSION#v}
           \`\`\`
           
           ### Changelog
@@ -397,7 +397,7 @@ jobs:
       - name: Run Trivy scanner
         uses: aquasecurity/trivy-action@master
         with:
-          image-ref: ghcr.io/veteran-chad/${{ matrix.image }}:storm${{ matrix.storm-version }}
+          image-ref: docker.io/veteranchad/${{ matrix.image }}:storm${{ matrix.storm-version }}
           format: 'sarif'
           output: 'trivy-${{ matrix.image }}-${{ matrix.storm-version }}.sarif'
           
@@ -479,7 +479,7 @@ COPY --from=builder /workspace/manager /manager
 ```yaml
 # values.yaml
 image:
-  repository: ghcr.io/veteran-chad/storm-controller
+  repository: docker.io/veteranchad/storm-controller
   tag: v1.0.0-storm2.8.1  # Default to specific Storm version
   pullPolicy: IfNotPresent
 
@@ -528,7 +528,7 @@ storm:
 ```bash
 # Rollback to previous version
 kubectl set image deployment/storm-controller \
-  controller=ghcr.io/veteran-chad/storm-controller:v0.9.0-storm2.8.1
+  controller=docker.io/veteranchad/storm-controller:v0.9.0-storm2.8.1
 ```
 
 ### Helm Chart

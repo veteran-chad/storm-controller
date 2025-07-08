@@ -8,8 +8,8 @@ on:
     branches: [ main ]
 
 env:
-  REGISTRY: ghcr.io
-  IMAGE_NAME: ${{ github.repository }}
+  REGISTRY: docker.io
+  IMAGE_NAME: veteranchad/storm-controller
   GO_VERSION: '1.23'
 
 jobs:
@@ -89,13 +89,13 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      - name: Log in to Container Registry
+      - name: Log in to Docker Hub
         if: github.event_name != 'pull_request'
         uses: docker/login-action@v3
         with:
           registry: ${{ env.REGISTRY }}
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
 
       - name: Determine version
         id: version
@@ -147,13 +147,13 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      - name: Log in to Container Registry
+      - name: Log in to Docker Hub
         if: github.event_name != 'pull_request'
         uses: docker/login-action@v3
         with:
           registry: ${{ env.REGISTRY }}
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
 
       - name: Determine version
         id: version
@@ -275,16 +275,16 @@ jobs:
           name: helm-charts
           path: .cr-release-packages/*.tgz
 
-      - name: Log in to Container Registry
+      - name: Log in to Docker Hub Registry
         if: github.event_name != 'pull_request'
         run: |
-          echo ${{ secrets.GITHUB_TOKEN }} | helm registry login ${{ env.REGISTRY }} --username ${{ github.actor }} --password-stdin
+          echo ${{ secrets.DOCKERHUB_TOKEN }} | helm registry login registry-1.docker.io --username ${{ secrets.DOCKERHUB_USERNAME }} --password-stdin
 
       - name: Push to OCI registry
         if: github.event_name != 'pull_request'
         run: |
           for chart in .cr-release-packages/*.tgz; do
-            helm push $chart oci://${{ env.REGISTRY }}/${{ github.repository_owner }}/charts
+            helm push $chart oci://registry-1.docker.io/veteranchad
           done
 
 
