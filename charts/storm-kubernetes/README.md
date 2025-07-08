@@ -1,12 +1,12 @@
 # Apache Storm Helm Chart for Kubernetes
 
 This Helm chart deploys Apache Storm on Kubernetes with support for:
-- CRD-based topology management via kubectl
-- Per-topology worker pools with independent scaling
 - High Availability Nimbus
+- Configurable Supervisor worker slots
 - Embedded or external Zookeeper
+- Storm UI with optional ingress
 - Prometheus monitoring
-- Zero-downtime upgrades
+- Persistent storage for logs and data
 
 ## Prerequisites
 
@@ -42,37 +42,19 @@ helm install my-storm apache/storm-kubernetes \
 
 ## Deploying Topologies
 
-This chart uses Custom Resource Definitions (CRDs) to manage Storm topologies. After installing the chart, you can deploy topologies using `kubectl`:
+After installing the chart, you can deploy topologies using the Storm CLI:
 
-```yaml
-apiVersion: storm.apache.org/v1beta1
-kind: StormTopology
-metadata:
-  name: my-topology
-  namespace: default
-spec:
-  clusterRef: my-storm
-  topology:
-    name: wordcount
-    jar:
-      url: "https://example.com/my-topology.jar"
-    mainClass: "com.example.MyTopology"
-  workers:
-    replicas: 2
-    resources:
-      requests:
-        cpu: "1"
-        memory: "2Gi"
-    autoscaling:
-      enabled: true
-      maxReplicas: 10
-```
-
-Apply the topology:
-
+1. Port-forward to the Nimbus service:
 ```bash
-kubectl apply -f my-topology.yaml
+kubectl port-forward svc/my-storm-nimbus 6627:6627
 ```
+
+2. Submit a topology:
+```bash
+storm jar my-topology.jar com.example.MyTopology my-topology
+```
+
+For automated topology management, consider using the [Storm Operator](../storm-operator/README.md).
 
 ## Configuration
 
@@ -92,32 +74,28 @@ The following table lists the main configurable parameters of the Storm chart an
 |-----------|-------------|---------|
 | `image.registry` | Storm image registry | `docker.io` |
 | `image.repository` | Storm image repository | `apache/storm` |
-| `image.tag` | Storm image tag | `2.6.0` |
+| `image.tag` | Storm image tag | `2.8.1` |
 | `image.pullPolicy` | Storm image pull policy | `IfNotPresent` |
 
 ### Nimbus parameters
 
 | Parameter | Description | Default |
 |-----------|-------------|---------|
-| `nimbus.replicaCount` | Number of Nimbus replicas (HA mode) | `1` |
-| `nimbus.resources.requests` | Nimbus container resource requests | `{cpu: 500m, memory: 1Gi}` |
-| `nimbus.resources.limits` | Nimbus container resource limits | `{cpu: 2000m, memory: 2Gi}` |
-| `nimbus.persistence.enabled` | Enable persistence for Nimbus | `true` |
-| `nimbus.persistence.size` | Nimbus persistent volume size | `10Gi` |
-| `nimbus.persistence.storageClass` | Nimbus persistent volume storage class | `""` |
+| `nimbus.replicaCount` | Number of Nimbus replicas | `1` |
+| `nimbus.resources.limits` | Resource limits | `{cpu: 1000m, memory: 2Gi}` |
+| `nimbus.resources.requests` | Resource requests | `{cpu: 250m, memory: 512Mi}` |
+| `nimbus.persistence.enabled` | Enable persistence | `true` |
+| `nimbus.persistence.size` | PVC size | `8Gi` |
 
 ### Supervisor parameters
 
 | Parameter | Description | Default |
 |-----------|-------------|---------|
-| `supervisor.replicaCount` | Number of Supervisor replicas | `3` |
-| `supervisor.deploymentMode` | Deployment mode (`deployment` or `daemonset`) | `deployment` |
-| `supervisor.slotsPerSupervisor` | Number of worker slots per supervisor | `4` |
-| `supervisor.resources.requests` | Supervisor container resource requests | `{cpu: 1000m, memory: 2Gi}` |
-| `supervisor.resources.limits` | Supervisor container resource limits | `{cpu: 2000m, memory: 4Gi}` |
-| `supervisor.autoscaling.enabled` | Enable HPA for supervisors | `false` |
-| `supervisor.autoscaling.minReplicas` | Minimum supervisor replicas | `3` |
-| `supervisor.autoscaling.maxReplicas` | Maximum supervisor replicas | `10` |
+| `supervisor.replicaCount` | Number of Supervisor nodes | `3` |
+| `supervisor.slotsPerSupervisor` | Worker slots per supervisor | `4` |
+| `supervisor.resources.limits` | Resource limits | `{cpu: 2000m, memory: 4Gi}` |
+| `supervisor.resources.requests` | Resource requests | `{cpu: 1000m, memory: 2Gi}` |
+| `supervisor.deploymentMode` | `deployment` or `daemonset` | `deployment` |
 
 ### UI parameters
 
@@ -125,70 +103,84 @@ The following table lists the main configurable parameters of the Storm chart an
 |-----------|-------------|---------|
 | `ui.enabled` | Enable Storm UI | `true` |
 | `ui.replicaCount` | Number of UI replicas | `1` |
-| `ui.service.type` | UI service type | `ClusterIP` |
-| `ui.ingress.enabled` | Enable ingress for UI | `false` |
-| `ui.ingress.hostname` | Hostname for UI ingress | `storm.local` |
-| `ui.auth.enabled` | Enable UI authentication | `false` |
-| `ui.auth.type` | Authentication type (`simple` or `oauth`) | `simple` |
-
-### Controller parameters
-
-| Parameter | Description | Default |
-|-----------|-------------|---------|
-| `controller.enabled` | Enable Storm Controller for CRD management | `true` |
-| `controller.replicaCount` | Number of controller replicas | `1` |
-| `controller.image.repository` | Controller image repository | `apache/storm-controller` |
-| `controller.image.tag` | Controller image tag | `0.1.0` |
+| `ui.service.type` | Service type | `ClusterIP` |
+| `ui.ingress.enabled` | Enable ingress | `false` |
+| `ui.ingress.hostname` | Ingress hostname | `storm.local` |
 
 ### Zookeeper parameters
 
 | Parameter | Description | Default |
 |-----------|-------------|---------|
 | `zookeeper.enabled` | Deploy Zookeeper | `true` |
-| `zookeeper.replicaCount` | Number of Zookeeper replicas | `3` |
-| `zookeeper.persistence.enabled` | Enable persistence for Zookeeper | `true` |
-| `zookeeper.persistence.size` | Zookeeper persistent volume size | `8Gi` |
-| `externalZookeeper.servers` | External Zookeeper servers (if not using embedded) | `[]` |
-
-### Monitoring parameters
-
-| Parameter | Description | Default |
-|-----------|-------------|---------|
-| `metrics.enabled` | Enable metrics export | `true` |
-| `metrics.serviceMonitor.enabled` | Create ServiceMonitor resource | `true` |
-| `metrics.serviceMonitor.interval` | Scrape interval | `30s` |
-| `metrics.prometheusRule.enabled` | Create PrometheusRule resource | `false` |
+| `zookeeper.replicaCount` | Number of Zookeeper nodes | `3` |
+| `externalZookeeper.servers` | External Zookeeper servers | `[]` |
 
 ### Storm configuration
 
 | Parameter | Description | Default |
 |-----------|-------------|---------|
-| `stormConf` | Additional Storm configuration | `{}` |
+| `storm.config` | Storm configuration (storm.yaml) | See values.yaml |
 
 ## Persistence
 
-The chart mounts a Persistent Volume for Nimbus to store topology jars and metadata. You can configure the size and storage class of the volume.
+The chart supports persistent volumes for Nimbus and Zookeeper data. To disable persistence:
+
+```bash
+helm install my-storm apache/storm-kubernetes \
+  --set nimbus.persistence.enabled=false \
+  --set zookeeper.persistence.enabled=false
+```
 
 ## Monitoring
 
-The chart includes support for Prometheus monitoring:
+The chart includes ServiceMonitor resources for Prometheus Operator integration:
 
-1. Metrics are exposed on `/metrics` endpoint
-2. ServiceMonitor CRD for automatic Prometheus discovery
-3. PrometheusRule CRD for alerting rules
+```bash
+helm install my-storm apache/storm-kubernetes \
+  --set metrics.enabled=true \
+  --set metrics.serviceMonitor.enabled=true
+```
+
+## High Availability
+
+For production deployments, enable HA mode:
+
+```bash
+helm install my-storm apache/storm-kubernetes \
+  --set nimbus.replicaCount=3 \
+  --set zookeeper.replicaCount=3 \
+  --set ui.replicaCount=2
+```
+
+## External Zookeeper
+
+To use an external Zookeeper cluster:
+
+```bash
+helm install my-storm apache/storm-kubernetes \
+  --set zookeeper.enabled=false \
+  --set externalZookeeper.servers='{zk1:2181,zk2:2181,zk3:2181}'
+```
+
+## Uninstalling
+
+To uninstall/delete the deployment:
+
+```bash
+helm uninstall my-storm
+```
 
 ## Upgrading
 
-### To 1.0.0
+To upgrade the Storm deployment:
 
-This version introduces breaking changes:
-- CRDs are now used for topology management
-- Controller component added for CRD reconciliation
-- Per-topology worker pools instead of shared workers
+```bash
+helm upgrade my-storm apache/storm-kubernetes \
+  --set image.tag=2.8.1
+```
 
 ## License
 
 Copyright 2024 The Apache Software Foundation
 
-Licensed under the Apache License, Version 2.0 (the "License");
-you may not use this file except in compliance with the License.
+Licensed under the Apache License, Version 2.0.

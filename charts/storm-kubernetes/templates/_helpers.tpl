@@ -72,17 +72,10 @@ Return the proper Storm image name
 {{- end -}}
 
 {{/*
-Return the proper Storm Controller image name
-*/}}
-{{- define "storm.controller.image" -}}
-{{- include "common.images.image" (dict "imageRoot" .Values.controller.image "global" .Values.global) -}}
-{{- end -}}
-
-{{/*
 Return the proper Docker Image Registry Secret Names
 */}}
 {{- define "storm.imagePullSecrets" -}}
-{{- include "common.images.pullSecrets" (dict "images" (list .Values.image .Values.controller.image) "global" .Values.global) -}}
+{{- include "common.images.pullSecrets" (dict "images" (list .Values.image) "global" .Values.global) -}}
 {{- end -}}
 
 {{/*
@@ -104,13 +97,6 @@ Create a default fully qualified ui name.
 */}}
 {{- define "storm.ui.fullname" -}}
 {{- printf "%s-%s" (include "storm.fullname" .) "ui" | trunc 63 | trimSuffix "-" }}
-{{- end }}
-
-{{/*
-Create a default fully qualified controller name.
-*/}}
-{{- define "storm.controller.fullname" -}}
-{{- printf "%s-%s" (include "storm.fullname" .) "controller" | trunc 63 | trimSuffix "-" }}
 {{- end }}
 
 {{/*
@@ -165,15 +151,6 @@ Validate values of Storm - Authentication
 storm: UI Authentication
     When simple authentication is enabled, you must provide either users or an existing secret.
     Please set either `ui.auth.users` or `ui.auth.existingSecret`.
-{{- end -}}
-{{- end -}}
-
-{{/*
-Return true if we should create the Storm controller
-*/}}
-{{- define "storm.controller.create" -}}
-{{- if .Values.controller.enabled -}}
-    {{- true -}}
 {{- end -}}
 {{- end -}}
 

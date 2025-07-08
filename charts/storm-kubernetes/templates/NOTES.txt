@@ -75,45 +75,20 @@ Storm UI has been disabled. You can enable it by setting ui.enabled=true
 
 To deploy a Storm topology:
 
-{{- if .Values.controller.enabled }}
+1. Port-forward to the Nimbus service:
 
-1. Create a StormTopology resource:
+   kubectl port-forward --namespace {{ .Release.Namespace }} svc/{{ include "storm.nimbus.fullname" . }} 6627:{{ .Values.nimbus.service.ports.thrift }}
 
-   cat <<EOF | kubectl apply -f -
-   apiVersion: storm.apache.org/v1beta1
-   kind: StormTopology
-   metadata:
-     name: my-topology
-     namespace: {{ .Release.Namespace }}
-   spec:
-     clusterRef: {{ .Release.Name }}
-     topology:
-       name: my-topology
-       jar:
-         url: "https://example.com/path/to/topology.jar"
-       mainClass: "com.example.MyTopology"
-     workers:
-       replicas: 2
-       resources:
-         requests:
-           cpu: "1"
-           memory: "2Gi"
-   EOF
+2. Submit your topology using the Storm CLI:
 
-2. Check topology status:
+   storm jar my-topology.jar com.example.MyTopology my-topology
 
-   kubectl get stormtopologies --namespace {{ .Release.Namespace }}
-   kubectl describe stormtopology my-topology --namespace {{ .Release.Namespace }}
+3. Monitor your topology in the Storm UI or using:
 
-{{- else }}
+   storm list
 
-Storm Controller has been disabled. To use CRD-based topology deployment, enable the controller:
-  controller.enabled=true
-
-You can still submit topologies using the Storm CLI by connecting to Nimbus at:
-  {{ include "storm.nimbus.fullname" . }}.{{ .Release.Namespace }}.svc.{{ .Values.clusterDomain }}:{{ .Values.nimbus.service.ports.thrift }}
-
-{{- end }}
+For automated topology management with Kubernetes CRDs, consider installing the Storm Operator:
+  https://github.com/apache/storm/tree/master/charts/storm-operator
 
 {{- if .Values.metrics.enabled }}
 

@@ -1,28 +1,6 @@
 # Storm deployment with node affinity and tolerations
 # Example values for deploying Storm on dedicated nodes
 
-# Inherit from local values
-crd:
-  install: true
-
-controller:
-  enabled: true
-  image:
-    repository: storm-controller
-    tag: latest
-    pullPolicy: Never
-  nodeSelector:
-    node: storm
-  tolerations:
-  - key: "type"
-    operator: "Equal"
-    value: "storm"
-    effect: "NoSchedule"
-
-stormCluster:
-  enabled: true
-  name: storm-cluster
-
 nimbus:
   replicas: 1
   nodeSelector:
@@ -56,15 +34,11 @@ ui:
 
 zookeeper:
   replicas: 3
-  # Bitnami Zookeeper chart supports nodeSelector and tolerations
-  nodeSelector:
-    node: storm
-  tolerations:
-  - key: "type"
-    operator: "Equal"
-    value: "storm"
-    effect: "NoSchedule"
-
-storm:
-  config:
-    storm.log.level: "INFO"
+  master:
+    nodeSelector:
+      node: storm
+    tolerations:
+    - key: "type"
+      operator: "Equal"
+      value: "storm"
+      effect: "NoSchedule"
