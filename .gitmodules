@@ -1,3 +1,6 @@
 [submodule "external/storm"]
 	path = external/storm
 	url = https://github.com/apache/storm
+[submodule "external/rts-storm-deploy"]
+	path = external/rts-storm-deploy
+	url = git@ssh.dev.azure.com:v3/HAL-HDS/iEnergy-RTS/rts-storm-deploy
