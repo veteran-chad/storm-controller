@@ -993,3 +993,68 @@ zookeeper:
 ## @param tests.enabled Enable Helm tests
 tests:
   enabled: true
+
+## @section Metrics parameters
+## @param metrics.enabled Enable metrics
+## @param metrics.serviceMonitor.enabled Create ServiceMonitor resource for scraping metrics using Prometheus Operator
+## @param metrics.serviceMonitor.namespace Namespace for the ServiceMonitor resource (defaults to Release namespace)
+## @param metrics.serviceMonitor.interval Interval at which metrics should be scraped
+## @param metrics.serviceMonitor.scrapeTimeout Timeout after which the scrape is ended
+## @param metrics.serviceMonitor.labels Additional labels for the ServiceMonitor
+## @param metrics.serviceMonitor.selector Prometheus instance selector labels
+## @param metrics.serviceMonitor.relabelings RelabelConfigs to apply to samples before scraping
+## @param metrics.serviceMonitor.metricRelabelings MetricRelabelConfigs to apply to samples before ingestion
+## @param metrics.serviceMonitor.honorLabels Specify honorLabels parameter of the scrape endpoint
+## @param metrics.serviceMonitor.jobLabel The name of the label on the target service to use as the job name in prometheus
+## @param metrics.serviceMonitor.annotations Additional annotations for the ServiceMonitor
+metrics:
+  enabled: false
+  ## @param metrics.exporter.image.registry Metrics exporter image registry
+  ## @param metrics.exporter.image.repository Metrics exporter image repository
+  ## @param metrics.exporter.image.tag Metrics exporter image tag
+  ## @param metrics.exporter.image.digest Metrics exporter image digest
+  ## @param metrics.exporter.image.pullPolicy Metrics exporter image pull policy
+  ## @param metrics.exporter.port Port for metrics endpoint
+  ## @param metrics.exporter.interval Interval for metrics collection
+  ## @param metrics.exporter.resources Resources for metrics exporter
+  ## @param metrics.exporter.resourcesPreset Resources preset for metrics exporter
+  ## @param metrics.exporter.podLabels Extra labels for metrics exporter pods
+  ## @param metrics.exporter.podAnnotations Annotations for metrics exporter pods
+  exporter:
+    image:
+      registry: docker.io
+      repository: busybox
+      tag: latest
+      digest: ""
+      pullPolicy: IfNotPresent
+    port: 9090
+    interval: 30
+    resources: {}
+    resourcesPreset: "nano"
+    podLabels: {}
+    podAnnotations: {}
+  serviceMonitor:
+    enabled: false
+    namespace: ""
+    interval: ""
+    scrapeTimeout: ""
+    labels: {}
+    selector: {}
+    relabelings: []
+    metricRelabelings: []
+    honorLabels: false
+    jobLabel: ""
+    annotations: {}
+  ## @param metrics.prometheusRule.enabled Create PrometheusRule resource for alerting
+  ## @param metrics.prometheusRule.namespace Namespace for the PrometheusRule resource (defaults to Release namespace)
+  ## @param metrics.prometheusRule.labels Additional labels for the PrometheusRule
+  ## @param metrics.prometheusRule.annotations Additional annotations for the PrometheusRule
+  ## @param metrics.prometheusRule.interval Evaluation interval for rules
+  ## @param metrics.prometheusRule.rules Alert rules
+  prometheusRule:
+    enabled: false
+    namespace: ""
+    labels: {}
+    annotations: {}
+    interval: "30s"
+    rules: []

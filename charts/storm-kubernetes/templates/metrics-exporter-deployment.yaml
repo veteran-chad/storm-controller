@@ -1,0 +1,136 @@
+{{- if .Values.metrics.enabled }}
+apiVersion: {{ include "common.capabilities.deployment.apiVersion" . }}
+kind: Deployment
+metadata:
+  name: {{ include "common.names.fullname" . }}-metrics-exporter
+  namespace: {{ include "common.names.namespace" . | quote }}
+  labels: {{- include "common.labels.standard" ( dict "customLabels" .Values.commonLabels "context" $ ) | nindent 4 }}
+    app.kubernetes.io/component: metrics-exporter
+  {{- if .Values.commonAnnotations }}
+  annotations: {{- include "common.tplvalues.render" ( dict "value" .Values.commonAnnotations "context" $ ) | nindent 4 }}
+  {{- end }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels: {{- include "common.labels.matchLabels" ( dict "customLabels" .Values.commonLabels "context" $ ) | nindent 6 }}
+      app.kubernetes.io/component: metrics-exporter
+  template:
+    metadata:
+      annotations:
+        checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}
+        {{- if .Values.metrics.exporter.podAnnotations }}
+        {{- include "common.tplvalues.render" (dict "value" .Values.metrics.exporter.podAnnotations "context" $) | nindent 8 }}
+        {{- end }}
+      labels: {{- include "common.labels.standard" ( dict "customLabels" .Values.commonLabels "context" $ ) | nindent 8 }}
+        app.kubernetes.io/component: metrics-exporter
+        {{- if .Values.metrics.exporter.podLabels }}
+        {{- include "common.tplvalues.render" (dict "value" .Values.metrics.exporter.podLabels "context" $) | nindent 8 }}
+        {{- end }}
+    spec:
+      serviceAccountName: {{ include "storm.serviceAccountName" . }}
+      {{- include "common.images.renderPullSecrets" (dict "images" (list .Values.metrics.exporter.image) "context" $) | nindent 6 }}
+      {{- if .Values.podSecurityContext.enabled }}
+      securityContext: {{- omit .Values.podSecurityContext "enabled" | toYaml | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: metrics-exporter
+          image: {{ include "common.images.image" (dict "imageRoot" .Values.metrics.exporter.image "global" .Values.global) }}
+          imagePullPolicy: {{ .Values.metrics.exporter.image.pullPolicy }}
+          {{- if .Values.containerSecurityContext.enabled }}
+          securityContext: {{- omit .Values.containerSecurityContext "enabled" | toYaml | nindent 12 }}
+          {{- end }}
+          command:
+            - /bin/sh
+            - -c
+            - |
+              # Install required packages if using Alpine
+              if command -v apk > /dev/null; then
+                apk add --no-cache python3 py3-pip
+              fi
+              
+              # Create metrics endpoint script
+              cat > /tmp/serve_metrics.py <<'EOF'
+              from http.server import HTTPServer, BaseHTTPRequestHandler
+              import json
+              import urllib.request
+              import time
+              
+              class MetricsHandler(BaseHTTPRequestHandler):
+                  def do_GET(self):
+                      if self.path == '/metrics':
+                          try:
+                              # Fetch Storm cluster summary
+                              url = "http://{{ include "common.names.fullname" . }}-ui:{{ .Values.ui.ports.http }}/api/v1/cluster/summary"
+                              with urllib.request.urlopen(url) as response:
+                                  data = json.loads(response.read())
+                              
+                              # Generate Prometheus metrics
+                              metrics = []
+                              metrics.append("# HELP storm_supervisors_total Total number of supervisors")
+                              metrics.append("# TYPE storm_supervisors_total gauge")
+                              metrics.append(f"storm_supervisors_total {data.get('supervisors', 0)}")
+                              
+                              metrics.append("# HELP storm_topologies_total Total number of topologies")
+                              metrics.append("# TYPE storm_topologies_total gauge")
+                              metrics.append(f"storm_topologies_total {data.get('topologies', 0)}")
+                              
+                              metrics.append("# HELP storm_slots_total Total number of slots")
+                              metrics.append("# TYPE storm_slots_total gauge")
+                              metrics.append(f"storm_slots_total {data.get('slotsTotal', 0)}")
+                              
+                              metrics.append("# HELP storm_slots_used Number of used slots")
+                              metrics.append("# TYPE storm_slots_used gauge")
+                              metrics.append(f"storm_slots_used {data.get('slotsUsed', 0)}")
+                              
+                              metrics.append("# HELP storm_slots_free Number of free slots")
+                              metrics.append("# TYPE storm_slots_free gauge")
+                              metrics.append(f"storm_slots_free {data.get('slotsFree', 0)}")
+                              
+                              metrics.append("# HELP storm_memory_total_mb Total memory in MB")
+                              metrics.append("# TYPE storm_memory_total_mb gauge")
+                              metrics.append(f"storm_memory_total_mb {data.get('totalMem', 0)}")
+                              
+                              metrics.append("# HELP storm_memory_available_mb Available memory in MB")
+                              metrics.append("# TYPE storm_memory_available_mb gauge")
+                              metrics.append(f"storm_memory_available_mb {data.get('availMem', 0)}")
+                              
+                              metrics.append("# HELP storm_cpu_total Total CPU capacity")
+                              metrics.append("# TYPE storm_cpu_total gauge")
+                              metrics.append(f"storm_cpu_total {data.get('totalCpu', 0)}")
+                              
+                              metrics.append("# HELP storm_cpu_available Available CPU capacity")
+                              metrics.append("# TYPE storm_cpu_available gauge")
+                              metrics.append(f"storm_cpu_available {data.get('availCpu', 0)}")
+                              
+                              # Send response
+                              self.send_response(200)
+                              self.send_header('Content-Type', 'text/plain; version=0.0.4')
+                              self.end_headers()
+                              self.wfile.write('\n'.join(metrics).encode())
+                          except Exception as e:
+                              self.send_error(500, str(e))
+                      else:
+                          self.send_error(404)
+                  
+                  def log_message(self, format, *args):
+                      # Suppress access logs
+                      pass
+              
+              if __name__ == '__main__':
+                  server = HTTPServer(('0.0.0.0', {{ .Values.metrics.exporter.port }}), MetricsHandler)
+                  print(f"Metrics server listening on port {{ .Values.metrics.exporter.port }}")
+                  server.serve_forever()
+              EOF
+              
+              # Run the metrics server
+              python3 /tmp/serve_metrics.py
+          ports:
+            - name: metrics
+              containerPort: {{ .Values.metrics.exporter.port }}
+              protocol: TCP
+          {{- if .Values.metrics.exporter.resources }}
+          resources: {{- toYaml .Values.metrics.exporter.resources | nindent 12 }}
+          {{- else if ne .Values.metrics.exporter.resourcesPreset "none" }}
+          resources: {{- include "common.resources.preset" (dict "type" .Values.metrics.exporter.resourcesPreset) | nindent 12 }}
+          {{- end }}
+{{- end }}

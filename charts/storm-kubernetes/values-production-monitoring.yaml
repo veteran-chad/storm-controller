@@ -1,0 +1,61 @@
+# Production monitoring configuration for Storm Kubernetes
+
+# Enable metrics collection
+metrics:
+  enabled: true
+  
+  # Metrics exporter configuration
+  exporter:
+    # Use a lightweight Alpine image with wget and python
+    image:
+      registry: docker.io
+      repository: alpine
+      tag: latest
+    port: 9090
+    interval: 30
+    resources:
+      requests:
+        memory: "64Mi"
+        cpu: "50m"
+      limits:
+        memory: "128Mi"
+        cpu: "100m"
+  
+  # ServiceMonitor for Prometheus Operator
+  serviceMonitor:
+    enabled: true
+    namespace: ""  # Use release namespace
+    interval: "30s"
+    scrapeTimeout: "10s"
+    labels:
+      prometheus: kube-prometheus  # Match your Prometheus selector
+    selector: {}
+    relabelings: []
+    metricRelabelings: []
+    honorLabels: false
+    jobLabel: ""
+    annotations: {}
+  
+  # PrometheusRule for alerting
+  prometheusRule:
+    enabled: true
+    namespace: ""  # Use release namespace
+    labels:
+      prometheus: kube-prometheus  # Match your Prometheus selector
+    annotations: {}
+    interval: "30s"
+    rules: []  # Use default rules
+
+# Example Grafana ConfigMap for dashboard provisioning
+# Create this separately in your monitoring namespace:
+#
+# apiVersion: v1
+# kind: ConfigMap
+# metadata:
+#   name: storm-dashboards
+#   namespace: monitoring
+#   labels:
+#     grafana_dashboard: "1"
+# data:
+#   storm-overview.json: |
+#     <contents of files/dashboards/storm-overview.json>
