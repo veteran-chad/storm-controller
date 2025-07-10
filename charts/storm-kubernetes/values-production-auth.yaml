@@ -1,0 +1,139 @@
+# Production authentication configuration for Storm Kubernetes
+
+# Enable authentication
+auth:
+  enabled: true
+  
+  # Kerberos authentication configuration
+  kerberos:
+    enabled: true
+    
+    # Kerberos realm configuration
+    realm: PROD.EXAMPLE.COM
+    kdc: kdc1.prod.example.com
+    adminServer: kdc1.prod.example.com
+    
+    # DNS configuration
+    dnsLookupRealm: true
+    dnsLookupKdc: true
+    
+    # Ticket configuration
+    ticketLifetime: 24h
+    renewLifetime: 7d
+    forwardable: true
+    
+    # Additional krb5.conf settings
+    extraConfig: |
+      default_tgs_enctypes = aes256-cts-hmac-sha1-96 aes128-cts-hmac-sha1-96
+      default_tkt_enctypes = aes256-cts-hmac-sha1-96 aes128-cts-hmac-sha1-96
+      permitted_enctypes = aes256-cts-hmac-sha1-96 aes128-cts-hmac-sha1-96
+    
+    # Domain to realm mappings
+    domainRealm:
+      - domain: .prod.example.com
+        realm: PROD.EXAMPLE.COM
+      - domain: prod.example.com
+        realm: PROD.EXAMPLE.COM
+      - domain: .storm.prod.example.com
+        realm: PROD.EXAMPLE.COM
+    
+    # Keytab files (base64 encoded)
+    # Generate with: kadmin -q "ktadd -k storm.keytab storm/hostname@PROD.EXAMPLE.COM"
+    # Then base64 encode: base64 -w 0 storm.keytab
+    keytab: {}
+      # storm: <base64-encoded-storm-keytab>
+      # nimbus: <base64-encoded-nimbus-keytab>
+      # supervisor: <base64-encoded-supervisor-keytab>
+  
+  # JAAS configuration
+  jaas:
+    # StormServer configuration for Nimbus
+    stormServer: |
+      com.sun.security.auth.module.Krb5LoginModule required
+      useKeyTab=true
+      keyTab="/etc/security/keytabs/storm.keytab"
+      storeKey=true
+      useTicketCache=false
+      principal="storm/_HOST@PROD.EXAMPLE.COM"
+      debug=false;
+    
+    # StormClient configuration for workers/supervisors
+    stormClient: |
+      com.sun.security.auth.module.Krb5LoginModule required
+      useKeyTab=true
+      keyTab="/etc/security/keytabs/storm.keytab"
+      storeKey=true
+      useTicketCache=false
+      principal="storm/_HOST@PROD.EXAMPLE.COM"
+      debug=false;
+    
+    # Client configuration for Zookeeper
+    client: |
+      com.sun.security.auth.module.Krb5LoginModule required
+      useKeyTab=true
+      keyTab="/etc/security/keytabs/storm.keytab"
+      storeKey=true
+      useTicketCache=false
+      principal="storm/_HOST@PROD.EXAMPLE.COM"
+      debug=false;
+  
+  # SASL configuration for Kafka integration
+  sasl:
+    enabled: true
+    mechanism: "GSSAPI"  # Use Kerberos for Kafka
+    kerberosPrincipal: "storm/_HOST@PROD.EXAMPLE.COM"
+
+# Update Storm configuration for authentication
+stormConfig:
+  # Kerberos authentication settings
+  storm.thrift.transport: "org.apache.storm.security.auth.kerberos.KerberosSaslTransportPlugin"
+  storm.principal.tolocal: "org.apache.storm.security.auth.KerberosPrincipalToLocal"
+  storm.zookeeper.auth.scheme: "sasl"
+  storm.zookeeper.auth.payload: ""
+  
+  # ACL settings
+  nimbus.admins:
+    - "admin"
+    - "storm"
+  nimbus.supervisor.users:
+    - "supervisor"
+  nimbus.users:
+    - "storm-user"
+  
+  # UI authentication
+  ui.filter: "org.apache.storm.security.auth.KerberosPrincipalToLocal"
+  ui.filter.params:
+    type: "kerberos"
+    kerberos.principal: "HTTP/_HOST@PROD.EXAMPLE.COM"
+    kerberos.keytab: "/etc/security/keytabs/http.keytab"
+  
+  # DRPC authentication
+  drpc.authorizer: "org.apache.storm.security.auth.authorizer.DRPCSimpleACLAuthorizer"
+  drpc.authorizer.acl.strict: true
+
+# Example: Simple authentication without Kerberos
+# auth:
+#   enabled: true
+#   kerberos:
+#     enabled: false
+#   
+# stormConfig:
+#   storm.thrift.transport: "org.apache.storm.security.auth.SimpleTransportPlugin"
+#   storm.principal.tolocal: "org.apache.storm.security.auth.DefaultPrincipalToLocal"
+#   nimbus.admins:
+#     - "admin"
+#   nimbus.supervisor.users:
+#     - "supervisor"
+
+# Example: SASL/PLAIN for Kafka
+# auth:
+#   sasl:
+#     enabled: true
+#     mechanism: "PLAIN"
+#     username: "storm-user"
+#     password: "storm-password"
+# 
+# stormConfig:
+#   # Kafka SASL configuration
+#   storm.kafka.client.sasl.mechanism: "PLAIN"
+#   storm.kafka.client.security.protocol: "SASL_PLAINTEXT"

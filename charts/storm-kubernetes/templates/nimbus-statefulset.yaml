@@ -177,6 +177,16 @@ spec:
             - name: data
               mountPath: {{ .Values.nimbus.persistence.mountPath }}
             {{- end }}
+            {{- if .Values.auth.enabled }}
+            - name: storm-auth
+              mountPath: /etc/storm/auth
+              readOnly: true
+            {{- if .Values.auth.kerberos.keytab }}
+            - name: storm-keytab
+              mountPath: /etc/security/keytabs
+              readOnly: true
+            {{- end }}
+            {{- end }}
             {{- if .Values.nimbus.extraVolumeMounts }}
             {{- include "common.tplvalues.render" (dict "value" .Values.nimbus.extraVolumeMounts "context" $) | nindent 12 }}
             {{- end }}
@@ -189,6 +199,16 @@ spec:
             name: {{ include "common.names.fullname" . }}
         - name: logs
           emptyDir: {}
+        {{- if .Values.auth.enabled }}
+        - name: storm-auth
+          configMap:
+            name: {{ include "common.names.fullname" . }}-auth
+        {{- if .Values.auth.kerberos.keytab }}
+        - name: storm-keytab
+          secret:
+            secretName: {{ include "common.names.fullname" . }}-keytab
+        {{- end }}
+        {{- end }}
         {{- if .Values.nimbus.extraVolumes }}
         {{- include "common.tplvalues.render" (dict "value" .Values.nimbus.extraVolumes "context" $) | nindent 8 }}
         {{- end }}

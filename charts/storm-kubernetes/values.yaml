@@ -1143,3 +1143,73 @@ metrics:
     annotations: {}
     interval: "30s"
     rules: []
+
+## @section Authentication parameters
+## @param auth.enabled Enable authentication
+## @param auth.kerberos.enabled Enable Kerberos authentication
+## @param auth.kerberos.realm Kerberos realm
+## @param auth.kerberos.kdc Kerberos KDC server
+## @param auth.kerberos.adminServer Kerberos admin server
+## @param auth.kerberos.dnsLookupRealm Enable DNS lookup for realm
+## @param auth.kerberos.dnsLookupKdc Enable DNS lookup for KDC
+## @param auth.kerberos.ticketLifetime Ticket lifetime
+## @param auth.kerberos.renewLifetime Ticket renewal lifetime
+## @param auth.kerberos.forwardable Make tickets forwardable
+## @param auth.kerberos.extraConfig Extra krb5.conf configuration
+## @param auth.kerberos.realmExtraConfig Extra realm configuration
+## @param auth.kerberos.domainRealm Domain to realm mappings
+## @param auth.kerberos.keytab Keytab files (principal -> base64 encoded keytab)
+auth:
+  enabled: false
+  ## Kerberos authentication
+  kerberos:
+    enabled: false
+    realm: EXAMPLE.COM
+    kdc: kerberos.example.com
+    adminServer: kerberos.example.com
+    dnsLookupRealm: false
+    dnsLookupKdc: false
+    ticketLifetime: 24h
+    renewLifetime: 7d
+    forwardable: true
+    extraConfig: ""
+    realmExtraConfig: ""
+    domainRealm:
+      - domain: .example.com
+        realm: EXAMPLE.COM
+      - domain: example.com
+        realm: EXAMPLE.COM
+    ## Keytab files for principals
+    ## Example:
+    ## keytab:
+    ##   storm: <base64-encoded-keytab>
+    ##   nimbus: <base64-encoded-keytab>
+    keytab: {}
+  ## JAAS configuration
+  ## @param auth.jaas.stormServer StormServer JAAS configuration
+  ## @param auth.jaas.stormClient StormClient JAAS configuration
+  ## @param auth.jaas.client Client JAAS configuration
+  jaas:
+    ## Example Kerberos configuration:
+    ## stormServer: |
+    ##   com.sun.security.auth.module.Krb5LoginModule required
+    ##   useKeyTab=true
+    ##   keyTab="/etc/security/keytabs/storm.keytab"
+    ##   storeKey=true
+    ##   useTicketCache=false
+    ##   principal="storm/hostname@EXAMPLE.COM";
+    stormServer: ""
+    stormClient: ""
+    client: ""
+  ## SASL configuration (for Kafka integration)
+  ## @param auth.sasl.enabled Enable SASL authentication
+  ## @param auth.sasl.mechanism SASL mechanism (PLAIN, SCRAM-SHA-256, SCRAM-SHA-512, GSSAPI)
+  ## @param auth.sasl.username SASL username
+  ## @param auth.sasl.password SASL password
+  ## @param auth.sasl.kerberosPrincipal Kerberos principal for GSSAPI
+  sasl:
+    enabled: false
+    mechanism: "PLAIN"
+    username: ""
+    password: ""
+    kerberosPrincipal: ""

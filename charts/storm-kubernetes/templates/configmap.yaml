@@ -115,6 +115,22 @@ data:
     {{- if .Values.clusterConfig }}
     {{- include "storm.renderClusterConfig" . | nindent 4 }}
     {{- end }}
+    
+    # Authentication configuration
+    {{- if .Values.auth.enabled }}
+    {{- if .Values.auth.kerberos.enabled }}
+    # Kerberos authentication
+    storm.thrift.transport: "org.apache.storm.security.auth.kerberos.KerberosSaslTransportPlugin"
+    java.security.auth.login.config: "/etc/storm/auth/storm_jaas.conf"
+    java.security.krb5.conf: "/etc/storm/auth/krb5.conf"
+    storm.principal.tolocal: "org.apache.storm.security.auth.KerberosPrincipalToLocal"
+    storm.zookeeper.auth.scheme: "sasl"
+    storm.zookeeper.auth.payload: ""
+    {{- else }}
+    # Simple authentication
+    storm.thrift.transport: "org.apache.storm.security.auth.SimpleTransportPlugin"
+    {{- end }}
+    {{- end }}
   
   log4j2.xml: |
     <?xml version="1.0" encoding="UTF-8"?>

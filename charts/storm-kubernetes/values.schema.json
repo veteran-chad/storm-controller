@@ -948,6 +948,137 @@
           }
         }
       }
+    },
+    "auth": {
+      "type": "object",
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "description": "Enable authentication",
+          "default": false
+        },
+        "kerberos": {
+          "type": "object",
+          "properties": {
+            "enabled": {
+              "type": "boolean",
+              "description": "Enable Kerberos authentication",
+              "default": false
+            },
+            "realm": {
+              "type": "string",
+              "description": "Kerberos realm",
+              "default": "EXAMPLE.COM"
+            },
+            "kdc": {
+              "type": "string",
+              "description": "Kerberos KDC server"
+            },
+            "adminServer": {
+              "type": "string",
+              "description": "Kerberos admin server"
+            },
+            "dnsLookupRealm": {
+              "type": "boolean",
+              "description": "Enable DNS lookup for realm",
+              "default": false
+            },
+            "dnsLookupKdc": {
+              "type": "boolean",
+              "description": "Enable DNS lookup for KDC",
+              "default": false
+            },
+            "ticketLifetime": {
+              "type": "string",
+              "description": "Ticket lifetime",
+              "default": "24h"
+            },
+            "renewLifetime": {
+              "type": "string",
+              "description": "Ticket renewal lifetime",
+              "default": "7d"
+            },
+            "forwardable": {
+              "type": "boolean",
+              "description": "Make tickets forwardable",
+              "default": true
+            },
+            "extraConfig": {
+              "type": "string",
+              "description": "Extra krb5.conf configuration"
+            },
+            "realmExtraConfig": {
+              "type": "string",
+              "description": "Extra realm configuration"
+            },
+            "domainRealm": {
+              "type": "array",
+              "description": "Domain to realm mappings",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "domain": {
+                    "type": "string"
+                  },
+                  "realm": {
+                    "type": "string"
+                  }
+                },
+                "required": ["domain", "realm"]
+              }
+            },
+            "keytab": {
+              "type": "object",
+              "description": "Keytab files (principal -> base64 encoded keytab)"
+            }
+          }
+        },
+        "jaas": {
+          "type": "object",
+          "properties": {
+            "stormServer": {
+              "type": "string",
+              "description": "StormServer JAAS configuration"
+            },
+            "stormClient": {
+              "type": "string",
+              "description": "StormClient JAAS configuration"
+            },
+            "client": {
+              "type": "string",
+              "description": "Client JAAS configuration"
+            }
+          }
+        },
+        "sasl": {
+          "type": "object",
+          "properties": {
+            "enabled": {
+              "type": "boolean",
+              "description": "Enable SASL authentication",
+              "default": false
+            },
+            "mechanism": {
+              "type": "string",
+              "description": "SASL mechanism",
+              "enum": ["PLAIN", "SCRAM-SHA-256", "SCRAM-SHA-512", "GSSAPI"],
+              "default": "PLAIN"
+            },
+            "username": {
+              "type": "string",
+              "description": "SASL username"
+            },
+            "password": {
+              "type": "string",
+              "description": "SASL password"
+            },
+            "kerberosPrincipal": {
+              "type": "string",
+              "description": "Kerberos principal for GSSAPI"
+            }
+          }
+        }
+      }
     }
   }
 }

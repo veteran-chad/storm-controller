@@ -1,0 +1,85 @@
+{{- if .Values.auth.enabled }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "common.names.fullname" . }}-auth
+  namespace: {{ include "common.names.namespace" . | quote }}
+  labels: {{- include "common.labels.standard" ( dict "customLabels" .Values.commonLabels "context" $ ) | nindent 4 }}
+  {{- if .Values.commonAnnotations }}
+  annotations: {{- include "common.tplvalues.render" ( dict "value" .Values.commonAnnotations "context" $ ) | nindent 4 }}
+  {{- end }}
+data:
+  {{- if .Values.auth.kerberos.enabled }}
+  krb5.conf: |
+    [libdefaults]
+      default_realm = {{ .Values.auth.kerberos.realm }}
+      dns_lookup_realm = {{ .Values.auth.kerberos.dnsLookupRealm }}
+      dns_lookup_kdc = {{ .Values.auth.kerberos.dnsLookupKdc }}
+      ticket_lifetime = {{ .Values.auth.kerberos.ticketLifetime }}
+      renew_lifetime = {{ .Values.auth.kerberos.renewLifetime }}
+      forwardable = {{ .Values.auth.kerberos.forwardable }}
+      {{- if .Values.auth.kerberos.extraConfig }}
+      {{- .Values.auth.kerberos.extraConfig | nindent 6 }}
+      {{- end }}
+
+    [realms]
+      {{ .Values.auth.kerberos.realm }} = {
+        kdc = {{ .Values.auth.kerberos.kdc }}
+        admin_server = {{ .Values.auth.kerberos.adminServer }}
+        {{- if .Values.auth.kerberos.realmExtraConfig }}
+        {{- .Values.auth.kerberos.realmExtraConfig | nindent 8 }}
+        {{- end }}
+      }
+
+    [domain_realm]
+      {{- range .Values.auth.kerberos.domainRealm }}
+      {{ .domain }} = {{ .realm }}
+      {{- end }}
+
+  storm_jaas.conf: |
+    {{- if .Values.auth.jaas.stormServer }}
+    StormServer {
+      {{ .Values.auth.jaas.stormServer | indent 6 | trim }}
+    };
+    {{- end }}
+
+    {{- if .Values.auth.jaas.stormClient }}
+    StormClient {
+      {{ .Values.auth.jaas.stormClient | indent 6 | trim }}
+    };
+    {{- end }}
+
+    {{- if .Values.auth.jaas.client }}
+    Client {
+      {{ .Values.auth.jaas.client | indent 6 | trim }}
+    };
+    {{- end }}
+  {{- end }}
+
+  {{- if .Values.auth.sasl.enabled }}
+  sasl_jaas.conf: |
+    {{- if .Values.auth.sasl.mechanism }}
+    KafkaClient {
+      {{- if eq .Values.auth.sasl.mechanism "PLAIN" }}
+      org.apache.kafka.common.security.plain.PlainLoginModule required
+        username="{{ .Values.auth.sasl.username }}"
+        password="{{ .Values.auth.sasl.password }}";
+      {{- else if eq .Values.auth.sasl.mechanism "SCRAM-SHA-256" }}
+      org.apache.kafka.common.security.scram.ScramLoginModule required
+        username="{{ .Values.auth.sasl.username }}"
+        password="{{ .Values.auth.sasl.password }}";
+      {{- else if eq .Values.auth.sasl.mechanism "SCRAM-SHA-512" }}
+      org.apache.kafka.common.security.scram.ScramLoginModule required
+        username="{{ .Values.auth.sasl.username }}"
+        password="{{ .Values.auth.sasl.password }}";
+      {{- else if eq .Values.auth.sasl.mechanism "GSSAPI" }}
+      com.sun.security.auth.module.Krb5LoginModule required
+        useKeyTab=true
+        storeKey=true
+        keyTab="/etc/security/keytabs/kafka.keytab"
+        principal="{{ .Values.auth.sasl.kerberosPrincipal }}";
+      {{- end }}
+    };
+    {{- end }}
+  {{- end }}
+{{- end }}
