@@ -66,6 +66,9 @@ spec:
         - name: wait-for-nimbus
           image: {{ include "common.images.image" (dict "imageRoot" .Values.waitContainer.image "global" .Values.global) }}
           imagePullPolicy: {{ .Values.waitContainer.image.pullPolicy }}
+          {{- if .Values.containerSecurityContext.enabled }}
+          securityContext: {{- omit .Values.containerSecurityContext "enabled" | toYaml | nindent 12 }}
+          {{- end }}
           command:
             - /bin/sh
             - -c

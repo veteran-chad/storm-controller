@@ -51,9 +51,9 @@ rbac:
 ## @param podSecurityContext.seccompProfile.type Set seccomp profile
 podSecurityContext:
   enabled: true
-  fsGroup: 1000
-  runAsUser: 1000
-  runAsGroup: 1000
+  fsGroup: 1000     # Storm user in official image
+  runAsUser: 1000   # Storm user in official image
+  runAsGroup: 1000  # Storm group in official image
   runAsNonRoot: true
   seccompProfile:
     type: RuntimeDefault
@@ -66,7 +66,7 @@ podSecurityContext:
 ## @param containerSecurityContext.capabilities.drop List of capabilities to drop
 containerSecurityContext:
   enabled: true
-  runAsUser: 1000
+  runAsUser: 1000  # Storm user in official image
   runAsNonRoot: true
   allowPrivilegeEscalation: false
   readOnlyRootFilesystem: false
