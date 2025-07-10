@@ -6,11 +6,11 @@ metrics:
   
   # Metrics exporter configuration
   exporter:
-    # Use a lightweight Alpine image with wget and python
+    # Use Python Alpine image
     image:
       registry: docker.io
-      repository: alpine
-      tag: latest
+      repository: python
+      tag: 3.11-alpine
     port: 9090
     interval: 30
     resources:

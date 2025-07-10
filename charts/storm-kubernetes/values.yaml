@@ -308,6 +308,15 @@ ui:
   ##   ui.disable.http.binding: true
   ##   ui.disable.spout.lag.monitoring: true
   extraConfig: {}
+  ## @param ui.pdb.create Enable PodDisruptionBudget for UI
+  ## @param ui.pdb.minAvailable Minimum available UI instances
+  ## @param ui.pdb.maxUnavailable Maximum unavailable UI instances
+  ## @param ui.pdb.unhealthyPodEvictionPolicy Eviction policy for unhealthy pods
+  pdb:
+    create: false
+    minAvailable: 1
+    maxUnavailable: ""
+    unhealthyPodEvictionPolicy: "IfHealthyBudget"
 
 ## @section Storm Nimbus parameters
 ## @param nimbus.enabled Deploy Storm Nimbus
@@ -503,6 +512,15 @@ nimbus:
   ##   nimbus.file.copy.expiration.secs: 600
   ##   nimbus.topology.validator: "org.apache.storm.nimbus.DefaultTopologyValidator"
   extraConfig: {}
+  ## @param nimbus.pdb.create Enable PodDisruptionBudget for Nimbus
+  ## @param nimbus.pdb.minAvailable Minimum available Nimbus instances
+  ## @param nimbus.pdb.maxUnavailable Maximum unavailable Nimbus instances
+  ## @param nimbus.pdb.unhealthyPodEvictionPolicy Eviction policy for unhealthy pods
+  pdb:
+    create: false
+    minAvailable: ""
+    maxUnavailable: 1
+    unhealthyPodEvictionPolicy: "IfHealthyBudget"
 
 ## @section Storm Supervisor parameters
 ## @param supervisor.enabled Deploy Storm Supervisor
@@ -698,6 +716,15 @@ supervisor:
   ##   supervisor.blobstore.class: "org.apache.storm.blobstore.NimbusBlobStore"
   ##   supervisor.blobstore.download.thread.count: 5
   extraConfig: {}
+  ## @param supervisor.pdb.create Enable PodDisruptionBudget for Supervisor
+  ## @param supervisor.pdb.minAvailable Minimum available Supervisor instances
+  ## @param supervisor.pdb.maxUnavailable Maximum unavailable Supervisor instances
+  ## @param supervisor.pdb.unhealthyPodEvictionPolicy Eviction policy for unhealthy pods
+  pdb:
+    create: false
+    minAvailable: 1
+    maxUnavailable: ""
+    unhealthyPodEvictionPolicy: "IfHealthyBudget"
 
 ## @section Zookeeper parameters
 ## @param zookeeper.enabled Deploy Zookeeper as a dependency

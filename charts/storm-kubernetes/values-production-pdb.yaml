@@ -1,0 +1,55 @@
+# Production PodDisruptionBudget configuration for Storm Kubernetes
+
+# UI PodDisruptionBudget
+ui:
+  # For UI, we usually have multiple replicas for HA
+  replicaCount: 2
+  pdb:
+    create: true
+    # Ensure at least 1 UI is always available
+    minAvailable: 1
+    # Allow unhealthy pods to be evicted if healthy budget is maintained
+    unhealthyPodEvictionPolicy: "IfHealthyBudget"
+
+# Nimbus PodDisruptionBudget
+nimbus:
+  # For Nimbus, we need at least 1 for HA (3 for production)
+  replicaCount: 3
+  pdb:
+    create: true
+    # Ensure at least 2 Nimbus instances are always available
+    minAvailable: 2
+    # Allow unhealthy pods to be evicted
+    unhealthyPodEvictionPolicy: "IfHealthyBudget"
+
+# Supervisor PodDisruptionBudget
+supervisor:
+  # Multiple supervisors for workload distribution
+  replicaCount: 3
+  pdb:
+    create: true
+    # Allow up to 1 supervisor to be unavailable
+    # This ensures rolling updates work smoothly
+    maxUnavailable: 1
+    # Allow unhealthy pods to be evicted
+    unhealthyPodEvictionPolicy: "IfHealthyBudget"
+
+# Zookeeper also needs PDB for production
+zookeeper:
+  enabled: true
+  replicaCount: 3
+  pdb:
+    create: true
+    # For a 3-node ZK cluster, ensure quorum is maintained
+    maxUnavailable: 1
+
+# Additional production settings
+# Enable anti-affinity to spread pods across nodes
+ui:
+  podAntiAffinityPreset: hard
+
+nimbus:
+  podAntiAffinityPreset: hard
+
+supervisor:
+  podAntiAffinityPreset: hard
