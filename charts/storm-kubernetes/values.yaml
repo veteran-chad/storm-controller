@@ -24,6 +24,74 @@ commonAnnotations: {}
 ## @param commonLabels Labels to add to all deployed objects
 commonLabels: {}
 
+## @section Security parameters
+## @param serviceAccount.create Enable creation of ServiceAccount for Storm pods
+## @param serviceAccount.name The name of the ServiceAccount to use
+## @param serviceAccount.automountServiceAccountToken Automount service account token for the server service account
+## @param serviceAccount.annotations Annotations for service account. Evaluated as a template
+## @param serviceAccount.labels Labels for service account. Evaluated as a template
+serviceAccount:
+  create: true
+  name: ""
+  automountServiceAccountToken: true
+  annotations: {}
+  labels: {}
+
+## @param rbac.create Create Role and RoleBinding
+## @param rbac.rules Custom RBAC rules to set
+rbac:
+  create: true
+  rules: []
+
+## @param podSecurityContext.enabled Enable security context for Storm pods
+## @param podSecurityContext.fsGroup Set filesystem group
+## @param podSecurityContext.runAsUser Set user ID
+## @param podSecurityContext.runAsGroup Set group ID
+## @param podSecurityContext.runAsNonRoot Set container must run as non-root user
+## @param podSecurityContext.seccompProfile.type Set seccomp profile
+podSecurityContext:
+  enabled: true
+  fsGroup: 1000
+  runAsUser: 1000
+  runAsGroup: 1000
+  runAsNonRoot: true
+  seccompProfile:
+    type: RuntimeDefault
+
+## @param containerSecurityContext.enabled Enable security context for containers
+## @param containerSecurityContext.runAsUser Set containers' user ID
+## @param containerSecurityContext.runAsNonRoot Set container must run as non-root user
+## @param containerSecurityContext.allowPrivilegeEscalation Set privilege escalation
+## @param containerSecurityContext.readOnlyRootFilesystem Set read-only root filesystem
+## @param containerSecurityContext.capabilities.drop List of capabilities to drop
+containerSecurityContext:
+  enabled: true
+  runAsUser: 1000
+  runAsNonRoot: true
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: false
+  capabilities:
+    drop:
+      - ALL
+
+## @param networkPolicy.enabled Enable NetworkPolicy
+## @param networkPolicy.allowExternalUI Allow external access to Storm UI
+## @param networkPolicy.allowExternalZookeeper Allow external access to Zookeeper
+## @param networkPolicy.allowedNamespaces Allow traffic from specific namespaces
+## @param networkPolicy.customIngress Custom ingress rules
+## @param networkPolicy.customEgress Custom egress rules
+networkPolicy:
+  enabled: false
+  allowExternalUI: true
+  allowExternalZookeeper: true
+  allowedNamespaces: []
+  customIngress: []
+  customEgress: []
+
+## @param podSecurityPolicy.create Create PodSecurityPolicy resources
+podSecurityPolicy:
+  create: false
+
 ## @section Wait Container parameters
 ## Configuration for init containers that wait for dependencies
 ## @param waitContainer.image.registry Wait container image registry

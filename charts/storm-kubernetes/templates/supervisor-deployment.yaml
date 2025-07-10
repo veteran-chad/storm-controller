@@ -30,9 +30,13 @@ spec:
         {{- include "common.tplvalues.render" (dict "value" .Values.supervisor.podLabels "context" $) | nindent 8 }}
         {{- end }}
     spec:
+      serviceAccountName: {{ include "storm.serviceAccountName" . }}
       {{- include "common.images.renderPullSecrets" (dict "images" (list .Values.supervisor.image) "context" $) | nindent 6 }}
       {{- if .Values.supervisor.hostAliases }}
       hostAliases: {{- include "common.tplvalues.render" (dict "value" .Values.supervisor.hostAliases "context" $) | nindent 8 }}
+      {{- end }}
+      {{- if .Values.podSecurityContext.enabled }}
+      securityContext: {{- omit .Values.podSecurityContext "enabled" | toYaml | nindent 8 }}
       {{- end }}
       {{- if .Values.supervisor.affinity }}
       affinity: {{- include "common.tplvalues.render" ( dict "value" .Values.supervisor.affinity "context" $) | nindent 8 }}
@@ -92,6 +96,9 @@ spec:
           {{- end }}
           {{- if .Values.supervisor.args }}
           args: {{- include "common.tplvalues.render" (dict "value" .Values.supervisor.args "context" $) | nindent 12 }}
+          {{- end }}
+          {{- if .Values.containerSecurityContext.enabled }}
+          securityContext: {{- omit .Values.containerSecurityContext "enabled" | toYaml | nindent 12 }}
           {{- end }}
           env:
             - name: STORM_CONF_DIR
