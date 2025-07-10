@@ -317,6 +317,40 @@ ui:
     minAvailable: 1
     maxUnavailable: ""
     unhealthyPodEvictionPolicy: "IfHealthyBudget"
+  ## @param ui.ingress.enabled Enable ingress for Storm UI
+  ## @param ui.ingress.pathType Ingress path type
+  ## @param ui.ingress.apiVersion Force Ingress API version (automatically detected if not set)
+  ## @param ui.ingress.hostname Default host for the ingress resource
+  ## @param ui.ingress.ingressClassName IngressClass that will be be used to implement the Ingress (Kubernetes 1.18+)
+  ## @param ui.ingress.path Default path for the ingress resource
+  ## @param ui.ingress.annotations Additional annotations for the Ingress resource
+  ## @param ui.ingress.tls Enable TLS configuration for the host defined at `ui.ingress.hostname`
+  ## @param ui.ingress.selfSigned Create a TLS secret for this ingress record using self-signed certificates
+  ## @param ui.ingress.extraHosts An array with additional hostname(s) to be covered with the ingress record
+  ## @param ui.ingress.extraPaths Any additional paths that may need to be added to the ingress under the main host
+  ## @param ui.ingress.extraTls TLS configuration for additional hostname(s) to be covered with this ingress
+  ## @param ui.ingress.secrets Custom TLS certificates as secrets
+  ## @param ui.ingress.extraRules Additional rules to be covered with this ingress record
+  ingress:
+    enabled: false
+    pathType: ImplementationSpecific
+    apiVersion: ""
+    hostname: storm-ui.local
+    ingressClassName: ""
+    path: /
+    annotations: {}
+      # kubernetes.io/ingress.class: nginx
+      # kubernetes.io/tls-acme: "true"
+      # nginx.ingress.kubernetes.io/force-ssl-redirect: "true"
+      # nginx.ingress.kubernetes.io/ssl-protocols: "TLSv1.2 TLSv1.3"
+      # nginx.ingress.kubernetes.io/ssl-ciphers: "ECDHE-ECDSA-AES128-GCM-SHA256,ECDHE-RSA-AES128-GCM-SHA256"
+    tls: false
+    selfSigned: false
+    extraHosts: []
+    extraPaths: []
+    extraTls: []
+    secrets: []
+    extraRules: []
 
 ## @section Storm Nimbus parameters
 ## @param nimbus.enabled Deploy Storm Nimbus

@@ -1,0 +1,95 @@
+# Production Ingress configuration for Storm Kubernetes
+
+ui:
+  # Enable ingress for Storm UI
+  ingress:
+    enabled: true
+    
+    # Use nginx ingress controller (most common)
+    ingressClassName: "nginx"
+    
+    # Production hostname
+    hostname: storm.example.com
+    
+    # Enable TLS
+    tls: true
+    
+    # Don't use self-signed in production
+    selfSigned: false
+    
+    # Production annotations
+    annotations:
+      # Nginx specific annotations
+      nginx.ingress.kubernetes.io/force-ssl-redirect: "true"
+      nginx.ingress.kubernetes.io/ssl-protocols: "TLSv1.2 TLSv1.3"
+      nginx.ingress.kubernetes.io/ssl-ciphers: "ECDHE-ECDSA-AES128-GCM-SHA256,ECDHE-RSA-AES128-GCM-SHA256,ECDHE-ECDSA-AES256-GCM-SHA384,ECDHE-RSA-AES256-GCM-SHA384"
+      
+      # Security headers
+      nginx.ingress.kubernetes.io/configuration-snippet: |
+        more_set_headers "X-Frame-Options: DENY";
+        more_set_headers "X-Content-Type-Options: nosniff";
+        more_set_headers "X-XSS-Protection: 1; mode=block";
+        more_set_headers "Referrer-Policy: strict-origin-when-cross-origin";
+        more_set_headers "Content-Security-Policy: default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline';";
+      
+      # Rate limiting
+      nginx.ingress.kubernetes.io/limit-rps: "100"
+      nginx.ingress.kubernetes.io/limit-connections: "50"
+      
+      # Proxy settings for Storm UI
+      nginx.ingress.kubernetes.io/proxy-body-size: "50m"
+      nginx.ingress.kubernetes.io/proxy-connect-timeout: "600"
+      nginx.ingress.kubernetes.io/proxy-send-timeout: "600"
+      nginx.ingress.kubernetes.io/proxy-read-timeout: "600"
+      
+      # WebSocket support (for Storm UI real-time updates)
+      nginx.ingress.kubernetes.io/websocket-services: "storm-ui"
+      nginx.ingress.kubernetes.io/proxy-http-version: "1.1"
+      nginx.ingress.kubernetes.io/proxy-set-headers: |
+        Upgrade $http_upgrade;
+        Connection "upgrade";
+      
+      # Enable CORS if needed
+      nginx.ingress.kubernetes.io/enable-cors: "true"
+      nginx.ingress.kubernetes.io/cors-allow-methods: "GET, POST, OPTIONS"
+      nginx.ingress.kubernetes.io/cors-allow-headers: "DNT,X-CustomHeader,Keep-Alive,User-Agent,X-Requested-With,If-Modified-Since,Cache-Control,Content-Type,Authorization"
+      
+      # cert-manager integration (if using cert-manager)
+      cert-manager.io/cluster-issuer: "letsencrypt-prod"
+      cert-manager.io/acme-challenge-type: "http01"
+    
+    # Additional hosts if needed
+    extraHosts: []
+    # - name: storm-staging.example.com
+    #   path: /
+    
+    # Custom TLS configuration
+    extraTls: []
+    # - hosts:
+    #     - storm.example.com
+    #   secretName: storm-tls-secret
+
+# For development/testing with self-signed certificates
+# ui:
+#   ingress:
+#     enabled: true
+#     hostname: storm.local
+#     tls: true
+#     selfSigned: true
+#     annotations:
+#       nginx.ingress.kubernetes.io/ssl-redirect: "false"
+
+# For AWS ALB Ingress Controller
+# ui:
+#   ingress:
+#     enabled: true
+#     ingressClassName: "alb"
+#     hostname: storm.example.com
+#     annotations:
+#       alb.ingress.kubernetes.io/scheme: "internet-facing"
+#       alb.ingress.kubernetes.io/target-type: "ip"
+#       alb.ingress.kubernetes.io/listen-ports: '[{"HTTP": 80}, {"HTTPS": 443}]'
+#       alb.ingress.kubernetes.io/ssl-redirect: '443'
+#       alb.ingress.kubernetes.io/certificate-arn: "arn:aws:acm:region:account:certificate/cert-id"
+#       alb.ingress.kubernetes.io/healthcheck-path: "/"
+#       alb.ingress.kubernetes.io/success-codes: "200,302"
