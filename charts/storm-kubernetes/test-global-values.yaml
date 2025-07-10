@@ -1,0 +1,38 @@
+# Test values file for testing global overrides
+
+# Global settings that should override component settings
+global:
+  imageRegistry: "test-registry.example.com"
+  imagePullSecrets:
+    - test-pull-secret-1
+    - test-pull-secret-2
+  storageClass: "test-storage-class"
+
+# Enable tests
+tests:
+  enabled: true
+
+# Minimal configuration for testing
+cluster:
+  enabled: true
+
+ui:
+  enabled: true
+  replicaCount: 1
+
+nimbus:
+  enabled: true
+  replicaCount: 1
+  # Don't override image registry here - should use global
+  image:
+    repository: storm
+    tag: 2.8.1
+
+supervisor:
+  enabled: true
+  replicaCount: 1
+  slotsPerSupervisor: 1
+
+zookeeper:
+  enabled: true
+  replicaCount: 1

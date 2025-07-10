@@ -1,0 +1,213 @@
+{{- if .Values.nimbus.enabled }}
+apiVersion: {{ include "common.capabilities.statefulset.apiVersion" . }}
+kind: StatefulSet
+metadata:
+  name: {{ include "common.names.fullname" . }}-nimbus
+  namespace: {{ include "common.names.namespace" . | quote }}
+  labels: {{- include "common.labels.standard" ( dict "customLabels" .Values.commonLabels "context" $ ) | nindent 4 }}
+    app.kubernetes.io/component: nimbus
+  {{- if .Values.commonAnnotations }}
+  annotations: {{- include "common.tplvalues.render" ( dict "value" .Values.commonAnnotations "context" $ ) | nindent 4 }}
+  {{- end }}
+spec:
+  replicas: {{ .Values.nimbus.replicaCount }}
+  serviceName: {{ include "common.names.fullname" . }}-nimbus-headless
+  {{- if .Values.nimbus.updateStrategy }}
+  updateStrategy: {{- toYaml .Values.nimbus.updateStrategy | nindent 4 }}
+  {{- end }}
+  selector:
+    matchLabels: {{- include "common.labels.matchLabels" ( dict "customLabels" .Values.commonLabels "context" $ ) | nindent 6 }}
+      app.kubernetes.io/component: nimbus
+  template:
+    metadata:
+      annotations:
+        checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}
+        {{- if .Values.nimbus.podAnnotations }}
+        {{- include "common.tplvalues.render" (dict "value" .Values.nimbus.podAnnotations "context" $) | nindent 8 }}
+        {{- end }}
+      labels: {{- include "common.labels.standard" ( dict "customLabels" .Values.commonLabels "context" $ ) | nindent 8 }}
+        app.kubernetes.io/component: nimbus
+        {{- if .Values.nimbus.podLabels }}
+        {{- include "common.tplvalues.render" (dict "value" .Values.nimbus.podLabels "context" $) | nindent 8 }}
+        {{- end }}
+    spec:
+      {{- include "common.images.renderPullSecrets" (dict "images" (list .Values.nimbus.image) "context" $) | nindent 6 }}
+      {{- if .Values.nimbus.hostAliases }}
+      hostAliases: {{- include "common.tplvalues.render" (dict "value" .Values.nimbus.hostAliases "context" $) | nindent 8 }}
+      {{- end }}
+      {{- if .Values.nimbus.affinity }}
+      affinity: {{- include "common.tplvalues.render" ( dict "value" .Values.nimbus.affinity "context" $) | nindent 8 }}
+      {{- else }}
+      affinity:
+        podAffinity: {{- include "common.affinities.pods" (dict "type" .Values.nimbus.podAffinityPreset "component" "nimbus" "context" $) | nindent 10 }}
+        podAntiAffinity: {{- include "common.affinities.pods" (dict "type" .Values.nimbus.podAntiAffinityPreset "component" "nimbus" "context" $) | nindent 10 }}
+        nodeAffinity: {{- include "common.affinities.nodes" (dict "type" .Values.nimbus.nodeAffinityPreset.type "key" .Values.nimbus.nodeAffinityPreset.key "values" .Values.nimbus.nodeAffinityPreset.values) | nindent 10 }}
+      {{- end }}
+      {{- if .Values.nimbus.nodeSelector }}
+      nodeSelector: {{- include "common.tplvalues.render" ( dict "value" .Values.nimbus.nodeSelector "context" $) | nindent 8 }}
+      {{- end }}
+      {{- if .Values.nimbus.tolerations }}
+      tolerations: {{- include "common.tplvalues.render" (dict "value" .Values.nimbus.tolerations "context" .) | nindent 8 }}
+      {{- end }}
+      {{- if .Values.nimbus.topologySpreadConstraints }}
+      topologySpreadConstraints: {{- include "common.tplvalues.render" (dict "value" .Values.nimbus.topologySpreadConstraints "context" .) | nindent 8 }}
+      {{- end }}
+      {{- if .Values.nimbus.priorityClassName }}
+      priorityClassName: {{ .Values.nimbus.priorityClassName | quote }}
+      {{- end }}
+      {{- if .Values.nimbus.schedulerName }}
+      schedulerName: {{ .Values.nimbus.schedulerName }}
+      {{- end }}
+      initContainers:
+        {{- if .Values.zookeeper.enabled }}
+        - name: wait-for-zookeeper
+          image: {{ include "common.images.image" (dict "imageRoot" .Values.waitContainer.image "global" .Values.global) }}
+          imagePullPolicy: {{ .Values.waitContainer.image.pullPolicy }}
+          command:
+            - /bin/sh
+            - -c
+            - |
+              echo "Waiting for Zookeeper..."
+              until nc -z {{ include "storm.zookeeperHeadlessService" . }}.{{ include "common.names.namespace" . }}.svc.{{ .Values.clusterDomain }} 2181; do
+                echo "Zookeeper is unavailable - sleeping"
+                sleep 2
+              done
+              echo "Zookeeper is up"
+        {{- end }}
+        {{- if .Values.nimbus.initContainers }}
+        {{- include "common.tplvalues.render" (dict "value" .Values.nimbus.initContainers "context" $) | nindent 8 }}
+        {{- end }}
+      containers:
+        - name: nimbus
+          image: {{ include "common.images.image" (dict "imageRoot" .Values.nimbus.image "global" .Values.global) }}
+          imagePullPolicy: {{ .Values.nimbus.image.pullPolicy }}
+          {{- if .Values.nimbus.command }}
+          command: {{- include "common.tplvalues.render" (dict "value" .Values.nimbus.command "context" $) | nindent 12 }}
+          {{- else }}
+          command:
+            - /bin/bash
+            - -c
+            - |
+              mkdir -p {{ .Values.nimbus.logDir }}
+              storm nimbus
+          {{- end }}
+          {{- if .Values.nimbus.args }}
+          args: {{- include "common.tplvalues.render" (dict "value" .Values.nimbus.args "context" $) | nindent 12 }}
+          {{- end }}
+          env:
+            - name: STORM_CONF_DIR
+              value: /conf
+            - name: STORM_LOG_DIR
+              value: {{ .Values.nimbus.logDir }}
+            {{- if .Values.nimbus.extraEnvVars }}
+            {{- include "common.tplvalues.render" (dict "value" .Values.nimbus.extraEnvVars "context" $) | nindent 12 }}
+            {{- end }}
+          {{- if or .Values.nimbus.extraEnvVarsCM .Values.nimbus.extraEnvVarsSecret }}
+          envFrom:
+            {{- if .Values.nimbus.extraEnvVarsCM }}
+            - configMapRef:
+                name: {{ include "common.tplvalues.render" (dict "value" .Values.nimbus.extraEnvVarsCM "context" $) }}
+            {{- end }}
+            {{- if .Values.nimbus.extraEnvVarsSecret }}
+            - secretRef:
+                name: {{ include "common.tplvalues.render" (dict "value" .Values.nimbus.extraEnvVarsSecret "context" $) }}
+            {{- end }}
+          {{- end }}
+          {{- if .Values.nimbus.resources }}
+          resources: {{- toYaml .Values.nimbus.resources | nindent 12 }}
+          {{- else if ne .Values.nimbus.resourcesPreset "none" }}
+          resources: {{- include "common.resources.preset" (dict "type" .Values.nimbus.resourcesPreset) | nindent 12 }}
+          {{- end }}
+          ports:
+            - name: thrift
+              containerPort: {{ .Values.nimbus.ports.thrift }}
+              protocol: TCP
+          {{- if .Values.nimbus.customLivenessProbe }}
+          livenessProbe: {{- include "common.tplvalues.render" (dict "value" .Values.nimbus.customLivenessProbe "context" $) | nindent 12 }}
+          {{- else if .Values.nimbus.livenessProbe.enabled }}
+          livenessProbe:
+            tcpSocket:
+              port: thrift
+            initialDelaySeconds: {{ .Values.nimbus.livenessProbe.initialDelaySeconds }}
+            periodSeconds: {{ .Values.nimbus.livenessProbe.periodSeconds }}
+            timeoutSeconds: {{ .Values.nimbus.livenessProbe.timeoutSeconds }}
+            successThreshold: {{ .Values.nimbus.livenessProbe.successThreshold }}
+            failureThreshold: {{ .Values.nimbus.livenessProbe.failureThreshold }}
+          {{- end }}
+          {{- if .Values.nimbus.customReadinessProbe }}
+          readinessProbe: {{- include "common.tplvalues.render" (dict "value" .Values.nimbus.customReadinessProbe "context" $) | nindent 12 }}
+          {{- else if .Values.nimbus.readinessProbe.enabled }}
+          readinessProbe:
+            tcpSocket:
+              port: thrift
+            initialDelaySeconds: {{ .Values.nimbus.readinessProbe.initialDelaySeconds }}
+            periodSeconds: {{ .Values.nimbus.readinessProbe.periodSeconds }}
+            timeoutSeconds: {{ .Values.nimbus.readinessProbe.timeoutSeconds }}
+            successThreshold: {{ .Values.nimbus.readinessProbe.successThreshold }}
+            failureThreshold: {{ .Values.nimbus.readinessProbe.failureThreshold }}
+          {{- end }}
+          {{- if .Values.nimbus.customStartupProbe }}
+          startupProbe: {{- include "common.tplvalues.render" (dict "value" .Values.nimbus.customStartupProbe "context" $) | nindent 12 }}
+          {{- else if .Values.nimbus.startupProbe.enabled }}
+          startupProbe:
+            tcpSocket:
+              port: thrift
+            initialDelaySeconds: {{ .Values.nimbus.startupProbe.initialDelaySeconds }}
+            periodSeconds: {{ .Values.nimbus.startupProbe.periodSeconds }}
+            timeoutSeconds: {{ .Values.nimbus.startupProbe.timeoutSeconds }}
+            successThreshold: {{ .Values.nimbus.startupProbe.successThreshold }}
+            failureThreshold: {{ .Values.nimbus.startupProbe.failureThreshold }}
+          {{- end }}
+          {{- if .Values.nimbus.lifecycleHooks }}
+          lifecycle: {{- include "common.tplvalues.render" (dict "value" .Values.nimbus.lifecycleHooks "context" $) | nindent 12 }}
+          {{- end }}
+          volumeMounts:
+            - name: config
+              mountPath: /conf
+            - name: logs
+              mountPath: {{ .Values.nimbus.logDir }}
+            {{- if .Values.nimbus.persistence.enabled }}
+            - name: data
+              mountPath: {{ .Values.nimbus.persistence.mountPath }}
+            {{- end }}
+            {{- if .Values.nimbus.extraVolumeMounts }}
+            {{- include "common.tplvalues.render" (dict "value" .Values.nimbus.extraVolumeMounts "context" $) | nindent 12 }}
+            {{- end }}
+        {{- if .Values.nimbus.sidecars }}
+        {{- include "common.tplvalues.render" ( dict "value" .Values.nimbus.sidecars "context" $) | nindent 8 }}
+        {{- end }}
+      volumes:
+        - name: config
+          configMap:
+            name: {{ include "common.names.fullname" . }}
+        - name: logs
+          emptyDir: {}
+        {{- if .Values.nimbus.extraVolumes }}
+        {{- include "common.tplvalues.render" (dict "value" .Values.nimbus.extraVolumes "context" $) | nindent 8 }}
+        {{- end }}
+  {{- if .Values.nimbus.persistence.enabled }}
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+        {{- if .Values.nimbus.persistence.annotations }}
+        annotations: {{- include "common.tplvalues.render" (dict "value" .Values.nimbus.persistence.annotations "context" $) | nindent 10 }}
+        {{- end }}
+        {{- if .Values.nimbus.persistence.labels }}
+        labels: {{- include "common.tplvalues.render" (dict "value" .Values.nimbus.persistence.labels "context" $) | nindent 10 }}
+        {{- end }}
+      spec:
+        accessModes:
+          {{- range .Values.nimbus.persistence.accessModes }}
+          - {{ . | quote }}
+          {{- end }}
+        {{- if .Values.nimbus.persistence.storageClass }}
+        storageClassName: {{ .Values.nimbus.persistence.storageClass }}
+        {{- end }}
+        resources:
+          requests:
+            storage: {{ .Values.nimbus.persistence.size | quote }}
+        {{- if .Values.nimbus.persistence.selector }}
+        selector: {{- include "common.tplvalues.render" (dict "value" .Values.nimbus.persistence.selector "context" $) | nindent 10 }}
+        {{- end }}
+  {{- end }}
+{{- end }}

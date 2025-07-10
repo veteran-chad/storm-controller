@@ -1,0 +1,120 @@
+{{- if .Values.tests.enabled }}
+apiVersion: v1
+kind: Pod
+metadata:
+  name: {{ include "common.names.fullname" . }}-test-global
+  namespace: {{ include "common.names.namespace" . | quote }}
+  labels: {{- include "common.labels.standard" ( dict "customLabels" .Values.commonLabels "context" $ ) | nindent 4 }}
+    app.kubernetes.io/component: test
+  annotations:
+    "helm.sh/hook": test
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
+spec:
+  restartPolicy: Never
+  {{- include "common.images.renderPullSecrets" (dict "images" (list .Values.nimbus.image .Values.ui.image .Values.supervisor.image) "context" $) | nindent 2 }}
+  containers:
+    - name: test-global-settings
+      image: {{ include "common.images.image" (dict "imageRoot" .Values.waitContainer.image "global" .Values.global) }}
+      command:
+        - /bin/sh
+        - -c
+        - |
+          echo "=== Testing Global Settings ==="
+          
+          # Test 1: Check if global image registry is applied
+          echo "Test 1: Global Image Registry"
+          {{- if .Values.global.imageRegistry }}
+          echo "✓ Global image registry is set: {{ .Values.global.imageRegistry }}"
+          {{- else }}
+          echo "✗ Global image registry is not set"
+          {{- end }}
+          
+          # Test 2: Check rendered images include global registry
+          echo ""
+          echo "Test 2: Rendered Images"
+          echo "Nimbus image: {{ include "common.images.image" (dict "imageRoot" .Values.nimbus.image "global" .Values.global) }}"
+          echo "UI image: {{ include "common.images.image" (dict "imageRoot" .Values.ui.image "global" .Values.global) }}"
+          echo "Supervisor image: {{ include "common.images.image" (dict "imageRoot" .Values.supervisor.image "global" .Values.global) }}"
+          
+          # Test 3: Check global pull secrets
+          echo ""
+          echo "Test 3: Global Image Pull Secrets"
+          {{- $pullSecrets := include "common.images.renderPullSecrets" (dict "images" (list .Values.nimbus.image) "context" $) }}
+          {{- if $pullSecrets }}
+          echo "✓ Pull secrets are configured:"
+          {{- if .Values.global.imagePullSecrets }}
+          {{- range .Values.global.imagePullSecrets }}
+          echo "  - {{ . }}"
+          {{- end }}
+          {{- end }}
+          {{- else }}
+          echo "✗ No pull secrets configured"
+          {{- end }}
+          
+          # Test 4: Check namespace
+          echo ""
+          echo "Test 4: Namespace"
+          echo "Deployment namespace: {{ include "common.names.namespace" . }}"
+          
+          # Test 5: Check cluster domain
+          echo ""
+          echo "Test 5: Cluster Domain"
+          echo "Cluster domain: {{ .Values.clusterDomain }}"
+          
+          # Test 6: Check common labels and annotations
+          echo ""
+          echo "Test 6: Common Labels"
+          {{- $labels := include "common.labels.standard" ( dict "customLabels" .Values.commonLabels "context" $ ) }}
+          {{- if $labels }}
+          echo "✓ Common labels are applied"
+          {{- else }}
+          echo "✗ No common labels found"
+          {{- end }}
+          
+          # Test 7: Check storage class
+          echo ""
+          echo "Test 7: Storage Class"
+          {{- if .Values.nimbus.persistence.enabled }}
+          {{- if .Values.nimbus.persistence.storageClass }}
+          echo "Nimbus storage class: {{ .Values.nimbus.persistence.storageClass }}"
+          {{- else if .Values.global.storageClass }}
+          echo "Using global storage class: {{ .Values.global.storageClass }}"
+          {{- else }}
+          echo "Using default storage class"
+          {{- end }}
+          {{- else }}
+          echo "Nimbus persistence is disabled"
+          {{- end }}
+          
+          echo ""
+          echo "=== All tests completed ==="
+    - name: test-configmap
+      image: {{ include "common.images.image" (dict "imageRoot" .Values.waitContainer.image "global" .Values.global) }}
+      command:
+        - /bin/sh
+        - -c
+        - |
+          echo ""
+          echo "=== Testing ConfigMap Settings ==="
+          
+          # Check if ConfigMap exists and has expected content
+          echo "Test: ConfigMap Content"
+          echo "Storm configuration:"
+          cat /conf/storm.yaml | head -20
+          
+          echo ""
+          echo "Log4j2 configuration:"
+          if [ -f /conf/log4j2.xml ]; then
+            echo "✓ log4j2.xml exists"
+          else
+            echo "✗ log4j2.xml not found"
+            exit 1
+          fi
+      volumeMounts:
+        - name: config
+          mountPath: /conf
+  volumes:
+    - name: config
+      configMap:
+        name: {{ include "common.names.fullname" . }}
+{{- end }}

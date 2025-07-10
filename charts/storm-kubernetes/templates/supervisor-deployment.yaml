@@ -1,0 +1,200 @@
+{{- if .Values.supervisor.enabled }}
+apiVersion: {{ include "common.capabilities.deployment.apiVersion" . }}
+kind: Deployment
+metadata:
+  name: {{ include "common.names.fullname" . }}-supervisor
+  namespace: {{ include "common.names.namespace" . | quote }}
+  labels: {{- include "common.labels.standard" ( dict "customLabels" .Values.commonLabels "context" $ ) | nindent 4 }}
+    app.kubernetes.io/component: supervisor
+  {{- if .Values.commonAnnotations }}
+  annotations: {{- include "common.tplvalues.render" ( dict "value" .Values.commonAnnotations "context" $ ) | nindent 4 }}
+  {{- end }}
+spec:
+  replicas: {{ .Values.supervisor.replicaCount }}
+  {{- if .Values.supervisor.updateStrategy }}
+  strategy: {{- toYaml .Values.supervisor.updateStrategy | nindent 4 }}
+  {{- end }}
+  selector:
+    matchLabels: {{- include "common.labels.matchLabels" ( dict "customLabels" .Values.commonLabels "context" $ ) | nindent 6 }}
+      app.kubernetes.io/component: supervisor
+  template:
+    metadata:
+      annotations:
+        checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}
+        {{- if .Values.supervisor.podAnnotations }}
+        {{- include "common.tplvalues.render" (dict "value" .Values.supervisor.podAnnotations "context" $) | nindent 8 }}
+        {{- end }}
+      labels: {{- include "common.labels.standard" ( dict "customLabels" .Values.commonLabels "context" $ ) | nindent 8 }}
+        app.kubernetes.io/component: supervisor
+        {{- if .Values.supervisor.podLabels }}
+        {{- include "common.tplvalues.render" (dict "value" .Values.supervisor.podLabels "context" $) | nindent 8 }}
+        {{- end }}
+    spec:
+      {{- include "common.images.renderPullSecrets" (dict "images" (list .Values.supervisor.image) "context" $) | nindent 6 }}
+      {{- if .Values.supervisor.hostAliases }}
+      hostAliases: {{- include "common.tplvalues.render" (dict "value" .Values.supervisor.hostAliases "context" $) | nindent 8 }}
+      {{- end }}
+      {{- if .Values.supervisor.affinity }}
+      affinity: {{- include "common.tplvalues.render" ( dict "value" .Values.supervisor.affinity "context" $) | nindent 8 }}
+      {{- else }}
+      affinity:
+        podAffinity: {{- include "common.affinities.pods" (dict "type" .Values.supervisor.podAffinityPreset "component" "supervisor" "context" $) | nindent 10 }}
+        podAntiAffinity: {{- include "common.affinities.pods" (dict "type" .Values.supervisor.podAntiAffinityPreset "component" "supervisor" "context" $) | nindent 10 }}
+        nodeAffinity: {{- include "common.affinities.nodes" (dict "type" .Values.supervisor.nodeAffinityPreset.type "key" .Values.supervisor.nodeAffinityPreset.key "values" .Values.supervisor.nodeAffinityPreset.values) | nindent 10 }}
+      {{- end }}
+      {{- if .Values.supervisor.nodeSelector }}
+      nodeSelector: {{- include "common.tplvalues.render" ( dict "value" .Values.supervisor.nodeSelector "context" $) | nindent 8 }}
+      {{- end }}
+      {{- if .Values.supervisor.tolerations }}
+      tolerations: {{- include "common.tplvalues.render" (dict "value" .Values.supervisor.tolerations "context" .) | nindent 8 }}
+      {{- end }}
+      {{- if .Values.supervisor.topologySpreadConstraints }}
+      topologySpreadConstraints: {{- include "common.tplvalues.render" (dict "value" .Values.supervisor.topologySpreadConstraints "context" .) | nindent 8 }}
+      {{- end }}
+      {{- if .Values.supervisor.priorityClassName }}
+      priorityClassName: {{ .Values.supervisor.priorityClassName | quote }}
+      {{- end }}
+      {{- if .Values.supervisor.schedulerName }}
+      schedulerName: {{ .Values.supervisor.schedulerName }}
+      {{- end }}
+      initContainers:
+        {{- if .Values.nimbus.enabled }}
+        - name: wait-for-nimbus
+          image: {{ include "common.images.image" (dict "imageRoot" .Values.waitContainer.image "global" .Values.global) }}
+          imagePullPolicy: {{ .Values.waitContainer.image.pullPolicy }}
+          command:
+            - /bin/sh
+            - -c
+            - |
+              echo "Waiting for Nimbus..."
+              until nc -z {{ include "storm.nimbusSeed" . }} {{ .Values.nimbus.ports.thrift }}; do
+                echo "Nimbus is unavailable - sleeping"
+                sleep 2
+              done
+              echo "Nimbus is up"
+        {{- end }}
+        {{- if .Values.supervisor.initContainers }}
+        {{- include "common.tplvalues.render" (dict "value" .Values.supervisor.initContainers "context" $) | nindent 8 }}
+        {{- end }}
+      containers:
+        - name: supervisor
+          image: {{ include "common.images.image" (dict "imageRoot" .Values.supervisor.image "global" .Values.global) }}
+          imagePullPolicy: {{ .Values.supervisor.image.pullPolicy }}
+          {{- if .Values.supervisor.command }}
+          command: {{- include "common.tplvalues.render" (dict "value" .Values.supervisor.command "context" $) | nindent 12 }}
+          {{- else }}
+          command:
+            - /bin/bash
+            - -c
+            - |
+              mkdir -p {{ .Values.supervisor.logDir }}
+              storm supervisor
+          {{- end }}
+          {{- if .Values.supervisor.args }}
+          args: {{- include "common.tplvalues.render" (dict "value" .Values.supervisor.args "context" $) | nindent 12 }}
+          {{- end }}
+          env:
+            - name: STORM_CONF_DIR
+              value: /conf
+            - name: STORM_LOG_DIR
+              value: {{ .Values.supervisor.logDir }}
+            {{- if .Values.supervisor.extraEnvVars }}
+            {{- include "common.tplvalues.render" (dict "value" .Values.supervisor.extraEnvVars "context" $) | nindent 12 }}
+            {{- end }}
+          {{- if or .Values.supervisor.extraEnvVarsCM .Values.supervisor.extraEnvVarsSecret }}
+          envFrom:
+            {{- if .Values.supervisor.extraEnvVarsCM }}
+            - configMapRef:
+                name: {{ include "common.tplvalues.render" (dict "value" .Values.supervisor.extraEnvVarsCM "context" $) }}
+            {{- end }}
+            {{- if .Values.supervisor.extraEnvVarsSecret }}
+            - secretRef:
+                name: {{ include "common.tplvalues.render" (dict "value" .Values.supervisor.extraEnvVarsSecret "context" $) }}
+            {{- end }}
+          {{- end }}
+          {{- if .Values.supervisor.resources }}
+          resources: {{- toYaml .Values.supervisor.resources | nindent 12 }}
+          {{- else if ne .Values.supervisor.resourcesPreset "none" }}
+          resources: {{- include "common.resources.preset" (dict "type" .Values.supervisor.resourcesPreset) | nindent 12 }}
+          {{- end }}
+          ports:
+            - name: http
+              containerPort: {{ .Values.supervisor.ports.http }}
+              protocol: TCP
+            {{- range $i := until (int .Values.supervisor.slotsPerSupervisor) }}
+            - name: slot-{{ $i }}
+              containerPort: {{ add 6700 $i }}
+              protocol: TCP
+            {{- end }}
+          {{- if .Values.supervisor.customLivenessProbe }}
+          livenessProbe: {{- include "common.tplvalues.render" (dict "value" .Values.supervisor.customLivenessProbe "context" $) | nindent 12 }}
+          {{- else if .Values.supervisor.livenessProbe.enabled }}
+          livenessProbe:
+            exec:
+              command:
+                - /bin/sh
+                - -c
+                - ps aux | grep -v grep | grep supervisor
+            initialDelaySeconds: {{ .Values.supervisor.livenessProbe.initialDelaySeconds }}
+            periodSeconds: {{ .Values.supervisor.livenessProbe.periodSeconds }}
+            timeoutSeconds: {{ .Values.supervisor.livenessProbe.timeoutSeconds }}
+            successThreshold: {{ .Values.supervisor.livenessProbe.successThreshold }}
+            failureThreshold: {{ .Values.supervisor.livenessProbe.failureThreshold }}
+          {{- end }}
+          {{- if .Values.supervisor.customReadinessProbe }}
+          readinessProbe: {{- include "common.tplvalues.render" (dict "value" .Values.supervisor.customReadinessProbe "context" $) | nindent 12 }}
+          {{- else if .Values.supervisor.readinessProbe.enabled }}
+          readinessProbe:
+            exec:
+              command:
+                - storm
+                - list
+            initialDelaySeconds: {{ .Values.supervisor.readinessProbe.initialDelaySeconds }}
+            periodSeconds: {{ .Values.supervisor.readinessProbe.periodSeconds }}
+            timeoutSeconds: {{ .Values.supervisor.readinessProbe.timeoutSeconds }}
+            successThreshold: {{ .Values.supervisor.readinessProbe.successThreshold }}
+            failureThreshold: {{ .Values.supervisor.readinessProbe.failureThreshold }}
+          {{- end }}
+          {{- if .Values.supervisor.customStartupProbe }}
+          startupProbe: {{- include "common.tplvalues.render" (dict "value" .Values.supervisor.customStartupProbe "context" $) | nindent 12 }}
+          {{- else if .Values.supervisor.startupProbe.enabled }}
+          startupProbe:
+            exec:
+              command:
+                - /bin/sh
+                - -c
+                - ps aux | grep -v grep | grep supervisor
+            initialDelaySeconds: {{ .Values.supervisor.startupProbe.initialDelaySeconds }}
+            periodSeconds: {{ .Values.supervisor.startupProbe.periodSeconds }}
+            timeoutSeconds: {{ .Values.supervisor.startupProbe.timeoutSeconds }}
+            successThreshold: {{ .Values.supervisor.startupProbe.successThreshold }}
+            failureThreshold: {{ .Values.supervisor.startupProbe.failureThreshold }}
+          {{- end }}
+          {{- if .Values.supervisor.lifecycleHooks }}
+          lifecycle: {{- include "common.tplvalues.render" (dict "value" .Values.supervisor.lifecycleHooks "context" $) | nindent 12 }}
+          {{- end }}
+          volumeMounts:
+            - name: config
+              mountPath: /conf
+            - name: logs
+              mountPath: {{ .Values.supervisor.logDir }}
+            - name: data
+              mountPath: {{ .Values.supervisor.dataDir }}
+            {{- if .Values.supervisor.extraVolumeMounts }}
+            {{- include "common.tplvalues.render" (dict "value" .Values.supervisor.extraVolumeMounts "context" $) | nindent 12 }}
+            {{- end }}
+        {{- if .Values.supervisor.sidecars }}
+        {{- include "common.tplvalues.render" ( dict "value" .Values.supervisor.sidecars "context" $) | nindent 8 }}
+        {{- end }}
+      volumes:
+        - name: config
+          configMap:
+            name: {{ include "common.names.fullname" . }}
+        - name: logs
+          emptyDir: {}
+        - name: data
+          emptyDir: {}
+        {{- if .Values.supervisor.extraVolumes }}
+        {{- include "common.tplvalues.render" (dict "value" .Values.supervisor.extraVolumes "context" $) | nindent 8 }}
+        {{- end }}
+{{- end }}

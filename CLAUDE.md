@@ -145,3 +145,8 @@ When adding new controller logic:
 ## Git Commit Guidelines
 
 - **Never add coauthored statements to git commits**
+
+## Chart Development Guidelines
+
+- **When working on charts `/charts/storm-kubernetes`**:
+  - Always reference the STYLE-GUIDE.md for editing helm and values configuration

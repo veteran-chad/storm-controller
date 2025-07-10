@@ -1,0 +1,70 @@
+{{- if .Values.nimbus.enabled }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "common.names.fullname" . }}-nimbus
+  namespace: {{ include "common.names.namespace" . | quote }}
+  labels: {{- include "common.labels.standard" ( dict "customLabels" .Values.commonLabels "context" $ ) | nindent 4 }}
+    app.kubernetes.io/component: nimbus
+  {{- if or .Values.nimbus.service.annotations .Values.commonAnnotations }}
+  {{- $annotations := include "common.tplvalues.merge" (dict "values" (list .Values.nimbus.service.annotations .Values.commonAnnotations) "context" .) }}
+  annotations: {{- include "common.tplvalues.render" ( dict "value" $annotations "context" $) | nindent 4 }}
+  {{- end }}
+spec:
+  type: {{ .Values.nimbus.service.type }}
+  {{- if and .Values.nimbus.service.clusterIP (eq .Values.nimbus.service.type "ClusterIP") }}
+  clusterIP: {{ .Values.nimbus.service.clusterIP }}
+  {{- end }}
+  {{- if .Values.nimbus.service.sessionAffinity }}
+  sessionAffinity: {{ .Values.nimbus.service.sessionAffinity }}
+  {{- end }}
+  {{- if .Values.nimbus.service.sessionAffinityConfig }}
+  sessionAffinityConfig: {{- include "common.tplvalues.render" (dict "value" .Values.nimbus.service.sessionAffinityConfig "context" $) | nindent 4 }}
+  {{- end }}
+  {{- if or (eq .Values.nimbus.service.type "LoadBalancer") (eq .Values.nimbus.service.type "NodePort") }}
+  externalTrafficPolicy: {{ .Values.nimbus.service.externalTrafficPolicy | quote }}
+  {{- end }}
+  {{- if and (eq .Values.nimbus.service.type "LoadBalancer") (not (empty .Values.nimbus.service.loadBalancerSourceRanges)) }}
+  loadBalancerSourceRanges: {{ .Values.nimbus.service.loadBalancerSourceRanges }}
+  {{- end }}
+  {{- if and (eq .Values.nimbus.service.type "LoadBalancer") (not (empty .Values.nimbus.service.loadBalancerIP)) }}
+  loadBalancerIP: {{ .Values.nimbus.service.loadBalancerIP }}
+  {{- end }}
+  ports:
+    - name: thrift
+      port: {{ .Values.nimbus.service.ports.thrift }}
+      targetPort: thrift
+      protocol: TCP
+      {{- if and (or (eq .Values.nimbus.service.type "NodePort") (eq .Values.nimbus.service.type "LoadBalancer")) (not (empty .Values.nimbus.service.nodePorts.thrift)) }}
+      nodePort: {{ .Values.nimbus.service.nodePorts.thrift }}
+      {{- else if eq .Values.nimbus.service.type "ClusterIP" }}
+      nodePort: null
+      {{- end }}
+    {{- if .Values.nimbus.service.extraPorts }}
+    {{- include "common.tplvalues.render" (dict "value" .Values.nimbus.service.extraPorts "context" $) | nindent 4 }}
+    {{- end }}
+  selector: {{- include "common.labels.matchLabels" ( dict "customLabels" .Values.commonLabels "context" $ ) | nindent 4 }}
+    app.kubernetes.io/component: nimbus
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "common.names.fullname" . }}-nimbus-headless
+  namespace: {{ include "common.names.namespace" . | quote }}
+  labels: {{- include "common.labels.standard" ( dict "customLabels" .Values.commonLabels "context" $ ) | nindent 4 }}
+    app.kubernetes.io/component: nimbus
+  {{- if or .Values.nimbus.service.headless.annotations .Values.commonAnnotations }}
+  {{- $annotations := include "common.tplvalues.merge" (dict "values" (list .Values.nimbus.service.headless.annotations .Values.commonAnnotations) "context" .) }}
+  annotations: {{- include "common.tplvalues.render" ( dict "value" $annotations "context" $) | nindent 4 }}
+  {{- end }}
+spec:
+  type: ClusterIP
+  clusterIP: None
+  ports:
+    - name: thrift
+      port: {{ .Values.nimbus.service.ports.thrift }}
+      targetPort: thrift
+      protocol: TCP
+  selector: {{- include "common.labels.matchLabels" ( dict "customLabels" .Values.commonLabels "context" $ ) | nindent 4 }}
+    app.kubernetes.io/component: nimbus
+{{- end }}

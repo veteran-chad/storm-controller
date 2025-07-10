@@ -1,0 +1,108 @@
+# Example implementation of the recommended memory management approach
+
+# values.yaml additions:
+supervisor:
+  enabled: true
+  replicaCount: 2
+  
+  # Memory configuration using the hybrid approach
+  memoryConfig:
+    # Mode can be "auto" or "manual"
+    # - auto: Automatically calculate container resources based on worker requirements
+    # - manual: Use resources section directly
+    mode: "auto"
+    
+    # Number of worker slots per supervisor
+    slotsPerSupervisor: 4
+    
+    # Memory allocated per worker (includes heap + off-heap)
+    # This is the primary tuning parameter
+    memoryPerWorker: "1Gi"
+    
+    # Overhead percentage for JVM non-heap memory (metaspace, direct memory, etc.)
+    # Container memory = total worker memory * (1 + overheadPercent/100)
+    memoryOverheadPercent: 25
+    
+    # CPU per worker (used for capacity calculation)
+    cpuPerWorker: "0.5"
+    
+  # Manual resource override (only used when mode=manual)
+  resources:
+    requests:
+      memory: "16Gi"
+      cpu: "4"
+    limits:
+      memory: "16Gi" 
+      cpu: "4"
+      
+  # Additional Storm configurations
+  extraConfig:
+    # These will be auto-calculated in auto mode:
+    # supervisor.memory.capacity.mb: <calculated>
+    # supervisor.cpu.capacity: <calculated>
+    # worker.heap.memory.mb: <calculated>
+    
+    # Additional JVM options for workers
+    worker.childopts: "-XX:+UseG1GC -XX:MaxGCPauseMillis=200"
+    
+    # Enable resource-aware scheduler
+    storm.scheduler: "org.apache.storm.scheduler.resource.ResourceAwareScheduler"
+
+# Usage examples for different scenarios:
+
+# 1. Development/Testing Environment
+development:
+  supervisor:
+    replicaCount: 1
+    memoryConfig:
+      mode: "auto"
+      slotsPerSupervisor: 2
+      memoryPerWorker: "512Mi"
+      memoryOverheadPercent: 25
+      cpuPerWorker: "0.5"
+# Results: 1.25Gi container, 2 slots @ 512Mi each
+
+# 2. Production - Standard Workload  
+production-standard:
+  supervisor:
+    replicaCount: 3
+    memoryConfig:
+      mode: "auto"
+      slotsPerSupervisor: 6
+      memoryPerWorker: "1.5Gi"
+      memoryOverheadPercent: 30
+      cpuPerWorker: "1"
+# Results: 11.7Gi container, 6 slots @ 1.5Gi each, 18 total slots
+
+# 3. Production - Memory Intensive
+production-memory:
+  supervisor:
+    replicaCount: 2
+    memoryConfig:
+      mode: "auto"
+      slotsPerSupervisor: 4
+      memoryPerWorker: "4Gi"
+      memoryOverheadPercent: 35
+      cpuPerWorker: "2"
+# Results: 21.6Gi container, 4 slots @ 4Gi each, 8 total slots
+
+# 4. Expert Mode - Full Control
+expert:
+  supervisor:
+    replicaCount: 2
+    memoryConfig:
+      mode: "manual"
+    slotsPerSupervisor: 8
+    resources:
+      requests:
+        memory: "64Gi"
+        cpu: "16"
+      limits:
+        memory: "64Gi"
+        cpu: "16"
+    extraConfig:
+      supervisor.memory.capacity.mb: 49152  # 48Gi usable
+      supervisor.cpu.capacity: 1600         # 16 cores
+      worker.heap.memory.mb: 4096          # 4Gi heap per worker
+      worker.childopts: "-Xmx4096m -Xms4096m -XX:+UseG1GC"
+      topology.worker.max.heap.size.mb: 6144  # Allow up to 6Gi

@@ -4,101 +4,11 @@ APP VERSION: {{ .Chart.AppVersion }}
 
 ** Please be patient while the chart is being deployed **
 
+Storm configuration has been created successfully.
 
-Apache Storm has been deployed successfully!
+ConfigMap Name: {{ include "common.names.fullname" . }}
+Namespace: {{ include "common.names.namespace" . }}
 
-{{- if not .Values.zookeeper.enabled }}
+To get more information about your release, try:
 
-WARNING: You have disabled the embedded Zookeeper deployment.
-Make sure you have configured the external Zookeeper servers correctly:
-  externalZookeeper.servers: {{ .Values.externalZookeeper.servers }}
-
-{{- end }}
-
-To access Storm UI:
-
-{{- if .Values.ui.enabled }}
-
-{{- if .Values.ui.ingress.enabled }}
-
-1. Get the Storm UI URL:
-
-{{- if .Values.ui.ingress.hostname }}
-   http{{ if .Values.ui.ingress.tls }}s{{ end }}://{{ .Values.ui.ingress.hostname }}{{ .Values.ui.ingress.path }}
-{{- else }}
-   kubectl get ingress --namespace {{ .Release.Namespace }} {{ include "storm.ui.fullname" . }}
-{{- end }}
-
-{{- else if contains "NodePort" .Values.ui.service.type }}
-
-1. Get the Storm UI URL by running these commands:
-
-   export NODE_PORT=$(kubectl get --namespace {{ .Release.Namespace }} -o jsonpath="{.spec.ports[0].nodePort}" services {{ include "storm.ui.serviceName" . }})
-   export NODE_IP=$(kubectl get nodes --namespace {{ .Release.Namespace }} -o jsonpath="{.items[0].status.addresses[0].address}")
-   echo "Storm UI URL: http://$NODE_IP:$NODE_PORT"
-
-{{- else if contains "LoadBalancer" .Values.ui.service.type }}
-
-1. Get the Storm UI URL by running these commands:
-
-   NOTE: It may take a few minutes for the LoadBalancer IP to be available.
-         Watch the status with: 'kubectl get svc --namespace {{ .Release.Namespace }} -w {{ include "storm.ui.serviceName" . }}'
-
-   export SERVICE_IP=$(kubectl get svc --namespace {{ .Release.Namespace }} {{ include "storm.ui.serviceName" . }} --template "{{ "{{ range (index .status.loadBalancer.ingress 0) }}{{ . }}{{ end }}" }}")
-   echo "Storm UI URL: http://$SERVICE_IP:{{ .Values.ui.service.ports.http }}"
-
-{{- else if contains "ClusterIP" .Values.ui.service.type }}
-
-1. Get the Storm UI URL by running these commands:
-
-   kubectl port-forward --namespace {{ .Release.Namespace }} svc/{{ include "storm.ui.serviceName" . }} 8080:{{ .Values.ui.service.ports.http }} &
-   echo "Storm UI URL: http://127.0.0.1:8080"
-
-{{- end }}
-
-{{- if and .Values.ui.auth .Values.ui.auth.enabled }}
-
-2. Login credentials:
-{{- if eq .Values.ui.auth.type "simple" }}
-{{- range .Values.ui.auth.users }}
-   Username: {{ .username }}
-   Password: {{ .password }}
-{{- end }}
-{{- end }}
-{{- end }}
-
-{{- else }}
-
-Storm UI has been disabled. You can enable it by setting ui.enabled=true
-
-{{- end }}
-
-To deploy a Storm topology:
-
-1. Port-forward to the Nimbus service:
-
-   kubectl port-forward --namespace {{ .Release.Namespace }} svc/{{ include "storm.nimbus.fullname" . }} 6627:{{ .Values.nimbus.service.ports.thrift }}
-
-2. Submit your topology using the Storm CLI:
-
-   storm jar my-topology.jar com.example.MyTopology my-topology
-
-3. Monitor your topology in the Storm UI or using:
-
-   storm list
-
-For automated topology management with Kubernetes CRDs, consider installing the Storm Operator:
-  https://github.com/apache/storm/tree/master/charts/storm-operator
-
-{{- if and .Values.metrics .Values.metrics.enabled }}
-
-Metrics are exposed for Prometheus scraping.
-{{- if and .Values.metrics.serviceMonitor .Values.metrics.serviceMonitor.enabled }}
-A ServiceMonitor resource has been created for automatic discovery by Prometheus Operator.
-{{- else }}
-To enable automatic discovery by Prometheus Operator, set metrics.serviceMonitor.enabled=true
-{{- end }}
-
-{{- end }}
-
-{{- include "storm.validateValues" . -}}
+  $ kubectl describe configmap {{ include "common.names.fullname" . }} -n {{ include "common.names.namespace" . }}

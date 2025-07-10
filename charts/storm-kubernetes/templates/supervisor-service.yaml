@@ -1,0 +1,48 @@
+{{- if .Values.supervisor.enabled }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "common.names.fullname" . }}-supervisor
+  namespace: {{ include "common.names.namespace" . | quote }}
+  labels: {{- include "common.labels.standard" ( dict "customLabels" .Values.commonLabels "context" $ ) | nindent 4 }}
+    app.kubernetes.io/component: supervisor
+  {{- if or .Values.supervisor.service.annotations .Values.commonAnnotations }}
+  {{- $annotations := include "common.tplvalues.merge" (dict "values" (list .Values.supervisor.service.annotations .Values.commonAnnotations) "context" .) }}
+  annotations: {{- include "common.tplvalues.render" ( dict "value" $annotations "context" $) | nindent 4 }}
+  {{- end }}
+spec:
+  type: {{ .Values.supervisor.service.type }}
+  {{- if and .Values.supervisor.service.clusterIP (eq .Values.supervisor.service.type "ClusterIP") }}
+  clusterIP: {{ .Values.supervisor.service.clusterIP }}
+  {{- end }}
+  {{- if .Values.supervisor.service.sessionAffinity }}
+  sessionAffinity: {{ .Values.supervisor.service.sessionAffinity }}
+  {{- end }}
+  {{- if .Values.supervisor.service.sessionAffinityConfig }}
+  sessionAffinityConfig: {{- include "common.tplvalues.render" (dict "value" .Values.supervisor.service.sessionAffinityConfig "context" $) | nindent 4 }}
+  {{- end }}
+  {{- if or (eq .Values.supervisor.service.type "LoadBalancer") (eq .Values.supervisor.service.type "NodePort") }}
+  externalTrafficPolicy: {{ .Values.supervisor.service.externalTrafficPolicy | quote }}
+  {{- end }}
+  {{- if and (eq .Values.supervisor.service.type "LoadBalancer") (not (empty .Values.supervisor.service.loadBalancerSourceRanges)) }}
+  loadBalancerSourceRanges: {{ .Values.supervisor.service.loadBalancerSourceRanges }}
+  {{- end }}
+  {{- if and (eq .Values.supervisor.service.type "LoadBalancer") (not (empty .Values.supervisor.service.loadBalancerIP)) }}
+  loadBalancerIP: {{ .Values.supervisor.service.loadBalancerIP }}
+  {{- end }}
+  ports:
+    - name: http
+      port: {{ .Values.supervisor.service.ports.http }}
+      targetPort: http
+      protocol: TCP
+      {{- if and (or (eq .Values.supervisor.service.type "NodePort") (eq .Values.supervisor.service.type "LoadBalancer")) (not (empty .Values.supervisor.service.nodePorts.http)) }}
+      nodePort: {{ .Values.supervisor.service.nodePorts.http }}
+      {{- else if eq .Values.supervisor.service.type "ClusterIP" }}
+      nodePort: null
+      {{- end }}
+    {{- if .Values.supervisor.service.extraPorts }}
+    {{- include "common.tplvalues.render" (dict "value" .Values.supervisor.service.extraPorts "context" $) | nindent 4 }}
+    {{- end }}
+  selector: {{- include "common.labels.matchLabels" ( dict "customLabels" .Values.commonLabels "context" $ ) | nindent 4 }}
+    app.kubernetes.io/component: supervisor
+{{- end }}
