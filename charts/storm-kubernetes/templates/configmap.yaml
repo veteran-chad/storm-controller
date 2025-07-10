@@ -1,4 +1,7 @@
 {{- include "storm.validateZookeeper" . }}
+{{- if .Values.supervisor.enabled }}
+{{- include "storm.supervisor.validateMemory" . }}
+{{- end -}}
 apiVersion: v1
 kind: ConfigMap
 metadata:
@@ -72,10 +75,18 @@ data:
       - {{ add 6700 $i }}
     {{- end }}
     {{- end }}
+    
+    # Auto-calculated memory settings (if in auto mode)
+    {{- if eq .Values.supervisor.memoryConfig.mode "auto" }}
+    {{- include "storm.supervisor.memoryConfig" $ | nindent 4 }}
+    {{- end }}
+    
     {{- if .Values.supervisor.extraConfig }}
     {{- range $key, $value := .Values.supervisor.extraConfig }}
+    {{- if not (and (eq $.Values.supervisor.memoryConfig.mode "auto") (or (eq $key "supervisor.memory.capacity.mb") (eq $key "supervisor.cpu.capacity") (eq $key "worker.heap.memory.mb"))) }}
     {{- if ne $key "supervisor.slots.ports" }}
     {{ $key }}: {{ $value | toJson }}
+    {{- end }}
     {{- end }}
     {{- end }}
     {{- end }}

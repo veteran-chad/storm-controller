@@ -444,6 +444,25 @@ supervisor:
   replicaCount: 1
   ## @param supervisor.slotsPerSupervisor Number of worker slots per supervisor
   slotsPerSupervisor: 4
+  
+  ## Memory configuration for supervisors
+  ## @param supervisor.memoryConfig.mode Memory configuration mode: "auto" or "manual"
+  ## @param supervisor.memoryConfig.memoryPerWorker Memory allocated per worker slot (e.g., "1Gi", "512Mi")
+  ## @param supervisor.memoryConfig.memoryOverheadPercent JVM overhead percentage for container sizing
+  ## @param supervisor.memoryConfig.cpuPerWorker CPU cores allocated per worker slot
+  memoryConfig:
+    ## Mode can be "auto" or "manual"
+    ## - auto: Automatically calculate container resources based on worker requirements
+    ## - manual: Use resources section directly
+    mode: "auto"
+    ## Memory allocated per worker (includes heap + off-heap)
+    ## This is the primary tuning parameter
+    memoryPerWorker: "1Gi"
+    ## Overhead percentage for JVM non-heap memory (metaspace, direct memory, etc.)
+    ## Container memory = total worker memory * (1 + overheadPercent/100)
+    memoryOverheadPercent: 25
+    ## CPU per worker (used for capacity calculation)
+    cpuPerWorker: "1"
   ## @param supervisor.image.registry Supervisor image registry
   ## @param supervisor.image.repository Supervisor image repository
   ## @param supervisor.image.tag Supervisor image tag (immutable tags are recommended)

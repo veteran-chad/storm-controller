@@ -18,11 +18,12 @@ Returns a dict with:
 {{- define "storm.supervisor.memorySettings" -}}
 {{- if eq .Values.supervisor.memoryConfig.mode "auto" -}}
   {{- /* Auto mode: Calculate based on slots and per-worker memory */ -}}
-  {{- $memPerWorkerMi := 0 -}}
-  {{- if hasSuffix "Gi" .Values.supervisor.memoryConfig.memoryPerWorker -}}
-    {{- $memPerWorkerMi = .Values.supervisor.memoryConfig.memoryPerWorker | trimSuffix "Gi" | float64 | mul 1024 | int -}}
-  {{- else if hasSuffix "Mi" .Values.supervisor.memoryConfig.memoryPerWorker -}}
-    {{- $memPerWorkerMi = .Values.supervisor.memoryConfig.memoryPerWorker | trimSuffix "Mi" | int -}}
+  {{- $memPerWorkerStr := .Values.supervisor.memoryConfig.memoryPerWorker -}}
+  {{- $memPerWorkerMi := 1024 -}}
+  {{- if hasSuffix "Gi" $memPerWorkerStr -}}
+    {{- $memPerWorkerMi = $memPerWorkerStr | trimSuffix "Gi" | float64 | mul 1024 | int -}}
+  {{- else if hasSuffix "Mi" $memPerWorkerStr -}}
+    {{- $memPerWorkerMi = $memPerWorkerStr | trimSuffix "Mi" | int -}}
   {{- else -}}
     {{- fail "memoryPerWorker must end with Gi or Mi" -}}
   {{- end -}}
@@ -33,23 +34,23 @@ Returns a dict with:
   
   {{- /* Calculate totals */ -}}
   {{- $totalWorkerMemoryMi := mul $memPerWorkerMi $slots -}}
-  {{- $totalCpu := mul $cpuPerWorker $slots -}}
+  {{- $totalCpu := mulf $cpuPerWorker (float64 $slots) -}}
   {{- $overheadMultiplier := add 1.0 (div $overheadPercent 100.0) -}}
   {{- $containerMemoryMi := $totalWorkerMemoryMi | float64 | mul $overheadMultiplier | int -}}
   
   {{- /* Worker heap is 80% of per-worker memory (leaving 20% for off-heap) */ -}}
-  {{- $workerHeapMB := $memPerWorkerMi | float64 | mul 0.8 | int -}}
+  {{- $workerHeapMB := $memPerWorkerMi | float64 | mulf 0.8 | int -}}
   
   {{- /* Storm CPU capacity is x100 (e.g., 4 cores = 400) */ -}}
-  {{- $supervisorCpuCapacity := $totalCpu | mul 100 | int -}}
+  {{- $supervisorCpuCapacity := $totalCpu | mulf 100.0 | int -}}
   
   {{- dict 
     "containerMemory" (printf "%dMi" $containerMemoryMi)
-    "containerCpu" (printf "%g" $totalCpu)
+    "containerCpu" ($totalCpu | toString)
     "supervisorCapacityMB" $totalWorkerMemoryMi
     "supervisorCpuCapacity" $supervisorCpuCapacity
     "workerHeapMB" $workerHeapMB
-  -}}
+  | toYaml -}}
 {{- else -}}
   {{- /* Manual mode: Use provided values */ -}}
   {{- $containerMem := required "supervisor.resources.limits.memory is required in manual mode" .Values.supervisor.resources.limits.memory -}}
@@ -64,7 +65,7 @@ Returns a dict with:
     "supervisorCapacityMB" $supervisorMemMB
     "supervisorCpuCapacity" $supervisorCpu
     "workerHeapMB" $workerHeapMB
-  -}}
+  | toYaml -}}
 {{- end -}}
 {{- end -}}
 
@@ -76,13 +77,13 @@ Validate memory configuration to ensure it's reasonable
 {{- $slots := .Values.supervisor.slotsPerSupervisor | int -}}
 
 {{- /* Ensure worker heap * slots doesn't exceed supervisor capacity */ -}}
-{{- $totalWorkerHeap := mul $settings.workerHeapMB $slots -}}
-{{- if gt $totalWorkerHeap $settings.supervisorCapacityMB -}}
+{{- $totalWorkerHeap := mul ($settings.workerHeapMB | int) $slots -}}
+{{- if gt $totalWorkerHeap ($settings.supervisorCapacityMB | int) -}}
   {{- fail printf "Total worker heap (%dMB) exceeds supervisor capacity (%dMB). Reduce slots or increase memory." $totalWorkerHeap $settings.supervisorCapacityMB -}}
 {{- end -}}
 
 {{- /* Warn if memory seems too low */ -}}
-{{- if lt $settings.workerHeapMB 256 -}}
+{{- if lt ($settings.workerHeapMB | int) 256 -}}
   {{- fail "Worker heap memory is less than 256MB. This is likely too small for Storm." -}}
 {{- end -}}
 {{- end -}}

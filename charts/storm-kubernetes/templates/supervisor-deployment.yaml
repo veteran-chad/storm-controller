@@ -114,6 +114,15 @@ spec:
           {{- end }}
           {{- if .Values.supervisor.resources }}
           resources: {{- toYaml .Values.supervisor.resources | nindent 12 }}
+          {{- else if eq .Values.supervisor.memoryConfig.mode "auto" }}
+          {{- $memorySettings := include "storm.supervisor.memorySettings" $ | fromYaml }}
+          resources:
+            requests:
+              memory: {{ $memorySettings.containerMemory }}
+              cpu: {{ $memorySettings.containerCpu }}
+            limits:
+              memory: {{ $memorySettings.containerMemory }}
+              cpu: {{ $memorySettings.containerCpu }}
           {{- else if ne .Values.supervisor.resourcesPreset "none" }}
           resources: {{- include "common.resources.preset" (dict "type" .Values.supervisor.resourcesPreset) | nindent 12 }}
           {{- end }}
