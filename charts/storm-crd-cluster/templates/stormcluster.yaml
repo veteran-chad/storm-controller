@@ -35,7 +35,7 @@ spec:
     {{- else }}
     # Use default Zookeeper from operator
     servers:
-      - "{{ .Values.zookeeper.default.serviceName }}.{{ .Values.zookeeper.default.operatorNamespace }}.svc.{{ .Values.clusterDomain | default "cluster.local" }}:2181"
+      - "{{ .Values.zookeeper.default.serviceName }}.{{ .Values.zookeeper.default.operatorNamespace }}.svc.{{ .Values.clusterDomain | default "cluster.local" }}"
     root: "/storm/{{ include "storm-shared.fullname" . }}"
     {{- end }}
   
@@ -63,6 +63,12 @@ spec:
     {{- if .Values.nimbus.resources }}
     resources:
       {{- toYaml .Values.nimbus.resources | nindent 6 }}
+    {{- end }}
+    {{- if .Values.persistence.enabled }}
+    persistence:
+      enabled: true
+      size: {{ .Values.persistence.size }}
+      storageClass: {{ .Values.persistence.storageClass | default .Values.global.storageClass | quote }}
     {{- end }}
     {{- if .Values.nimbus.nodeSelector }}
     nodeSelector:
@@ -110,14 +116,6 @@ spec:
   {{- if .Values.storm.config }}
   config:
     {{- toYaml .Values.storm.config | nindent 4 }}
-  {{- end }}
-  
-  # Persistence configuration
-  {{- if .Values.persistence.enabled }}
-  persistence:
-    enabled: true
-    storageClass: {{ .Values.persistence.storageClass | default .Values.global.storageClass | quote }}
-    size: {{ .Values.persistence.size }}
   {{- end }}
   
   # Monitoring configuration

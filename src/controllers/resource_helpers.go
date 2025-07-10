@@ -19,6 +19,7 @@ package controllers
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -303,11 +304,37 @@ func (r *StormClusterReconciler) reconcileUIService(ctx context.Context, cluster
 // Helper functions for building specs
 
 func getStormImage(cluster *stormv1beta1.StormCluster) string {
+	repository := cluster.Spec.Image.Repository
+
+	// Check if repository already contains a registry
+	// A registry is present if:
+	// 1. It contains a dot followed by a domain (e.g., "example.com/...")
+	// 2. It contains a colon with port (e.g., "localhost:5000/...")
+	// Simple paths like "apache/storm" should NOT be considered as having a registry
+	hasRegistry := false
+
+	// Check for domain pattern (contains dot before first slash)
+	if firstSlash := strings.Index(repository, "/"); firstSlash > 0 {
+		prefix := repository[:firstSlash]
+		if strings.Contains(prefix, ".") || strings.Contains(prefix, ":") {
+			hasRegistry = true
+		}
+	} else if strings.Contains(repository, ".") || strings.Contains(repository, ":") {
+		// No slash but contains dot or colon (e.g., "registry.com")
+		hasRegistry = true
+	}
+
+	if hasRegistry {
+		// Repository already includes registry, don't prepend anything
+		return fmt.Sprintf("%s:%s", repository, cluster.Spec.Image.Tag)
+	}
+
+	// Repository is just the image name, use registry if specified
 	registry := cluster.Spec.Image.Registry
 	if registry == "" {
 		registry = "docker.io"
 	}
-	return fmt.Sprintf("%s/%s:%s", registry, cluster.Spec.Image.Repository, cluster.Spec.Image.Tag)
+	return fmt.Sprintf("%s/%s:%s", registry, repository, cluster.Spec.Image.Tag)
 }
 
 func getConfigMapName(cluster *stormv1beta1.StormCluster) string {
@@ -319,9 +346,15 @@ func getConfigMapName(cluster *stormv1beta1.StormCluster) string {
 
 func getImagePullSecrets(cluster *stormv1beta1.StormCluster) []corev1.LocalObjectReference {
 	secrets := []corev1.LocalObjectReference{}
+
+	// Add secrets from cluster-level ImagePullSecrets
+	secrets = append(secrets, cluster.Spec.ImagePullSecrets...)
+
+	// Add secrets from Image.PullSecrets
 	for _, secret := range cluster.Spec.Image.PullSecrets {
 		secrets = append(secrets, corev1.LocalObjectReference{Name: secret})
 	}
+
 	return secrets
 }
 
@@ -355,11 +388,28 @@ func buildNimbusStatefulSetSpec(cluster *stormv1beta1.StormCluster) appsv1.State
 				Name:  "STORM_LOG_DIR",
 				Value: "/logs",
 			},
+			{
+				Name:  "STORM_LOG_LEVEL",
+				Value: "INFO",
+			},
+			{
+				Name:  "STORM_LOG_STDOUT",
+				Value: "true",
+			},
+			{
+				Name:  "JAVA_TOOL_OPTIONS",
+				Value: "-Dlog4j.configurationFile=/conf/log4j2-console.xml",
+			},
 		}, cluster.Spec.Nimbus.ExtraEnvVars...),
 		VolumeMounts: []corev1.VolumeMount{
 			{
 				Name:      "storm-config",
 				MountPath: "/conf",
+			},
+			{
+				Name:      "storm-config",
+				MountPath: "/apache-storm/log4j2/cluster.xml",
+				SubPath:   "log4j2-console.xml",
 			},
 			{
 				Name:      "nimbus-data",
@@ -488,11 +538,28 @@ func buildSupervisorDeploymentSpec(cluster *stormv1beta1.StormCluster) appsv1.De
 				Name:  "STORM_LOG_DIR",
 				Value: "/logs",
 			},
+			{
+				Name:  "STORM_LOG_LEVEL",
+				Value: "INFO",
+			},
+			{
+				Name:  "STORM_LOG_STDOUT",
+				Value: "true",
+			},
+			{
+				Name:  "JAVA_TOOL_OPTIONS",
+				Value: "-Dlog4j.configurationFile=/conf/log4j2-console.xml",
+			},
 		}, cluster.Spec.Supervisor.ExtraEnvVars...),
 		VolumeMounts: []corev1.VolumeMount{
 			{
 				Name:      "storm-config",
 				MountPath: "/conf",
+			},
+			{
+				Name:      "storm-config",
+				MountPath: "/apache-storm/log4j2/cluster.xml",
+				SubPath:   "log4j2-console.xml",
 			},
 			{
 				Name:      "storm-logs",
@@ -592,11 +659,28 @@ func buildUIDeploymentSpec(cluster *stormv1beta1.StormCluster) appsv1.Deployment
 				Name:  "STORM_LOG_DIR",
 				Value: "/logs",
 			},
+			{
+				Name:  "STORM_LOG_LEVEL",
+				Value: "INFO",
+			},
+			{
+				Name:  "STORM_LOG_STDOUT",
+				Value: "true",
+			},
+			{
+				Name:  "JAVA_TOOL_OPTIONS",
+				Value: "-Dlog4j.configurationFile=/conf/log4j2-console.xml",
+			},
 		},
 		VolumeMounts: []corev1.VolumeMount{
 			{
 				Name:      "storm-config",
 				MountPath: "/conf",
+			},
+			{
+				Name:      "storm-config",
+				MountPath: "/apache-storm/log4j2/cluster.xml",
+				SubPath:   "log4j2-console.xml",
 			},
 			{
 				Name:      "storm-logs",

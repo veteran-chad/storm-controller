@@ -115,6 +115,9 @@ func GetZookeeperConfig(cluster *stormv1beta1.StormCluster) map[string]interface
 	// Set Zookeeper servers
 	config["storm.zookeeper.servers"] = cluster.Spec.Zookeeper.Servers
 
+	// Set Zookeeper port (Storm requires this separately)
+	config["storm.zookeeper.port"] = 2181
+
 	// Set Zookeeper root path with cluster isolation
 	config["storm.zookeeper.root"] = cluster.Spec.Zookeeper.Root
 

@@ -1,9 +1,9 @@
 dependencies:
 - name: storm-shared
-  repository: oci://registry-1.docker.io/veteranchad
+  repository: oci://hdscmnrtspsdevscuscr.azurecr.io/helm/rts
   version: 0.1.0
 - name: zookeeper
   repository: oci://registry-1.docker.io/bitnamicharts
   version: 13.8.4
-digest: sha256:a48bb5fc9855f9746834f13ba61ed71c1da01255a39cf6f294c5d910716bba66
-generated: "2025-07-08T16:30:32.929574384Z"
+digest: sha256:e0d770c12dabf57462098863d0ca7e5ca9b5e06cccd1f57e18a2127d6bdaa3e5
+generated: "2025-07-09T16:09:01.571856225Z"

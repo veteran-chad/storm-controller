@@ -1,0 +1,37 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: nimbus-log-reader
+  namespace: storm-system
+spec:
+  containers:
+  - name: log-reader
+    image: busybox
+    command: 
+    - /bin/sh
+    - -c
+    - |
+      echo "Waiting for logs to be written..."
+      sleep 5
+      echo "=== Checking /logs directory ==="
+      ls -la /logs/
+      echo ""
+      echo "=== Nimbus logs ==="
+      if [ -f /logs/nimbus.log ]; then
+        tail -100 /logs/nimbus.log
+      else
+        echo "No nimbus.log found"
+        echo "Files in /logs:"
+        find /logs -type f -name "*.log" | head -10
+      fi
+      echo ""
+      echo "Keeping pod alive for further inspection..."
+      sleep 3600
+    volumeMounts:
+    - name: storm-logs
+      mountPath: /logs
+      readOnly: true
+  volumes:
+  - name: storm-logs
+    persistentVolumeClaim:
+      claimName: nimbus-data-rts-storm-cluster-storm-crd-cluster-nimbus-0

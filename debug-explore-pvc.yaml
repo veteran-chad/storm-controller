@@ -1,0 +1,45 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: nimbus-pvc-explorer
+  namespace: storm-system
+spec:
+  containers:
+  - name: explorer
+    image: storm:2.8.1
+    command: 
+    - /bin/bash
+    - -c
+    - |
+      echo "=== Exploring PVC contents ==="
+      echo "Contents of /data (PVC mount):"
+      find /data -type f 2>/dev/null | head -20
+      echo ""
+      echo "=== Checking storm directories ==="
+      echo "Storm home: $STORM_HOME"
+      echo "Contents of /storm:"
+      ls -la /storm 2>/dev/null || echo "/storm not found"
+      echo ""
+      echo "Contents of /apache-storm/logs:"
+      ls -la /apache-storm/logs 2>/dev/null || echo "/apache-storm/logs not found"
+      echo ""
+      echo "=== Trying to find any log files ==="
+      find / -name "*.log" -type f 2>/dev/null | grep -E "(storm|nimbus)" | head -20
+      echo ""
+      echo "=== Checking environment ==="
+      env | grep -i storm
+      echo ""
+      echo "Keeping pod alive for manual inspection..."
+      sleep 3600
+    volumeMounts:
+    - name: nimbus-data
+      mountPath: /data
+    env:
+    - name: STORM_CONF_DIR
+      value: "/conf"
+    - name: STORM_LOG_DIR
+      value: "/logs"
+  volumes:
+  - name: nimbus-data
+    persistentVolumeClaim:
+      claimName: nimbus-data-rts-storm-cluster-storm-crd-cluster-nimbus-0

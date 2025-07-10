@@ -19,6 +19,7 @@ package controllers
 import (
 	"context"
 	"fmt"
+	"strings"
 	"time"
 
 	appsv1 "k8s.io/api/apps/v1"
@@ -934,15 +935,11 @@ func (r *StormWorkerPoolReconciler) reconcileService(ctx context.Context, worker
 
 func (r *StormWorkerPoolReconciler) getStormImage(cluster *stormv1beta1.StormCluster) string {
 	// Default values
-	registry := "docker.io"
 	repository := "apache/storm"
 	tag := "2.6.0"
 
 	// Override with cluster spec if available
 	if cluster.Spec.Image != nil {
-		if cluster.Spec.Image.Registry != "" {
-			registry = cluster.Spec.Image.Registry
-		}
 		if cluster.Spec.Image.Repository != "" {
 			repository = cluster.Spec.Image.Repository
 		}
@@ -951,14 +948,38 @@ func (r *StormWorkerPoolReconciler) getStormImage(cluster *stormv1beta1.StormClu
 		}
 	}
 
+	// Check if repository already contains a registry
+	// A registry is present if:
+	// 1. It contains a dot followed by a domain (e.g., "example.com/...")
+	// 2. It contains a colon with port (e.g., "localhost:5000/...")
+	// Simple paths like "apache/storm" should NOT be considered as having a registry
+	hasRegistry := false
+
+	// Check for domain pattern (contains dot before first slash)
+	if firstSlash := strings.Index(repository, "/"); firstSlash > 0 {
+		prefix := repository[:firstSlash]
+		if strings.Contains(prefix, ".") || strings.Contains(prefix, ":") {
+			hasRegistry = true
+		}
+	} else if strings.Contains(repository, ".") || strings.Contains(repository, ":") {
+		// No slash but contains dot or colon (e.g., "registry.com")
+		hasRegistry = true
+	}
+
+	if hasRegistry {
+		// Repository already includes registry, don't prepend anything
+		return fmt.Sprintf("%s:%s", repository, tag)
+	}
+
+	// Repository is just the image name, use registry if specified
+	registry := "docker.io"
+	if cluster.Spec.Image != nil && cluster.Spec.Image.Registry != "" {
+		registry = cluster.Spec.Image.Registry
+	}
 	return fmt.Sprintf("%s/%s:%s", registry, repository, tag)
 }
 
 func (r *StormWorkerPoolReconciler) getImageFromSpec(imageSpec *stormv1beta1.ImageSpec) string {
-	registry := imageSpec.Registry
-	if registry == "" {
-		registry = "docker.io"
-	}
 	repository := imageSpec.Repository
 	if repository == "" {
 		repository = "apache/storm"
@@ -966,6 +987,35 @@ func (r *StormWorkerPoolReconciler) getImageFromSpec(imageSpec *stormv1beta1.Ima
 	tag := imageSpec.Tag
 	if tag == "" {
 		tag = "2.6.0"
+	}
+
+	// Check if repository already contains a registry
+	// A registry is present if:
+	// 1. It contains a dot followed by a domain (e.g., "example.com/...")
+	// 2. It contains a colon with port (e.g., "localhost:5000/...")
+	// Simple paths like "apache/storm" should NOT be considered as having a registry
+	hasRegistry := false
+
+	// Check for domain pattern (contains dot before first slash)
+	if firstSlash := strings.Index(repository, "/"); firstSlash > 0 {
+		prefix := repository[:firstSlash]
+		if strings.Contains(prefix, ".") || strings.Contains(prefix, ":") {
+			hasRegistry = true
+		}
+	} else if strings.Contains(repository, ".") || strings.Contains(repository, ":") {
+		// No slash but contains dot or colon (e.g., "registry.com")
+		hasRegistry = true
+	}
+
+	if hasRegistry {
+		// Repository already includes registry, don't prepend anything
+		return fmt.Sprintf("%s:%s", repository, tag)
+	}
+
+	// Repository is just the image name, use registry if specified
+	registry := imageSpec.Registry
+	if registry == "" {
+		registry = "docker.io"
 	}
 	return fmt.Sprintf("%s/%s:%s", registry, repository, tag)
 }

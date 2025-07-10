@@ -1,0 +1,22 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: storm-logs-debug
+  namespace: storm-system
+spec:
+  template:
+    spec:
+      containers:
+      - name: debug
+        image: alpine
+        command:
+        - sh
+        - -c
+        - |
+          echo "Waiting for nimbus pod..."
+          sleep 10
+          kubectl get pods -n storm-system | grep nimbus
+          echo "---"
+          kubectl logs test-cluster-nimbus-0 -n storm-system --tail=1000 || echo "Failed to get logs"
+      restartPolicy: Never
+      serviceAccountName: storm-operator-operator

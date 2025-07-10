@@ -1,0 +1,21 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: nimbus-debug
+  namespace: storm-system
+spec:
+  containers:
+  - name: debug
+    image: busybox
+    command: ['sleep', '3600']
+    volumeMounts:
+    - name: nimbus-data
+      mountPath: /nimbus-data
+    - name: storm-logs
+      mountPath: /storm-logs
+  volumes:
+  - name: nimbus-data
+    persistentVolumeClaim:
+      claimName: nimbus-data-rts-storm-cluster-storm-crd-cluster-nimbus-0
+  - name: storm-logs
+    emptyDir: {}

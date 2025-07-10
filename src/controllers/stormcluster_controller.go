@@ -757,8 +757,30 @@ func (r *StormClusterReconciler) reconcileConfigMap(ctx context.Context, cluster
 
 		// Build Storm configuration
 		stormConfig := r.buildStormConfig(cluster)
+
+		// Log4j2 configuration for console output
+		log4j2Config := `<?xml version="1.0" encoding="UTF-8"?>
+<configuration monitorInterval="60" shutdownHook="disable">
+    <properties>
+        <property name="pattern">%d{yyyy-MM-dd HH:mm:ss.SSS} %c{1.} %t [%p] %msg%n</property>
+    </properties>
+    <appenders>
+        <Console name="Console" target="SYSTEM_OUT">
+            <PatternLayout charset="UTF-8">
+                <pattern>${pattern}</pattern>
+            </PatternLayout>
+        </Console>
+    </appenders>
+    <loggers>
+        <root level="info">
+            <appender-ref ref="Console"/>
+        </root>
+    </loggers>
+</configuration>`
+
 		configMap.Data = map[string]string{
-			"storm.yaml": stormConfig,
+			"storm.yaml":         stormConfig,
+			"log4j2-console.xml": log4j2Config,
 		}
 
 		return nil

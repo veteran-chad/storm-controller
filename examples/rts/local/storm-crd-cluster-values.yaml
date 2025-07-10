@@ -1,0 +1,109 @@
+# Storm CRD Cluster Values for RTS Local Deployment
+# Deploys a Storm cluster using CRDs
+
+# Cluster name
+clusterName: rts-storm-cluster
+
+# Zookeeper configuration
+zookeeper:
+  external:
+    enabled: false
+  default:
+    operatorNamespace: "storm-system"  # Fix: Use storm-system instead of storm-operator
+    serviceName: "storm-operator-zookeeper-headless"
+
+# Storm version
+stormVersion: "2.8.1"
+
+# Storm image configuration (used by all components)
+storm:
+  image:
+    registry: hdscmnrtspsdevscuscr.azurecr.io
+    repository: gp-upstream/docker.io/library/storm
+    tag: 2.8.1
+    pullPolicy: Always
+    pullSecrets:
+      - acr-pull-secret
+
+# Nimbus configuration
+nimbus:
+  replicas: 1
+  resources:
+    requests:
+      memory: "1Gi"
+      cpu: "500m"
+    limits:
+      memory: "2Gi"
+      cpu: "1000m"
+
+# Supervisor configuration  
+supervisor:
+  replicas: 2
+  resources:
+    requests:
+      memory: "1Gi"
+      cpu: "500m"
+    limits:
+      memory: "2Gi"
+      cpu: "1000m"
+  # Number of worker slots per supervisor
+  slotsPerSupervisor: 4
+
+# UI configuration
+ui:
+  enabled: true
+  replicas: 1
+  service:
+    type: ClusterIP  # Change to LoadBalancer or NodePort if external access needed
+    port: 8080
+  resources:
+    requests:
+      memory: "512Mi"
+      cpu: "250m"
+    limits:
+      memory: "1Gi"
+      cpu: "500m"
+
+# Storm configuration overrides
+stormConfig:
+  # Local development optimizations
+  topology.max.spout.pending: 1000
+  topology.worker.max.heap.size.mb: 1024
+  topology.acker.executors: 1
+  # Enable debug for development
+  topology.debug: false
+  # Local cluster settings
+  storm.local.dir: "/storm/data"
+  storm.log.dir: "/storm/logs"
+  # Metrics
+  topology.builtin.metrics.bucket.size.secs: 60
+  topology.metrics.consumer.register:
+    - class: "org.apache.storm.metric.LoggingMetricsConsumer"
+      parallelism.hint: 1
+
+# Persistence
+persistence:
+  enabled: true
+  storageClass: ""  # Use default storage class
+  size: 10Gi
+
+# Image pull secrets for ACR - configured under storm.image.pullSecrets
+
+# Security context
+securityContext:
+  runAsNonRoot: true
+  runAsUser: 1000
+  fsGroup: 1000
+
+# Monitoring
+monitoring:
+  enabled: false  # Enable if Prometheus operator is installed
+
+# Network policies
+networkPolicy:
+  enabled: false  # Enable for production
+
+# Pod disruption budget
+podDisruptionBudget:
+  enabled: false  # Enable for production
+  minAvailable: 1

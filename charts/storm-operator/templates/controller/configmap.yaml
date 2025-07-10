@@ -17,7 +17,11 @@ data:
       # Default Storm configuration
       storm:
         image:
+          {{- if include "storm-shared.images.registry" (dict "imageRoot" .Values.operator.defaults.storm.image "global" .Values.global) }}
           registry: {{ include "storm-shared.images.registry" (dict "imageRoot" .Values.operator.defaults.storm.image "global" .Values.global) | quote }}
+          {{- else }}
+          registry: ""
+          {{- end }}
           repository: {{ .Values.operator.defaults.storm.image.repository | quote }}
           tag: {{ .Values.operator.defaults.storm.image.tag | quote }}
         config:
@@ -37,7 +41,7 @@ data:
       zookeeper:
         {{- if .Values.zookeeper.enabled }}
         servers:
-          - "{{ include "storm-shared.fullname" . }}-zookeeper-headless:2181"
+          - "{{ include "storm-shared.fullname" . }}-zookeeper-headless"
         {{- else if .Values.externalZookeeper.servers }}
         servers:
           {{- range .Values.externalZookeeper.servers }}

@@ -1,0 +1,89 @@
+# Storm Operator Values for RTS Local Deployment
+# Using Azure Container Registry
+
+# Zookeeper configuration
+zookeeper:
+  enabled: true
+  replicaCount: 3
+  persistence:
+    enabled: true
+    size: 8Gi
+  # Use ACR for Zookeeper if needed
+  # image:
+  #   registry: hdscmnrtspsdevscuscr.azurecr.io
+  #   repository: rts/zookeeper
+
+# Storm operator configuration
+operator:
+  # Controller image
+  image:
+    registry: hdscmnrtspsdevscuscr.azurecr.io
+    repository: rts/storm-controller
+    tag: latest
+    pullPolicy: Always
+    pullSecrets:
+      - acr-pull-secret
+
+  # Default Storm configuration
+  defaults:
+    storm:
+      image:
+        registry: hdscmnrtspsdevscuscr.azurecr.io
+        repository: gp-upstream/docker.io/library/storm
+        tag: 2.8.1
+      config:
+        storm.zookeeper.session.timeout: 30000
+        storm.zookeeper.connection.timeout: 30000
+        nimbus.thrift.port: 6627
+        ui.port: 8080
+        # Local mode optimizations
+        nimbus.task.launch.secs: 60
+        nimbus.supervisor.timeout.secs: 60
+        supervisor.worker.start.timeout.secs: 120
+        supervisor.worker.timeout.secs: 30
+        # Resource settings for local development
+        worker.childopts: "-Xmx1024m"
+        supervisor.childopts: "-Xmx512m"
+        nimbus.childopts: "-Xmx1024m"
+    # Default Zookeeper connection (without port)
+    zookeeper:
+      servers: ["storm-operator-zookeeper-headless"]
+      connectionTimeout: 15000
+      sessionTimeout: 20000
+
+  # Resource limits for the controller
+  resources:
+    limits:
+      cpu: 500m
+      memory: 512Mi
+    requests:
+      cpu: 100m
+      memory: 128Mi
+
+# Enable leader election for HA
+enableLeaderElection: true
+
+# Metrics configuration
+metrics:
+  enabled: true
+  serviceMonitor:
+    enabled: false  # Disable for local, enable if Prometheus is installed
+
+# RBAC
+rbac:
+  create: true
+
+# Service account
+serviceAccount:
+  create: true
+  name: storm-controller
+
+# Log level
+logLevel: info
+
+# Development settings
+development:
+  # Enable webhook logs
+  webhookLogs: true
+  # Enable debug logging for Storm client
+  stormClientDebug: false

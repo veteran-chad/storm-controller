@@ -263,6 +263,7 @@ func TestGetZookeeperConfig(t *testing.T) {
 
 	expected := map[string]interface{}{
 		"storm.zookeeper.servers":            []string{"zk1:2181", "zk2:2181"},
+		"storm.zookeeper.port":               2181,
 		"storm.zookeeper.root":               "/storm/test-cluster",
 		"storm.zookeeper.connection.timeout": 15000,
 		"storm.zookeeper.session.timeout":    20000,
@@ -286,6 +287,7 @@ func TestGetZookeeperConfigWithoutTimeouts(t *testing.T) {
 
 	expected := map[string]interface{}{
 		"storm.zookeeper.servers": []string{"zk:2181"},
+		"storm.zookeeper.port":    2181,
 		"storm.zookeeper.root":    "/storm/test",
 	}
 

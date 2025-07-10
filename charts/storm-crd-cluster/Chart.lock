@@ -1,6 +1,6 @@
 dependencies:
 - name: storm-shared
-  repository: oci://registry-1.docker.io/veteranchad
+  repository: oci://hdscmnrtspsdevscuscr.azurecr.io/helm/rts
   version: 0.1.0
-digest: sha256:a926b0ad9b2d62ca63e14f7a3ae6c2383333c2d18eb2e3792407885e8c4835f5
-generated: "2025-07-08T16:31:11.06568677Z"
+digest: sha256:fe2abd23bd46c156defb820a1e690d5a6fb4f144782e423d7073bce5f0fdfc69
+generated: "2025-07-09T16:09:18.994834346Z"

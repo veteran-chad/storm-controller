@@ -1,0 +1,61 @@
+apiVersion: storm.apache.org/v1beta1
+kind: StormCluster
+metadata:
+  name: storm-cluster
+  namespace: storm-system
+spec:
+  # Storm image configuration
+  image:
+    repository: storm
+    tag: "2.8.1"
+    pullPolicy: IfNotPresent
+  
+  # Zookeeper configuration
+  zookeeper:
+    servers:
+      - "storm-operator-zookeeper"
+  
+  # Nimbus configuration
+  nimbus:
+    replicas: 1
+    resources:
+      requests:
+        memory: "512Mi"
+        cpu: "250m"
+      limits:
+        memory: "1Gi"
+        cpu: "500m"
+    persistence:
+      enabled: true
+      size: "5Gi"
+      storageClass: ""  # Use default storage class
+  
+  # Supervisor configuration
+  supervisor:
+    replicas: 1
+    slotsPerSupervisor: 2
+    resources:
+      requests:
+        memory: "512Mi"
+        cpu: "250m"
+      limits:
+        memory: "1Gi"
+        cpu: "500m"
+  
+  # UI configuration
+  ui:
+    replicas: 1
+    resources:
+      requests:
+        memory: "256Mi"
+        cpu: "100m"
+      limits:
+        memory: "512Mi"
+        cpu: "250m"
+  
+  # Storm configuration
+  config:
+    storm.zookeeper.servers: '["storm-operator-zookeeper"]'
+    nimbus.seeds: '["storm-cluster-nimbus"]'
+    ui.port: "8080"
+    nimbus.thrift.port: "6627"

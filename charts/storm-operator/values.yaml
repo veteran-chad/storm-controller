@@ -64,7 +64,7 @@ operator:
     # Default Zookeeper connection
     zookeeper:
       # Use the included Zookeeper by default
-      servers: ["{{ .Release.Name }}-zookeeper-headless:2181"]
+      servers: ["{{ .Release.Name }}-zookeeper-headless"]
       connectionTimeout: 15000
       sessionTimeout: 20000
   

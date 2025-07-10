@@ -84,6 +84,71 @@ These tests should be rewritten to:
 
 ## Other Known Issues
 
+### Storm Logging Configuration
+
+**Issue**: Default Storm logging configuration writes to files which can cause pods to crash when log directories don't exist or lack proper permissions.
+
+**Solution**: The storm-controller now configures Storm components to use console/stdout logging by default.
+
+**Implementation Details**:
+1. **Custom log4j2 Configuration**: The controller automatically injects a custom log4j2 configuration that uses a Console appender instead of file-based appenders.
+
+2. **Volume Mount Override**: The controller mounts the custom log4j2 configuration over Storm's default `/apache-storm/log4j2/cluster.xml` file using a ConfigMap subPath mount.
+
+3. **Environment Variables**: Sets `JAVA_TOOL_OPTIONS` to ensure the custom configuration is used, though the volume mount override takes precedence.
+
+**Benefits**:
+- Logs are immediately visible via `kubectl logs` without needing to access files inside containers
+- No risk of pods crashing due to missing log directories
+- Better integration with Kubernetes logging infrastructure
+- Easier debugging and troubleshooting
+
+**Configuration**: The log4j2 console configuration is automatically added to the Storm ConfigMap with the following pattern:
+```xml
+<?xml version="1.0" encoding="UTF-8"?>
+<configuration monitorInterval="60" shutdownHook="disable">
+    <properties>
+        <property name="pattern">%d{yyyy-MM-dd HH:mm:ss.SSS} %c{1.} %t [%p] %msg%n</property>
+    </properties>
+    <appenders>
+        <Console name="Console" target="SYSTEM_OUT">
+            <PatternLayout charset="UTF-8">
+                <pattern>${pattern}</pattern>
+            </PatternLayout>
+        </Console>
+    </appenders>
+    <loggers>
+        <root level="info">
+            <appender-ref ref="Console"/>
+        </root>
+    </loggers>
+</configuration>
+```
+
+**Note**: This is now the standard logging configuration for all Storm components deployed by the controller.
+
+### Critical: Docker.io Image Prefix Issue
+
+**Issue**: The storm-controller incorrectly prepends "docker.io/" to image references in private registries.
+
+**Symptoms**:
+- When deploying from private registries (e.g., Azure Container Registry), pods fail with ImagePullBackOff
+- Image references like `myregistry.azurecr.io/storm:2.8.1` become `docker.io/myregistry.azurecr.io/storm:2.8.1`
+- Affects all Storm component deployments (nimbus, supervisor, UI)
+
+**Root Cause**: The controller's image formatting logic assumes all images without a registry prefix should use Docker Hub.
+
+**Workaround**: 
+1. Use public Docker Hub images temporarily
+2. Or manually patch the deployments/statefulsets after creation:
+   ```bash
+   kubectl set image deployment/<deployment-name> <container-name>=<correct-image>
+   ```
+
+**Fix Required**: The controller needs to properly detect registry URLs and not prepend docker.io to fully qualified image names.
+
+**Impact**: Critical - prevents deployment from private registries without manual intervention.
+
 ### Storm API Slot Reporting
 
 The Storm API sometimes reports incorrect slot information:
