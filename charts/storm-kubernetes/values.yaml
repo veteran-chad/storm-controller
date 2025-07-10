@@ -759,6 +759,30 @@ supervisor:
     minAvailable: 1
     maxUnavailable: ""
     unhealthyPodEvictionPolicy: "IfHealthyBudget"
+  ## @param supervisor.hpa.enabled Enable HorizontalPodAutoscaler for Supervisors
+  ## @param supervisor.hpa.minReplicas Minimum number of supervisor replicas
+  ## @param supervisor.hpa.maxReplicas Maximum number of supervisor replicas
+  ## @param supervisor.hpa.targetCPU Target CPU utilization percentage
+  ## @param supervisor.hpa.targetMemory Target memory utilization percentage
+  ## @param supervisor.hpa.metrics Custom metrics for HPA
+  ## @param supervisor.hpa.behavior Custom scaling behavior
+  hpa:
+    enabled: false
+    minReplicas: 3
+    maxReplicas: 20
+    targetCPU: 70
+    targetMemory: 80
+    metrics: []
+    ## Example custom metrics:
+    ## metrics:
+    ##   - type: Pods
+    ##     pods:
+    ##       metric:
+    ##         name: storm_slots_used_ratio
+    ##       target:
+    ##         type: AverageValue
+    ##         averageValue: "0.8"
+    behavior: {}
 
 ## @section Zookeeper parameters
 ## @param zookeeper.enabled Deploy Zookeeper as a dependency

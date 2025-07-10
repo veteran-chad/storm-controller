@@ -1,0 +1,77 @@
+{{- if and .Values.supervisor.enabled .Values.supervisor.hpa.enabled }}
+apiVersion: {{ include "common.capabilities.hpa.apiVersion" ( dict "context" $ ) }}
+kind: HorizontalPodAutoscaler
+metadata:
+  name: {{ include "common.names.fullname" . }}-supervisor
+  namespace: {{ include "common.names.namespace" . | quote }}
+  labels: {{- include "common.labels.standard" ( dict "customLabels" .Values.commonLabels "context" $ ) | nindent 4 }}
+    app.kubernetes.io/component: supervisor
+  {{- if .Values.commonAnnotations }}
+  annotations: {{- include "common.tplvalues.render" ( dict "value" .Values.commonAnnotations "context" $ ) | nindent 4 }}
+  {{- end }}
+spec:
+  scaleTargetRef:
+    apiVersion: {{ include "common.capabilities.deployment.apiVersion" . }}
+    kind: Deployment
+    name: {{ include "common.names.fullname" . }}-supervisor
+  minReplicas: {{ .Values.supervisor.hpa.minReplicas }}
+  maxReplicas: {{ .Values.supervisor.hpa.maxReplicas }}
+  {{- if .Values.supervisor.hpa.targetCPU }}
+  targetCPUUtilizationPercentage: {{ .Values.supervisor.hpa.targetCPU }}
+  {{- end }}
+  {{- if or .Values.supervisor.hpa.targetMemory .Values.supervisor.hpa.metrics }}
+  metrics:
+    {{- if .Values.supervisor.hpa.targetCPU }}
+    - type: Resource
+      resource:
+        name: cpu
+        {{- if semverCompare "<1.23-0" (include "common.capabilities.kubeVersion" .) }}
+        targetAverageUtilization: {{ .Values.supervisor.hpa.targetCPU }}
+        {{- else }}
+        target:
+          type: Utilization
+          averageUtilization: {{ .Values.supervisor.hpa.targetCPU }}
+        {{- end }}
+    {{- end }}
+    {{- if .Values.supervisor.hpa.targetMemory }}
+    - type: Resource
+      resource:
+        name: memory
+        {{- if semverCompare "<1.23-0" (include "common.capabilities.kubeVersion" .) }}
+        targetAverageUtilization: {{ .Values.supervisor.hpa.targetMemory }}
+        {{- else }}
+        target:
+          type: Utilization
+          averageUtilization: {{ .Values.supervisor.hpa.targetMemory }}
+        {{- end }}
+    {{- end }}
+    {{- if .Values.supervisor.hpa.metrics }}
+    {{- include "common.tplvalues.render" (dict "value" .Values.supervisor.hpa.metrics "context" $) | nindent 4 }}
+    {{- end }}
+  {{- end }}
+  {{- if .Values.supervisor.hpa.behavior }}
+  behavior: {{- include "common.tplvalues.render" (dict "value" .Values.supervisor.hpa.behavior "context" $) | nindent 4 }}
+  {{- else }}
+  behavior:
+    scaleUp:
+      stabilizationWindowSeconds: 120
+      policies:
+      - type: Percent
+        value: 100
+        periodSeconds: 60
+      - type: Pods
+        value: 2
+        periodSeconds: 60
+      selectPolicy: Max
+    scaleDown:
+      stabilizationWindowSeconds: 300
+      policies:
+      - type: Percent
+        value: 10
+        periodSeconds: 60
+      - type: Pods
+        value: 1
+        periodSeconds: 60
+      selectPolicy: Min
+  {{- end }}
+{{- end }}

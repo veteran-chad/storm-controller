@@ -1,0 +1,120 @@
+# Production HPA (Horizontal Pod Autoscaler) configuration for Storm Kubernetes
+
+# Prerequisites:
+# - metrics-server must be installed in the cluster
+# - Supervisor pods must have resource requests defined
+
+supervisor:
+  # Initial replica count (HPA will adjust this)
+  replicaCount: 5
+  
+  # Resource configuration is REQUIRED for HPA
+  resources:
+    requests:
+      cpu: 2000m      # 2 CPU cores per supervisor
+      memory: 4Gi     # 4GB memory per supervisor
+    limits:
+      cpu: 4000m      # 4 CPU cores max
+      memory: 8Gi     # 8GB memory max
+  
+  # HPA configuration
+  hpa:
+    enabled: true
+    
+    # Scaling limits
+    minReplicas: 3      # Minimum 3 supervisors
+    maxReplicas: 20     # Maximum 20 supervisors
+    
+    # Resource-based scaling
+    targetCPU: 70       # Scale up when CPU > 70%
+    targetMemory: 80    # Scale up when Memory > 80%
+    
+    # Custom metrics (requires Prometheus Adapter)
+    metrics: []
+    # Example: Scale based on Storm slot usage
+    # metrics:
+    #   - type: Pods
+    #     pods:
+    #       metric:
+    #         name: storm_slots_used_ratio
+    #       target:
+    #         type: AverageValue
+    #         averageValue: "0.8"  # Scale when 80% slots are used
+    
+    # Advanced scaling behavior
+    behavior:
+      scaleUp:
+        # Stabilization window to prevent flapping
+        stabilizationWindowSeconds: 120
+        policies:
+        # Allow 100% increase every 60 seconds
+        - type: Percent
+          value: 100
+          periodSeconds: 60
+        # Or add 2 pods every 60 seconds
+        - type: Pods
+          value: 2
+          periodSeconds: 60
+        # Use the policy that scales most
+        selectPolicy: Max
+      scaleDown:
+        # Longer stabilization for scale down
+        stabilizationWindowSeconds: 300
+        policies:
+        # Remove max 10% every 60 seconds
+        - type: Percent
+          value: 10
+          periodSeconds: 60
+        # Or remove 1 pod every 60 seconds
+        - type: Pods
+          value: 1
+          periodSeconds: 60
+        # Use the policy that scales least
+        selectPolicy: Min
+
+# Enable metrics for custom HPA metrics
+metrics:
+  enabled: true
+  serviceMonitor:
+    enabled: true
+
+# Example: HPA with custom metrics based on Storm metrics
+# Requires prometheus-adapter to be configured
+#
+# supervisor:
+#   hpa:
+#     enabled: true
+#     minReplicas: 3
+#     maxReplicas: 30
+#     metrics:
+#       # Scale based on slot usage
+#       - type: Pods
+#         pods:
+#           metric:
+#             name: storm_slots_used_percentage
+#           target:
+#             type: AverageValue
+#             averageValue: "75"  # Target 75% slot usage
+#       # Scale based on executor load
+#       - type: Pods
+#         pods:
+#           metric:
+#             name: storm_executor_capacity_percentage
+#           target:
+#             type: AverageValue
+#             averageValue: "80"  # Target 80% executor capacity
+#       # Scale based on pending tuples
+#       - type: External
+#         external:
+#           metric:
+#             name: storm_topology_pending_tuples
+#             selector:
+#               matchLabels:
+#                 topology: "critical-topology"
+#           target:
+#             type: Value
+#             value: "10000"  # Scale if pending tuples > 10k
+
+# For testing HPA behavior
+# Generate load with: kubectl run -i --tty load-generator --rm --image=busybox --restart=Never -- /bin/sh
+# Then run: while true; do wget -q -O- http://storm-ui:8080; done

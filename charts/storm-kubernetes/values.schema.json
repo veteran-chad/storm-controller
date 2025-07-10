@@ -541,6 +541,53 @@
               "description": "Maximum unavailable pods"
             }
           }
+        },
+        "hpa": {
+          "type": "object",
+          "properties": {
+            "enabled": {
+              "type": "boolean",
+              "description": "Enable HorizontalPodAutoscaler",
+              "default": false
+            },
+            "minReplicas": {
+              "type": "integer",
+              "description": "Minimum number of replicas",
+              "default": 3,
+              "minimum": 1
+            },
+            "maxReplicas": {
+              "type": "integer",
+              "description": "Maximum number of replicas",
+              "default": 20,
+              "minimum": 1
+            },
+            "targetCPU": {
+              "type": "integer",
+              "description": "Target CPU utilization percentage",
+              "default": 70,
+              "minimum": 1,
+              "maximum": 100
+            },
+            "targetMemory": {
+              "type": "integer",
+              "description": "Target memory utilization percentage",
+              "default": 80,
+              "minimum": 1,
+              "maximum": 100
+            },
+            "metrics": {
+              "type": "array",
+              "description": "Custom metrics for HPA",
+              "items": {
+                "type": "object"
+              }
+            },
+            "behavior": {
+              "type": "object",
+              "description": "Custom scaling behavior"
+            }
+          }
         }
       }
     },
