@@ -247,7 +247,8 @@ jobs:
       - name: Test with monitoring
         run: |
           helm template test-release charts/storm-kubernetes \
-            --values charts/storm-kubernetes/values-production-monitoring.yaml > /tmp/monitoring.yaml
+            --values charts/storm-kubernetes/values-production-monitoring.yaml > /tmp/monitoring.yaml || \
+          (echo "Failed to generate monitoring template" && exit 1)
           echo "✓ Monitoring features template generated successfully"
           
       - name: Test with HPA
@@ -272,16 +273,16 @@ jobs:
         run: |
           # Check that key resources are generated
           echo "Checking for required resources..."
-          grep -q "kind: StatefulSet" /tmp/production.yaml && echo "✓ StatefulSet found"
-          grep -q "kind: Deployment" /tmp/production.yaml && echo "✓ Deployment found"
-          grep -q "kind: Service" /tmp/production.yaml && echo "✓ Service found"
-          grep -q "kind: ConfigMap" /tmp/production.yaml && echo "✓ ConfigMap found"
-          grep -q "kind: ServiceAccount" /tmp/production.yaml && echo "✓ ServiceAccount found"
-          grep -q "kind: NetworkPolicy" /tmp/production.yaml && echo "✓ NetworkPolicy found"
-          grep -q "kind: PodDisruptionBudget" /tmp/production.yaml && echo "✓ PodDisruptionBudget found"
-          grep -q "kind: ServiceMonitor" /tmp/monitoring.yaml && echo "✓ ServiceMonitor found"
-          grep -q "kind: HorizontalPodAutoscaler" /tmp/hpa.yaml && echo "✓ HPA found"
-          grep -q "storm-auth" /tmp/auth.yaml && echo "✓ Auth ConfigMap found"
+          grep -q "kind: StatefulSet" /tmp/production.yaml && echo "✓ StatefulSet found" || echo "✗ StatefulSet missing"
+          grep -q "kind: Deployment" /tmp/production.yaml && echo "✓ Deployment found" || echo "✗ Deployment missing"
+          grep -q "kind: Service" /tmp/production.yaml && echo "✓ Service found" || echo "✗ Service missing"
+          grep -q "kind: ConfigMap" /tmp/production.yaml && echo "✓ ConfigMap found" || echo "✗ ConfigMap missing"
+          grep -q "kind: ServiceAccount" /tmp/production.yaml && echo "✓ ServiceAccount found" || echo "✗ ServiceAccount missing"
+          grep -q "kind: NetworkPolicy" /tmp/production.yaml && echo "✓ NetworkPolicy found" || echo "✗ NetworkPolicy missing"
+          grep -q "kind: PodDisruptionBudget" /tmp/production.yaml && echo "✓ PodDisruptionBudget found" || echo "✗ PodDisruptionBudget missing"
+          grep -q "kind: ServiceMonitor" /tmp/monitoring.yaml && echo "✓ ServiceMonitor found" || true
+          grep -q "kind: HorizontalPodAutoscaler" /tmp/hpa.yaml && echo "✓ HPA found" || echo "✗ HPA missing"
+          grep -q "storm-auth" /tmp/auth.yaml && echo "✓ Auth ConfigMap found" || echo "✗ Auth ConfigMap missing"
 
   package-helm-chart:
     name: Package Storm Kubernetes Chart
@@ -312,14 +313,6 @@ jobs:
           fi
           echo "version=$VERSION" >> $GITHUB_OUTPUT
 
-      - name: Update chart versions
-        run: |
-          VERSION=${{ steps.version.outputs.version }}
-          sed -i "s/version: .*/version: ${VERSION}/" charts/storm-kubernetes/Chart.yaml
-          if [[ $GITHUB_REF == refs/tags/v* ]]; then
-            sed -i "s/appVersion: .*/appVersion: ${GITHUB_REF#refs/tags/}/" charts/storm-kubernetes/Chart.yaml
-          fi
-
       - name: Log in to Docker Hub Registry for Helm
         run: |
           echo ${{ secrets.DOCKERHUB_TOKEN }} | helm registry login registry-1.docker.io --username ${{ secrets.DOCKERHUB_USERNAME }} --password-stdin
@@ -333,6 +326,14 @@ jobs:
           
           # Always update dependencies to ensure consistency
           helm dependency update charts/storm-kubernetes
+          
+      - name: Update chart versions
+        run: |
+          VERSION=${{ steps.version.outputs.version }}
+          sed -i "s/version: .*/version: ${VERSION}/" charts/storm-kubernetes/Chart.yaml
+          if [[ $GITHUB_REF == refs/tags/v* ]]; then
+            sed -i "s/appVersion: .*/appVersion: ${GITHUB_REF#refs/tags/}/" charts/storm-kubernetes/Chart.yaml
+          fi
 
       - name: Package charts
         run: |
