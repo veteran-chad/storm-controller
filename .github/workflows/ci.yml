@@ -1,14 +1,12 @@
 name: CI
 
-# DISABLED: See KNOWN_ISSUES.md for details about Helm dependency version conflicts
 on:
-  workflow_dispatch:  # Only allow manual triggering for now
-# on:
-#   push:
-#     branches: [ main ]
-#     tags: [ 'v*' ]
-#   pull_request:
-#     branches: [ main ]
+  push:
+    branches: [ main, feature/storm-controller ]
+    tags: [ 'v*' ]
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch:
 
 env:
   REGISTRY: docker.io
@@ -188,8 +186,8 @@ jobs:
             org.opencontainers.image.description=Kubernetes controller for Apache Storm
             org.opencontainers.image.version=${{ steps.version.outputs.version }}
 
-  lint-helm-charts:
-    name: Lint Helm Charts
+  lint-helm-chart:
+    name: Lint Storm Kubernetes Helm Chart
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -203,27 +201,92 @@ jobs:
           helm repo add bitnami https://charts.bitnami.com/bitnami
           helm repo update
 
-      - name: Log in to Docker Hub Registry for Helm
-        run: |
-          echo ${{ secrets.DOCKERHUB_TOKEN }} | helm registry login registry-1.docker.io --username ${{ secrets.DOCKERHUB_USERNAME }} --password-stdin
-
       - name: Build Helm dependencies
         run: |
-          helm dependency update charts/storm-operator
           helm dependency update charts/storm-kubernetes
-          helm dependency update charts/storm-crd-cluster
 
-      - name: Lint charts
+      - name: Lint chart
         run: |
-          helm lint charts/storm-operator
-          helm lint charts/storm-crd-cluster
-          helm lint charts/storm-kubernetes
-          helm lint charts/storm-shared
-
-  package-helm-charts:
-    name: Package Helm Charts
+          helm lint charts/storm-kubernetes --strict
+          
+      - name: Validate values schema
+        run: |
+          helm lint charts/storm-kubernetes --strict --values charts/storm-kubernetes/values-production.yaml
+          
+  test-helm-chart:
+    name: Test Storm Kubernetes Chart
     runs-on: ubuntu-latest
-    needs: [lint-helm-charts]
+    needs: [lint-helm-chart]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: azure/setup-helm@v4
+        with:
+          version: 'latest'
+
+      - name: Add Helm repositories
+        run: |
+          helm repo add bitnami https://charts.bitnami.com/bitnami
+          helm repo update
+
+      - name: Build dependencies
+        run: |
+          helm dependency update charts/storm-kubernetes
+          
+      - name: Test default installation
+        run: |
+          helm template test-release charts/storm-kubernetes > /tmp/default.yaml
+          echo "✓ Default installation template generated successfully"
+          
+      - name: Test with security features
+        run: |
+          helm template test-release charts/storm-kubernetes \
+            --values charts/storm-kubernetes/values-production-security.yaml > /tmp/security.yaml
+          echo "✓ Security features template generated successfully"
+          
+      - name: Test with monitoring
+        run: |
+          helm template test-release charts/storm-kubernetes \
+            --values charts/storm-kubernetes/values-production-monitoring.yaml > /tmp/monitoring.yaml
+          echo "✓ Monitoring features template generated successfully"
+          
+      - name: Test with HPA
+        run: |
+          helm template test-release charts/storm-kubernetes \
+            --values charts/storm-kubernetes/values-production-hpa.yaml > /tmp/hpa.yaml
+          echo "✓ HPA features template generated successfully"
+          
+      - name: Test with authentication
+        run: |
+          helm template test-release charts/storm-kubernetes \
+            --values charts/storm-kubernetes/values-production-auth.yaml > /tmp/auth.yaml
+          echo "✓ Authentication features template generated successfully"
+          
+      - name: Test full production setup
+        run: |
+          helm template test-release charts/storm-kubernetes \
+            --values charts/storm-kubernetes/values-production.yaml > /tmp/production.yaml
+          echo "✓ Full production template generated successfully"
+          
+      - name: Validate generated manifests
+        run: |
+          # Check that key resources are generated
+          echo "Checking for required resources..."
+          grep -q "kind: StatefulSet" /tmp/production.yaml && echo "✓ StatefulSet found"
+          grep -q "kind: Deployment" /tmp/production.yaml && echo "✓ Deployment found"
+          grep -q "kind: Service" /tmp/production.yaml && echo "✓ Service found"
+          grep -q "kind: ConfigMap" /tmp/production.yaml && echo "✓ ConfigMap found"
+          grep -q "kind: ServiceAccount" /tmp/production.yaml && echo "✓ ServiceAccount found"
+          grep -q "kind: NetworkPolicy" /tmp/production.yaml && echo "✓ NetworkPolicy found"
+          grep -q "kind: PodDisruptionBudget" /tmp/production.yaml && echo "✓ PodDisruptionBudget found"
+          grep -q "kind: ServiceMonitor" /tmp/monitoring.yaml && echo "✓ ServiceMonitor found"
+          grep -q "kind: HorizontalPodAutoscaler" /tmp/hpa.yaml && echo "✓ HPA found"
+          grep -q "storm-auth" /tmp/auth.yaml && echo "✓ Auth ConfigMap found"
+
+  package-helm-chart:
+    name: Package Storm Kubernetes Chart
+    runs-on: ubuntu-latest
+    needs: [lint-helm-chart, test-helm-chart]
     permissions:
       contents: read
       packages: write
@@ -252,19 +315,9 @@ jobs:
       - name: Update chart versions
         run: |
           VERSION=${{ steps.version.outputs.version }}
-          for chart in storm-operator storm-crd-cluster storm-kubernetes storm-shared; do
-            sed -i "s/version: .*/version: ${VERSION}/" charts/$chart/Chart.yaml
-            if [[ $GITHUB_REF == refs/tags/v* ]]; then
-              sed -i "s/appVersion: .*/appVersion: ${GITHUB_REF#refs/tags/}/" charts/$chart/Chart.yaml
-            fi
-          done
-          
-          # For PR builds, don't update dependency versions since we won't push storm-shared
-          if [[ "${{ github.event_name }}" != "pull_request" ]]; then
-            # Update storm-shared dependency version in dependent charts
-            for chart in storm-operator storm-crd-cluster storm-kubernetes; do
-              sed -i "/name: storm-shared/,/version:/ s/version: .*/version: \"${VERSION}\"/" charts/$chart/Chart.yaml
-            done
+          sed -i "s/version: .*/version: ${VERSION}/" charts/storm-kubernetes/Chart.yaml
+          if [[ $GITHUB_REF == refs/tags/v* ]]; then
+            sed -i "s/appVersion: .*/appVersion: ${GITHUB_REF#refs/tags/}/" charts/storm-kubernetes/Chart.yaml
           fi
 
       - name: Log in to Docker Hub Registry for Helm
@@ -275,20 +328,16 @@ jobs:
         run: |
           if [[ "${{ github.event_name }}" == "pull_request" ]]; then
             # For PRs, remove lock files and update dependencies
-            rm -f charts/*/Chart.lock
+            rm -f charts/storm-kubernetes/Chart.lock
           fi
           
           # Always update dependencies to ensure consistency
-          helm dependency update charts/storm-operator
           helm dependency update charts/storm-kubernetes
-          helm dependency update charts/storm-crd-cluster
 
       - name: Package charts
         run: |
           mkdir -p .cr-release-packages
-          for chart in storm-operator storm-crd-cluster storm-kubernetes storm-shared; do
-            helm package charts/$chart --destination .cr-release-packages
-          done
+          helm package charts/storm-kubernetes --destination .cr-release-packages
 
       - name: Upload chart artifacts
         uses: actions/upload-artifact@v4
