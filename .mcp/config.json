@@ -1,9 +1,0 @@
-{
-  "mcpServers": {
-    "storm-expert": {
-      "command": "./scripts/start-storm-mcp.sh",
-      "args": [],
-      "cwd": "/home/chris/source/github.com/veteran-chad/storm-controller"
-    }
-  }
-}

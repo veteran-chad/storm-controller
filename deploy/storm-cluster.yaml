@@ -1,8 +1,0 @@
-apiVersion: storm.apache.org/v1beta1
-kind: StormCluster
-metadata:
-  name: storm-cluster-storm-kubernetes
-  namespace: storm-system
-spec:
-  # The controller will use the Helm deployment
-  # This is just a reference object
