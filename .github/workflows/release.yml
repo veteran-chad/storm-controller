@@ -1,0 +1,203 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+env:
+  REGISTRY: docker.io
+
+jobs:
+  release-helm-chart:
+    name: Release Storm Kubernetes Helm Chart
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: azure/setup-helm@v4
+        with:
+          version: 'latest'
+
+      - name: Add Helm repositories
+        run: |
+          helm repo add bitnami https://charts.bitnami.com/bitnami
+          helm repo update
+
+      - name: Log in to Docker Hub Registry for Helm
+        run: |
+          echo ${{ secrets.DOCKERHUB_TOKEN }} | helm registry login registry-1.docker.io --username ${{ secrets.DOCKERHUB_USERNAME }} --password-stdin
+
+      - name: Build dependencies
+        run: |
+          helm dependency update charts/storm-kubernetes
+
+      - name: Update chart version
+        run: |
+          VERSION=${GITHUB_REF#refs/tags/v}
+          APP_VERSION=${GITHUB_REF#refs/tags/}
+          
+          sed -i "s/version: .*/version: ${VERSION}/" charts/storm-kubernetes/Chart.yaml
+          sed -i "s/appVersion: .*/appVersion: \"${APP_VERSION}\"/" charts/storm-kubernetes/Chart.yaml
+
+      - name: Package chart
+        run: |
+          mkdir -p .release
+          helm package charts/storm-kubernetes --destination .release
+
+      - name: Create chart index
+        run: |
+          helm repo index .release --url https://github.com/${{ github.repository }}/releases/download/${GITHUB_REF#refs/tags/}
+
+      - name: Upload chart artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: helm-charts
+          path: |
+            .release/*.tgz
+            .release/index.yaml
+
+      - name: Push to OCI registry
+        run: |
+          for chart in .release/*.tgz; do
+            helm push $chart oci://registry-1.docker.io/veteranchad
+          done
+
+  create-release:
+    name: Create GitHub Release
+    runs-on: ubuntu-latest
+    needs: [release-helm-chart]
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Generate release notes
+        id: notes
+        run: |
+          VERSION=${GITHUB_REF#refs/tags/}
+          PREV_TAG=$(git describe --tags --abbrev=0 HEAD^ 2>/dev/null || echo "")
+          
+          cat > release-notes.md << 'EOF'
+          ## Storm Kubernetes Helm Chart ${VERSION}
+          
+          ### Installation
+          
+          #### Using Helm Repository
+          
+          ```bash
+          # Add the Helm repository
+          helm repo add storm-kubernetes https://github.com/${{ github.repository }}/releases/download/${VERSION}
+          helm repo update
+          
+          # Install Storm on Kubernetes
+          helm install my-storm storm-kubernetes/storm-kubernetes \
+            --namespace storm-system --create-namespace
+          ```
+          
+          #### Using OCI Registry
+          
+          ```bash
+          helm install my-storm oci://registry-1.docker.io/veteranchad/storm-kubernetes \
+            --version ${VERSION#v} \
+            --namespace storm-system --create-namespace
+          ```
+          
+          ### Production Deployment
+          
+          ```bash
+          # Deploy with all production features enabled
+          helm install storm-prod oci://registry-1.docker.io/veteranchad/storm-kubernetes \
+            --version ${VERSION#v} \
+            --namespace storm-production --create-namespace \
+            --values https://raw.githubusercontent.com/${{ github.repository }}/${VERSION}/charts/storm-kubernetes/values-production.yaml
+          ```
+          
+          ### Features in this Release
+          
+          - **High Availability**: Multi-Nimbus setup with Zookeeper
+          - **Security**: RBAC, Pod Security Contexts, Network Policies
+          - **Monitoring**: Prometheus metrics, ServiceMonitor, Grafana dashboards
+          - **Autoscaling**: HPA support for supervisors
+          - **Ingress**: TLS support with cert-manager integration
+          - **Authentication**: Kerberos/SASL support
+          - **Memory Management**: Automatic JVM and worker memory calculation
+          
+          ### What's Changed
+          
+          EOF
+          
+          if [ -n "$PREV_TAG" ]; then
+            echo "#### Commits since $PREV_TAG" >> release-notes.md
+            echo "" >> release-notes.md
+            git log --pretty=format:"- %s (%an)" ${PREV_TAG}..HEAD -- charts/storm-kubernetes >> release-notes.md
+          else
+            echo "#### All Commits" >> release-notes.md
+            echo "" >> release-notes.md
+            git log --pretty=format:"- %s (%an)" --max-count=20 -- charts/storm-kubernetes >> release-notes.md
+          fi
+          
+          cat >> release-notes.md << 'EOF'
+          
+          ### Configuration Examples
+          
+          #### Enable Security Features
+          ```bash
+          helm install my-storm storm-kubernetes/storm-kubernetes \
+            --set serviceAccount.create=true \
+            --set rbac.create=true \
+            --set networkPolicy.enabled=true \
+            --set podSecurityContext.enabled=true
+          ```
+          
+          #### Enable Monitoring
+          ```bash
+          helm install my-storm storm-kubernetes/storm-kubernetes \
+            --set metrics.enabled=true \
+            --set metrics.serviceMonitor.enabled=true \
+            --set metrics.prometheusRule.enabled=true
+          ```
+          
+          #### Enable Autoscaling
+          ```bash
+          helm install my-storm storm-kubernetes/storm-kubernetes \
+            --set supervisor.hpa.enabled=true \
+            --set supervisor.hpa.minReplicas=3 \
+            --set supervisor.hpa.maxReplicas=20
+          ```
+          
+          ### Documentation
+          
+          - [README](https://github.com/${{ github.repository }}/blob/${VERSION}/charts/storm-kubernetes/README.md)
+          - [Production Guide](https://github.com/${{ github.repository }}/blob/${VERSION}/charts/storm-kubernetes/PRODUCTION.md)
+          - [Values Documentation](https://github.com/${{ github.repository }}/blob/${VERSION}/charts/storm-kubernetes/values.yaml)
+          - [Examples](https://github.com/${{ github.repository }}/tree/${VERSION}/charts/storm-kubernetes/values-production*.yaml)
+          
+          EOF
+
+      - name: Prepare release assets
+        run: |
+          cd artifacts
+          mv helm-charts/*.tgz .
+          mv helm-charts/index.yaml .
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          body_path: release-notes.md
+          draft: false
+          prerelease: ${{ contains(github.ref, '-rc.') || contains(github.ref, '-beta.') || contains(github.ref, '-alpha.') }}
+          generate_release_notes: true
+          files: |
+            artifacts/*.tgz
+            artifacts/index.yaml

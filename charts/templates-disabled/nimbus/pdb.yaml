@@ -1,0 +1,22 @@
+{{- if .Values.nimbus.pdb.create }}
+apiVersion: {{ include "storm.pdb.apiVersion" . }}
+kind: PodDisruptionBudget
+metadata:
+  name: {{ include "storm.nimbus.fullname" . }}
+  namespace: {{ .Release.Namespace | quote }}
+  labels: {{- include "storm.labels" . | nindent 4 }}
+    app.kubernetes.io/component: nimbus
+  {{- if .Values.commonAnnotations }}
+  annotations: {{- include "storm.commonAnnotations" . | nindent 4 }}
+  {{- end }}
+spec:
+  {{- if .Values.nimbus.pdb.minAvailable }}
+  minAvailable: {{ .Values.nimbus.pdb.minAvailable }}
+  {{- end }}
+  {{- if .Values.nimbus.pdb.maxUnavailable }}
+  maxUnavailable: {{ .Values.nimbus.pdb.maxUnavailable }}
+  {{- end }}
+  selector:
+    matchLabels: {{- include "storm.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: nimbus
+{{- end }}

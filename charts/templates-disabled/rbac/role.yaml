@@ -1,0 +1,47 @@
+{{- if and .Values.rbac.create (or (and .Values.controller .Values.controller.enabled) .Values.rbac.rules) }}
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: {{ include "storm.fullname" . }}
+  namespace: {{ .Release.Namespace | quote }}
+  labels: {{- include "storm.labels" . | nindent 4 }}
+  {{- if .Values.commonAnnotations }}
+  annotations: {{- include "storm.commonAnnotations" . | nindent 4 }}
+  {{- end }}
+rules:
+  {{- if .Values.controller.enabled }}
+  # Rules for Storm Controller
+  - apiGroups: [""]
+    resources: ["pods", "services", "configmaps", "secrets"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+  - apiGroups: ["apps"]
+    resources: ["deployments", "statefulsets", "daemonsets"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+  - apiGroups: ["autoscaling"]
+    resources: ["horizontalpodautoscalers"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+  - apiGroups: ["networking.k8s.io"]
+    resources: ["ingresses"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+  - apiGroups: ["storm.apache.org"]
+    resources: ["stormclusters", "stormtopologies", "stormworkerpools"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+  - apiGroups: ["storm.apache.org"]
+    resources: ["stormclusters/status", "stormtopologies/status", "stormworkerpools/status"]
+    verbs: ["get", "update", "patch"]
+  - apiGroups: ["storm.apache.org"]
+    resources: ["stormclusters/finalizers", "stormtopologies/finalizers", "stormworkerpools/finalizers"]
+    verbs: ["update"]
+  - apiGroups: [""]
+    resources: ["events"]
+    verbs: ["create", "patch"]
+  # Leader election
+  - apiGroups: ["coordination.k8s.io"]
+    resources: ["leases"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+  {{- end }}
+  {{- if .Values.rbac.rules }}
+  # Custom rules
+  {{- toYaml .Values.rbac.rules | nindent 2 }}
+  {{- end }}
+{{- end }}

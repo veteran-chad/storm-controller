@@ -1,0 +1,50 @@
+{{- if and .Values.operator.serviceMonitor.enabled }}
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: {{ include "storm-shared.fullname" . }}-operator
+  namespace: {{ default .Release.Namespace .Values.operator.serviceMonitor.namespace | quote }}
+  labels:
+    {{- include "storm-shared.componentLabels" (dict "component" "controller" "context" .) | nindent 4 }}
+    {{- if .Values.operator.serviceMonitor.labels }}
+    {{- toYaml .Values.operator.serviceMonitor.labels | nindent 4 }}
+    {{- end }}
+    {{- if .Values.commonLabels }}
+    {{- toYaml .Values.commonLabels | nindent 4 }}
+    {{- end }}
+  {{- if .Values.commonAnnotations }}
+  annotations:
+    {{- toYaml .Values.commonAnnotations | nindent 4 }}
+  {{- end }}
+spec:
+  selector:
+    matchLabels:
+      {{- include "storm-shared.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: controller
+    {{- if .Values.operator.serviceMonitor.selector }}
+    {{- toYaml .Values.operator.serviceMonitor.selector | nindent 4 }}
+    {{- end }}
+  endpoints:
+    - port: metrics
+      {{- if .Values.operator.serviceMonitor.interval }}
+      interval: {{ .Values.operator.serviceMonitor.interval }}
+      {{- end }}
+      {{- if .Values.operator.serviceMonitor.scrapeTimeout }}
+      scrapeTimeout: {{ .Values.operator.serviceMonitor.scrapeTimeout }}
+      {{- end }}
+      {{- if .Values.operator.serviceMonitor.honorLabels }}
+      honorLabels: {{ .Values.operator.serviceMonitor.honorLabels }}
+      {{- end }}
+      {{- if .Values.operator.serviceMonitor.relabelings }}
+      relabelings: {{- toYaml .Values.operator.serviceMonitor.relabelings | nindent 6 }}
+      {{- end }}
+      {{- if .Values.operator.serviceMonitor.metricRelabelings }}
+      metricRelabelings: {{- toYaml .Values.operator.serviceMonitor.metricRelabelings | nindent 6 }}
+      {{- end }}
+  {{- if .Values.operator.serviceMonitor.jobLabel }}
+  jobLabel: {{ .Values.operator.serviceMonitor.jobLabel | quote }}
+  {{- end }}
+  namespaceSelector:
+    matchNames:
+      - {{ .Release.Namespace | quote }}
+{{- end }}

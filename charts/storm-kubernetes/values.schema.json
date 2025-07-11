@@ -1,0 +1,1084 @@
+{
+  "$schema": "http://json-schema.org/schema#",
+  "type": "object",
+  "properties": {
+    "global": {
+      "type": "object",
+      "properties": {
+        "imageRegistry": {
+          "type": "string",
+          "description": "Global Docker image registry"
+        },
+        "imagePullSecrets": {
+          "type": "array",
+          "description": "Global Docker registry secret names as an array",
+          "items": {
+            "type": "object"
+          }
+        },
+        "storageClass": {
+          "type": "string",
+          "description": "Global StorageClass for Persistent Volume(s)"
+        },
+        "security": {
+          "type": "object",
+          "properties": {
+            "allowInsecureImages": {
+              "type": "boolean",
+              "description": "Allow non-Bitnami images (required for Storm)"
+            }
+          }
+        }
+      }
+    },
+    "nameOverride": {
+      "type": "string",
+      "description": "String to partially override common.names.fullname template"
+    },
+    "fullnameOverride": {
+      "type": "string",
+      "description": "String to fully override common.names.fullname template"
+    },
+    "clusterDomain": {
+      "type": "string",
+      "description": "Default Kubernetes cluster domain",
+      "default": "cluster.local"
+    },
+    "commonAnnotations": {
+      "type": "object",
+      "description": "Annotations to add to all deployed objects"
+    },
+    "commonLabels": {
+      "type": "object",
+      "description": "Labels to add to all deployed objects"
+    },
+    "serviceAccount": {
+      "type": "object",
+      "properties": {
+        "create": {
+          "type": "boolean",
+          "description": "Enable creation of ServiceAccount for Storm pods",
+          "default": true
+        },
+        "name": {
+          "type": "string",
+          "description": "The name of the ServiceAccount to use"
+        },
+        "automountServiceAccountToken": {
+          "type": "boolean",
+          "description": "Automount service account token for the server service account",
+          "default": true
+        },
+        "annotations": {
+          "type": "object",
+          "description": "Annotations for service account"
+        },
+        "labels": {
+          "type": "object",
+          "description": "Labels for service account"
+        }
+      }
+    },
+    "rbac": {
+      "type": "object",
+      "properties": {
+        "create": {
+          "type": "boolean",
+          "description": "Create Role and RoleBinding",
+          "default": true
+        },
+        "rules": {
+          "type": "array",
+          "description": "Custom RBAC rules to set",
+          "items": {
+            "type": "object"
+          }
+        }
+      }
+    },
+    "podSecurityContext": {
+      "type": "object",
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "description": "Enable security context for Storm pods",
+          "default": true
+        },
+        "fsGroup": {
+          "type": "integer",
+          "description": "Set filesystem group",
+          "default": 1000,
+          "minimum": 0
+        },
+        "runAsUser": {
+          "type": "integer",
+          "description": "Set user ID",
+          "default": 1000,
+          "minimum": 0
+        },
+        "runAsGroup": {
+          "type": "integer",
+          "description": "Set group ID",
+          "default": 1000,
+          "minimum": 0
+        },
+        "runAsNonRoot": {
+          "type": "boolean",
+          "description": "Set container must run as non-root user",
+          "default": true
+        },
+        "seccompProfile": {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "description": "Set seccomp profile",
+              "enum": ["RuntimeDefault", "Localhost", "Unconfined"],
+              "default": "RuntimeDefault"
+            }
+          }
+        }
+      }
+    },
+    "containerSecurityContext": {
+      "type": "object",
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "description": "Enable security context for containers",
+          "default": true
+        },
+        "runAsUser": {
+          "type": "integer",
+          "description": "Set containers' user ID",
+          "default": 1000,
+          "minimum": 0
+        },
+        "runAsNonRoot": {
+          "type": "boolean",
+          "description": "Set container must run as non-root user",
+          "default": true
+        },
+        "allowPrivilegeEscalation": {
+          "type": "boolean",
+          "description": "Set privilege escalation",
+          "default": false
+        },
+        "readOnlyRootFilesystem": {
+          "type": "boolean",
+          "description": "Set read-only root filesystem",
+          "default": false
+        },
+        "capabilities": {
+          "type": "object",
+          "properties": {
+            "drop": {
+              "type": "array",
+              "description": "List of capabilities to drop",
+              "items": {
+                "type": "string"
+              },
+              "default": ["ALL"]
+            }
+          }
+        }
+      }
+    },
+    "networkPolicy": {
+      "type": "object",
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "description": "Enable NetworkPolicy",
+          "default": false
+        },
+        "allowExternalUI": {
+          "type": "boolean",
+          "description": "Allow external access to Storm UI",
+          "default": true
+        },
+        "allowExternalZookeeper": {
+          "type": "boolean",
+          "description": "Allow external access to Zookeeper",
+          "default": true
+        },
+        "allowedNamespaces": {
+          "type": "array",
+          "description": "Allow traffic from specific namespaces",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "podSecurityPolicy": {
+      "type": "object",
+      "properties": {
+        "create": {
+          "type": "boolean",
+          "description": "Create PodSecurityPolicy resources",
+          "default": false
+        }
+      }
+    },
+    "waitContainer": {
+      "type": "object",
+      "properties": {
+        "image": {
+          "type": "object",
+          "properties": {
+            "registry": {
+              "type": "string",
+              "description": "Wait container image registry",
+              "default": "docker.io"
+            },
+            "repository": {
+              "type": "string",
+              "description": "Wait container image repository",
+              "default": "busybox"
+            },
+            "tag": {
+              "type": "string",
+              "description": "Wait container image tag",
+              "default": "1.36"
+            },
+            "digest": {
+              "type": "string",
+              "description": "Wait container image digest"
+            },
+            "pullPolicy": {
+              "type": "string",
+              "description": "Wait container image pull policy",
+              "enum": ["Always", "Never", "IfNotPresent"],
+              "default": "IfNotPresent"
+            },
+            "pullSecrets": {
+              "type": "array",
+              "description": "Specify docker-registry secret names",
+              "items": {
+                "type": "string"
+              }
+            }
+          }
+        }
+      }
+    },
+    "topologyUploadScript": {
+      "type": "object",
+      "properties": {
+        "image": {
+          "type": "object",
+          "properties": {
+            "registry": {
+              "type": "string",
+              "description": "Upload script container image registry",
+              "default": "docker.io"
+            },
+            "repository": {
+              "type": "string",
+              "description": "Upload script container image repository",
+              "default": "storm"
+            },
+            "tag": {
+              "type": "string",
+              "description": "Upload script container image tag",
+              "default": "latest"
+            }
+          }
+        }
+      }
+    },
+    "storm": {
+      "type": "object",
+      "properties": {
+        "image": {
+          "type": "object",
+          "properties": {
+            "registry": {
+              "type": "string",
+              "description": "Storm image registry",
+              "default": "docker.io"
+            },
+            "repository": {
+              "type": "string",
+              "description": "Storm image repository",
+              "default": "storm"
+            },
+            "tag": {
+              "type": "string",
+              "description": "Storm image tag",
+              "default": "latest"
+            },
+            "digest": {
+              "type": "string",
+              "description": "Storm image digest"
+            },
+            "pullPolicy": {
+              "type": "string",
+              "description": "Storm image pull policy",
+              "enum": ["Always", "Never", "IfNotPresent"],
+              "default": "IfNotPresent"
+            },
+            "pullSecrets": {
+              "type": "array",
+              "description": "Specify docker-registry secret names",
+              "items": {
+                "type": "string"
+              }
+            }
+          }
+        }
+      }
+    },
+    "nimbus": {
+      "type": "object",
+      "properties": {
+        "replicaCount": {
+          "type": "integer",
+          "description": "Number of Nimbus replicas",
+          "default": 1,
+          "minimum": 1
+        },
+        "resources": {
+          "type": "object",
+          "properties": {
+            "limits": {
+              "type": "object",
+              "properties": {
+                "cpu": {
+                  "type": "string",
+                  "pattern": "^\\d+(\\.\\d+)?(m)?$"
+                },
+                "memory": {
+                  "type": "string",
+                  "pattern": "^\\d+(\\.\\d+)?(Ki|Mi|Gi|Ti)?$"
+                }
+              }
+            },
+            "requests": {
+              "type": "object",
+              "properties": {
+                "cpu": {
+                  "type": "string",
+                  "pattern": "^\\d+(\\.\\d+)?(m)?$"
+                },
+                "memory": {
+                  "type": "string",
+                  "pattern": "^\\d+(\\.\\d+)?(Ki|Mi|Gi|Ti)?$"
+                }
+              }
+            }
+          }
+        },
+        "extraEnvVars": {
+          "type": "array",
+          "description": "Extra environment variables",
+          "items": {
+            "type": "object"
+          }
+        },
+        "extraEnvVarsCM": {
+          "type": "string",
+          "description": "Name of existing ConfigMap containing extra env vars"
+        },
+        "extraEnvVarsSecret": {
+          "type": "string",
+          "description": "Name of existing Secret containing extra env vars"
+        },
+        "service": {
+          "type": "object",
+          "properties": {
+            "ports": {
+              "type": "object",
+              "properties": {
+                "nimbus": {
+                  "type": "integer",
+                  "description": "Nimbus service port",
+                  "default": 6627,
+                  "minimum": 1,
+                  "maximum": 65535
+                }
+              }
+            }
+          }
+        },
+        "jvmOptions": {
+          "type": "string",
+          "description": "JVM options for Nimbus"
+        },
+        "pdb": {
+          "type": "object",
+          "properties": {
+            "create": {
+              "type": "boolean",
+              "description": "Enable PodDisruptionBudget",
+              "default": false
+            },
+            "minAvailable": {
+              "type": ["integer", "string"],
+              "description": "Minimum available pods"
+            },
+            "maxUnavailable": {
+              "type": ["integer", "string"],
+              "description": "Maximum unavailable pods"
+            }
+          }
+        }
+      }
+    },
+    "supervisor": {
+      "type": "object",
+      "properties": {
+        "replicaCount": {
+          "type": "integer",
+          "description": "Number of Supervisor replicas",
+          "default": 3,
+          "minimum": 1
+        },
+        "resources": {
+          "type": "object",
+          "properties": {
+            "limits": {
+              "type": "object",
+              "properties": {
+                "cpu": {
+                  "type": "string",
+                  "pattern": "^\\d+(\\.\\d+)?(m)?$"
+                },
+                "memory": {
+                  "type": "string",
+                  "pattern": "^\\d+(\\.\\d+)?(Ki|Mi|Gi|Ti)?$"
+                }
+              }
+            },
+            "requests": {
+              "type": "object",
+              "properties": {
+                "cpu": {
+                  "type": "string",
+                  "pattern": "^\\d+(\\.\\d+)?(m)?$"
+                },
+                "memory": {
+                  "type": "string",
+                  "pattern": "^\\d+(\\.\\d+)?(Ki|Mi|Gi|Ti)?$"
+                }
+              }
+            }
+          }
+        },
+        "autoMemory": {
+          "type": "object",
+          "properties": {
+            "enabled": {
+              "type": "boolean",
+              "description": "Enable automatic memory calculation",
+              "default": false
+            },
+            "containerMemoryFactor": {
+              "type": "number",
+              "description": "Factor for calculating JVM memory from container memory",
+              "default": 0.8,
+              "minimum": 0.1,
+              "maximum": 0.95
+            },
+            "jvmMemoryFactor": {
+              "type": "number",
+              "description": "Factor for calculating worker memory from JVM memory",
+              "default": 0.75,
+              "minimum": 0.1,
+              "maximum": 0.95
+            }
+          }
+        },
+        "slots": {
+          "type": "integer",
+          "description": "Number of worker slots per supervisor",
+          "default": 4,
+          "minimum": 1
+        },
+        "slotsPerSupervisor": {
+          "type": "integer",
+          "description": "Number of worker slots per supervisor (alias for slots)",
+          "default": 4,
+          "minimum": 1
+        },
+        "jvmOptions": {
+          "type": "string",
+          "description": "JVM options for Supervisor"
+        },
+        "ports": {
+          "type": "object",
+          "description": "Supervisor ports configuration",
+          "properties": {
+            "http": {
+              "type": "integer",
+              "description": "Supervisor HTTP port",
+              "default": 8000,
+              "minimum": 1,
+              "maximum": 65535
+            }
+          }
+        },
+        "memoryPerSlot": {
+          "type": ["number", "null"],
+          "description": "Memory per worker slot (in MB)",
+          "minimum": 128
+        },
+        "pdb": {
+          "type": "object",
+          "properties": {
+            "create": {
+              "type": "boolean",
+              "description": "Enable PodDisruptionBudget",
+              "default": false
+            },
+            "minAvailable": {
+              "type": ["integer", "string"],
+              "description": "Minimum available pods"
+            },
+            "maxUnavailable": {
+              "type": ["integer", "string"],
+              "description": "Maximum unavailable pods"
+            }
+          }
+        },
+        "hpa": {
+          "type": "object",
+          "properties": {
+            "enabled": {
+              "type": "boolean",
+              "description": "Enable HorizontalPodAutoscaler",
+              "default": false
+            },
+            "minReplicas": {
+              "type": "integer",
+              "description": "Minimum number of replicas",
+              "default": 3,
+              "minimum": 1
+            },
+            "maxReplicas": {
+              "type": "integer",
+              "description": "Maximum number of replicas",
+              "default": 20,
+              "minimum": 1
+            },
+            "targetCPU": {
+              "type": "integer",
+              "description": "Target CPU utilization percentage",
+              "default": 70,
+              "minimum": 1,
+              "maximum": 100
+            },
+            "targetMemory": {
+              "type": "integer",
+              "description": "Target memory utilization percentage",
+              "default": 80,
+              "minimum": 1,
+              "maximum": 100
+            },
+            "metrics": {
+              "type": "array",
+              "description": "Custom metrics for HPA",
+              "items": {
+                "type": "object"
+              }
+            },
+            "behavior": {
+              "type": "object",
+              "description": "Custom scaling behavior"
+            }
+          }
+        }
+      }
+    },
+    "ui": {
+      "type": "object",
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "description": "Enable Storm UI",
+          "default": true
+        },
+        "replicaCount": {
+          "type": "integer",
+          "description": "Number of Storm UI replicas",
+          "default": 1,
+          "minimum": 1
+        },
+        "resources": {
+          "type": "object",
+          "properties": {
+            "limits": {
+              "type": "object",
+              "properties": {
+                "cpu": {
+                  "type": "string",
+                  "pattern": "^\\d+(\\.\\d+)?(m)?$"
+                },
+                "memory": {
+                  "type": "string",
+                  "pattern": "^\\d+(\\.\\d+)?(Ki|Mi|Gi|Ti)?$"
+                }
+              }
+            },
+            "requests": {
+              "type": "object",
+              "properties": {
+                "cpu": {
+                  "type": "string",
+                  "pattern": "^\\d+(\\.\\d+)?(m)?$"
+                },
+                "memory": {
+                  "type": "string",
+                  "pattern": "^\\d+(\\.\\d+)?(Ki|Mi|Gi|Ti)?$"
+                }
+              }
+            }
+          }
+        },
+        "service": {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "description": "Service type",
+              "enum": ["ClusterIP", "NodePort", "LoadBalancer"],
+              "default": "ClusterIP"
+            },
+            "ports": {
+              "type": "object",
+              "properties": {
+                "http": {
+                  "type": "integer",
+                  "description": "UI HTTP port",
+                  "default": 8080,
+                  "minimum": 1,
+                  "maximum": 65535
+                }
+              }
+            }
+          }
+        },
+        "ingress": {
+          "type": "object",
+          "properties": {
+            "enabled": {
+              "type": "boolean",
+              "description": "Enable ingress",
+              "default": false
+            },
+            "hostname": {
+              "type": "string",
+              "description": "Default host for the ingress resource"
+            },
+            "ingressClassName": {
+              "type": "string",
+              "description": "IngressClass resource name"
+            },
+            "path": {
+              "type": "string",
+              "description": "Default path for the ingress resource",
+              "default": "/"
+            },
+            "pathType": {
+              "type": "string",
+              "description": "Ingress path type",
+              "enum": ["ImplementationSpecific", "Prefix", "Exact"],
+              "default": "ImplementationSpecific"
+            },
+            "annotations": {
+              "type": "object",
+              "description": "Additional annotations for the Ingress resource"
+            },
+            "tls": {
+              "type": "boolean",
+              "description": "Enable TLS for ingress",
+              "default": false
+            },
+            "selfSigned": {
+              "type": "boolean",
+              "description": "Create a TLS secret for this ingress using self-signed certificates",
+              "default": false
+            },
+            "extraHosts": {
+              "type": "array",
+              "description": "Additional hostnames for ingress",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "name": {
+                    "type": "string",
+                    "description": "Hostname"
+                  },
+                  "path": {
+                    "type": "string",
+                    "description": "Path"
+                  },
+                  "pathType": {
+                    "type": "string",
+                    "description": "Path type",
+                    "enum": ["ImplementationSpecific", "Prefix", "Exact"]
+                  }
+                },
+                "required": ["name"]
+              }
+            },
+            "extraTls": {
+              "type": "array",
+              "description": "Additional TLS configuration",
+              "items": {
+                "type": "object"
+              }
+            }
+          }
+        },
+        "pdb": {
+          "type": "object",
+          "properties": {
+            "create": {
+              "type": "boolean",
+              "description": "Enable PodDisruptionBudget",
+              "default": false
+            },
+            "minAvailable": {
+              "type": ["integer", "string"],
+              "description": "Minimum available pods"
+            },
+            "maxUnavailable": {
+              "type": ["integer", "string"],
+              "description": "Maximum unavailable pods"
+            }
+          }
+        }
+      }
+    },
+    "logviewer": {
+      "type": "object",
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "description": "Enable Log Viewer",
+          "default": true
+        },
+        "resources": {
+          "type": "object"
+        },
+        "service": {
+          "type": "object",
+          "properties": {
+            "ports": {
+              "type": "object",
+              "properties": {
+                "logviewer": {
+                  "type": "integer",
+                  "description": "Logviewer port",
+                  "default": 8000,
+                  "minimum": 1,
+                  "maximum": 65535
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "externalZookeeper": {
+      "type": "object",
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "description": "Use external Zookeeper",
+          "default": false
+        },
+        "servers": {
+          "type": "array",
+          "description": "List of external Zookeeper servers",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "stormConfig": {
+      "type": "object",
+      "description": "Custom Storm configuration"
+    },
+    "persistence": {
+      "type": "object",
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "description": "Enable persistence using PVC",
+          "default": false
+        },
+        "storageClass": {
+          "type": "string",
+          "description": "Storage class of backing PVC"
+        },
+        "accessModes": {
+          "type": "array",
+          "description": "Persistent Volume access modes",
+          "items": {
+            "type": "string",
+            "enum": ["ReadWriteOnce", "ReadOnlyMany", "ReadWriteMany"]
+          },
+          "default": ["ReadWriteOnce"]
+        },
+        "size": {
+          "type": "string",
+          "description": "Size of data volume",
+          "pattern": "^\\d+(\\.\\d+)?(Ki|Mi|Gi|Ti)?$",
+          "default": "8Gi"
+        }
+      }
+    },
+    "metrics": {
+      "type": "object",
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "description": "Enable metrics collection",
+          "default": false
+        },
+        "exporter": {
+          "type": "object",
+          "properties": {
+            "image": {
+              "type": "object",
+              "properties": {
+                "repository": {
+                  "type": "string",
+                  "description": "Metrics exporter image repository",
+                  "default": "python"
+                },
+                "tag": {
+                  "type": "string",
+                  "description": "Metrics exporter image tag",
+                  "default": "3.11-alpine"
+                }
+              }
+            },
+            "port": {
+              "type": "integer",
+              "description": "Metrics exporter port",
+              "default": 9102,
+              "minimum": 1,
+              "maximum": 65535
+            },
+            "interval": {
+              "type": "integer",
+              "description": "Metrics collection interval in seconds",
+              "default": 30,
+              "minimum": 10
+            }
+          }
+        },
+        "serviceMonitor": {
+          "type": "object",
+          "properties": {
+            "enabled": {
+              "type": "boolean",
+              "description": "Create ServiceMonitor resource",
+              "default": false
+            },
+            "namespace": {
+              "type": "string",
+              "description": "Namespace for ServiceMonitor"
+            },
+            "labels": {
+              "type": "object",
+              "description": "Labels for ServiceMonitor"
+            },
+            "interval": {
+              "type": "string",
+              "description": "Scrape interval",
+              "default": "30s"
+            }
+          }
+        },
+        "prometheusRule": {
+          "type": "object",
+          "properties": {
+            "enabled": {
+              "type": "boolean",
+              "description": "Create PrometheusRule resource",
+              "default": false
+            },
+            "namespace": {
+              "type": "string",
+              "description": "Namespace for PrometheusRule"
+            },
+            "labels": {
+              "type": "object",
+              "description": "Labels for PrometheusRule"
+            }
+          }
+        }
+      }
+    },
+    "crd": {
+      "type": "object",
+      "properties": {
+        "install": {
+          "type": "boolean",
+          "description": "Install Storm CRDs",
+          "default": false
+        }
+      }
+    },
+    "controller": {
+      "type": "object",
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "description": "Deploy Storm controller",
+          "default": false
+        },
+        "image": {
+          "type": "object",
+          "properties": {
+            "repository": {
+              "type": "string",
+              "description": "Controller image repository"
+            },
+            "tag": {
+              "type": "string",
+              "description": "Controller image tag"
+            }
+          }
+        }
+      }
+    },
+    "auth": {
+      "type": "object",
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "description": "Enable authentication",
+          "default": false
+        },
+        "kerberos": {
+          "type": "object",
+          "properties": {
+            "enabled": {
+              "type": "boolean",
+              "description": "Enable Kerberos authentication",
+              "default": false
+            },
+            "realm": {
+              "type": "string",
+              "description": "Kerberos realm",
+              "default": "EXAMPLE.COM"
+            },
+            "kdc": {
+              "type": "string",
+              "description": "Kerberos KDC server"
+            },
+            "adminServer": {
+              "type": "string",
+              "description": "Kerberos admin server"
+            },
+            "dnsLookupRealm": {
+              "type": "boolean",
+              "description": "Enable DNS lookup for realm",
+              "default": false
+            },
+            "dnsLookupKdc": {
+              "type": "boolean",
+              "description": "Enable DNS lookup for KDC",
+              "default": false
+            },
+            "ticketLifetime": {
+              "type": "string",
+              "description": "Ticket lifetime",
+              "default": "24h"
+            },
+            "renewLifetime": {
+              "type": "string",
+              "description": "Ticket renewal lifetime",
+              "default": "7d"
+            },
+            "forwardable": {
+              "type": "boolean",
+              "description": "Make tickets forwardable",
+              "default": true
+            },
+            "extraConfig": {
+              "type": "string",
+              "description": "Extra krb5.conf configuration"
+            },
+            "realmExtraConfig": {
+              "type": "string",
+              "description": "Extra realm configuration"
+            },
+            "domainRealm": {
+              "type": "array",
+              "description": "Domain to realm mappings",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "domain": {
+                    "type": "string"
+                  },
+                  "realm": {
+                    "type": "string"
+                  }
+                },
+                "required": ["domain", "realm"]
+              }
+            },
+            "keytab": {
+              "type": "object",
+              "description": "Keytab files (principal -> base64 encoded keytab)"
+            }
+          }
+        },
+        "jaas": {
+          "type": "object",
+          "properties": {
+            "stormServer": {
+              "type": "string",
+              "description": "StormServer JAAS configuration"
+            },
+            "stormClient": {
+              "type": "string",
+              "description": "StormClient JAAS configuration"
+            },
+            "client": {
+              "type": "string",
+              "description": "Client JAAS configuration"
+            }
+          }
+        },
+        "sasl": {
+          "type": "object",
+          "properties": {
+            "enabled": {
+              "type": "boolean",
+              "description": "Enable SASL authentication",
+              "default": false
+            },
+            "mechanism": {
+              "type": "string",
+              "description": "SASL mechanism",
+              "enum": ["PLAIN", "SCRAM-SHA-256", "SCRAM-SHA-512", "GSSAPI"],
+              "default": "PLAIN"
+            },
+            "username": {
+              "type": "string",
+              "description": "SASL username"
+            },
+            "password": {
+              "type": "string",
+              "description": "SASL password"
+            },
+            "kerberosPrincipal": {
+              "type": "string",
+              "description": "Kerberos principal for GSSAPI"
+            }
+          }
+        }
+      }
+    }
+  }
+}

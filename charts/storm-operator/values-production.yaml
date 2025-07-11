@@ -1,0 +1,185 @@
+# Production configuration for Storm Operator
+# This configuration includes high availability, security, and monitoring settings
+# Suitable for production deployments
+
+# Global settings
+global:
+  storageClass: "fast-ssd"  # Use production storage class
+  
+# Operator configuration
+operator:
+  # High availability with 3 replicas
+  replicaCount: 3
+  
+  # Production-grade resources
+  resources:
+    requests:
+      cpu: 500m
+      memory: 512Mi
+    limits:
+      cpu: 2000m
+      memory: 2Gi
+  
+  # Pod disruption budget for high availability
+  podDisruptionBudget:
+    minAvailable: 2
+  
+  # Production affinity rules
+  podAntiAffinityPreset: hard
+  nodeAffinityPreset:
+    type: soft
+    key: "node-role.kubernetes.io/storm"
+    values:
+      - "true"
+  
+  # Production tolerations
+  tolerations:
+    - key: "storm-operator"
+      operator: "Equal"
+      value: "true"
+      effect: "NoSchedule"
+  
+  # Enable all probes with production settings
+  livenessProbe:
+    enabled: true
+    initialDelaySeconds: 30
+    periodSeconds: 10
+    timeoutSeconds: 5
+    failureThreshold: 3
+  
+  readinessProbe:
+    enabled: true
+    initialDelaySeconds: 10
+    periodSeconds: 5
+    timeoutSeconds: 3
+    failureThreshold: 3
+  
+  startupProbe:
+    enabled: true
+    initialDelaySeconds: 0
+    periodSeconds: 10
+    timeoutSeconds: 5
+    failureThreshold: 30
+
+# Zookeeper configuration for production
+zookeeper:
+  enabled: true
+  replicaCount: 3
+  
+  persistence:
+    enabled: true
+    size: 10Gi
+    storageClass: "fast-ssd"
+  
+  resources:
+    requests:
+      cpu: 500m
+      memory: 1Gi
+    limits:
+      cpu: 1000m
+      memory: 2Gi
+  
+  # Production JVM settings
+  jvmFlags: "-Xms1G -Xmx1G -XX:+UseG1GC -XX:MaxGCPauseMillis=200"
+  
+  # Enable autopurge for production
+  autopurge:
+    snapRetainCount: 3
+    purgeInterval: 24
+
+# Enhanced security settings
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 1000
+  fsGroup: 1000
+  seccompProfile:
+    type: RuntimeDefault
+
+containerSecurityContext:
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: true
+  capabilities:
+    drop:
+      - ALL
+
+# Service account with RBAC
+serviceAccount:
+  create: true
+  automountServiceAccountToken: true
+  annotations:
+    eks.amazonaws.com/role-arn: "arn:aws:iam::123456789012:role/storm-operator-role"
+
+# Network policies
+networkPolicy:
+  enabled: true
+  allowExternal: false
+  additionalRules:
+    - to:
+      - namespaceSelector:
+          matchLabels:
+            name: storm-system
+    - from:
+      - namespaceSelector:
+          matchLabels:
+            name: monitoring
+
+# Monitoring and metrics
+metrics:
+  enabled: true
+  serviceMonitor:
+    enabled: true
+    namespace: monitoring
+    labels:
+      prometheus: kube-prometheus
+  
+  # Prometheus rules for alerting
+  prometheusRule:
+    enabled: true
+    namespace: monitoring
+    rules:
+      - alert: StormOperatorDown
+        expr: up{job="storm-operator"} == 0
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Storm Operator is down"
+          description: "Storm Operator has been down for more than 5 minutes"
+
+# CRD management
+crd:
+  install: true
+  # Keep CRDs on helm uninstall for safety
+  annotations:
+    "helm.sh/resource-policy": keep
+
+# PodDisruptionBudget
+pdb:
+  create: true
+  minAvailable: 2
+
+# Additional production configurations
+commonLabels:
+  environment: "production"
+  team: "platform"
+
+commonAnnotations:
+  "prometheus.io/scrape": "true"
+  "prometheus.io/port": "8080"
+
+# Resource quotas for the namespace
+resourceQuota:
+  enabled: true
+  hard:
+    requests.cpu: "100"
+    requests.memory: "200Gi"
+    persistentvolumeclaims: "50"
+
+# Pod priority for critical workloads
+priorityClassName: "high-priority"
+
+# Backup configuration
+backup:
+  enabled: true
+  schedule: "0 2 * * *"
+  retention: 30

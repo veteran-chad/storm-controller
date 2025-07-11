@@ -1,0 +1,25 @@
+# Default values for storm-shared.
+# This is a library chart, so these values are not directly used
+# but serve as documentation for the expected structure
+
+global:
+  # -- Global Docker image registry
+  imageRegistry: ""
+  # -- Global Docker registry secret names as an array
+  imagePullSecrets: []
+  # -- Global StorageClass for Persistent Volume(s)
+  storageClass: ""
+
+# Common Storm image configuration structure
+storm:
+  image:
+    registry: docker.io
+    repository: storm
+    tag: 2.8.1
+    pullPolicy: IfNotPresent
+
+# Common labels that should be applied to all resources
+commonLabels: {}
+
+# Common annotations that should be applied to all resources
+commonAnnotations: {}

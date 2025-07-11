@@ -1,0 +1,6 @@
+operator:
+  image:
+    registry: ""
+    repository: storm-operator
+    tag: latest
+    pullPolicy: Never

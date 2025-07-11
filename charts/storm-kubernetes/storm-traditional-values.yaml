@@ -1,0 +1,26 @@
+# Traditional Storm deployment values (no CRDs)
+
+# External Zookeeper configuration (required)
+externalZookeeper:
+  servers:
+    - "zookeeper-0.zookeeper-headless.zookeeper.svc.cluster.local:2181"
+    - "zookeeper-1.zookeeper-headless.zookeeper.svc.cluster.local:2181"
+    - "zookeeper-2.zookeeper-headless.zookeeper.svc.cluster.local:2181"
+
+# Storm cluster configuration
+nimbus:
+  replicas: 1
+
+supervisor:
+  replicas: 1
+  slotsPerSupervisor: 1
+
+ui:
+  enabled: true
+
+# Enable debug logging
+storm:
+  config:
+    storm.log.level: "INFO"
+    # Add Zookeeper servers to Storm config
+    storm.zookeeper.servers: ["zookeeper-0.zookeeper-headless.zookeeper.svc.cluster.local", "zookeeper-1.zookeeper-headless.zookeeper.svc.cluster.local", "zookeeper-2.zookeeper-headless.zookeeper.svc.cluster.local"]

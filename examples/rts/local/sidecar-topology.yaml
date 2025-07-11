@@ -1,0 +1,34 @@
+apiVersion: storm.apache.org/v1beta1
+kind: StormTopology
+metadata:
+  name: wordcount-sidecar
+  namespace: storm-system
+spec:
+  clusterRef: rts-storm-cluster-storm-crd-cluster
+  topology:
+    name: wordcount-sidecar
+    jar:
+      # Using sidecar method to extract JAR from container
+      container:
+        image: hdscmnrtspsdevscuscr.azurecr.io/rts/storm-topology-example:latest
+        path: /storm-starter.jar
+        extractionMode: sidecar
+        pullSecrets:
+          - name: acr-pull-secret
+    mainClass: "org.apache.storm.starter.WordCountTopology"
+    config:
+      topology.version: "1.0.0"
+      topology.workers: "2"
+      topology.debug: "false"
+      topology.max.spout.pending: "1000"
+      topology.message.timeout.secs: "30"
+  # Optional: Define worker pool
+  workers:
+    replicas: 2
+    resources:
+      requests:
+        memory: "1Gi"
+        cpu: "500m"
+      limits:
+        memory: "2Gi" 
+        cpu: "1000m"

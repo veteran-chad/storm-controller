@@ -1,0 +1,22 @@
+apiVersion: storm.apache.org/v1beta1
+kind: StormTopology
+metadata:
+  name: wordcount-versioned-test
+  namespace: storm-system
+spec:
+  clusterRef: storm-cluster-storm-kubernetes
+  topology:
+    name: wordcount-versioned
+    jar:
+      container:
+        image: "docker.io/veteranchad/storm-topology-example:latest"
+        path: "/storm-starter.jar"
+        pullPolicy: IfNotPresent
+        extractionMode: "job"
+    mainClass: org.apache.storm.starter.WordCountTopology
+    args:
+      - "wordcount-versioned"
+    config:
+      topology.workers: "1"
+      topology.max.spout.pending: "500"
+      topology.version: "1.2.3"  # Setting the topology version here

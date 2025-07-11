@@ -1,0 +1,14 @@
+apiVersion: storm.apache.org/v1beta1
+kind: StormCluster
+metadata:
+  name: test-cluster-2
+  namespace: storm-system
+spec:
+  managementMode: reference
+  nimbus:
+    replicas: 1
+  supervisor:
+    replicas: 1
+    slotsPerSupervisor: 1
+  ui:
+    enabled: true

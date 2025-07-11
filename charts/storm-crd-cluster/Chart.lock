@@ -1,0 +1,6 @@
+dependencies:
+- name: storm-shared
+  repository: oci://hdscmnrtspsdevscuscr.azurecr.io/helm/rts
+  version: 0.1.0
+digest: sha256:fe2abd23bd46c156defb820a1e690d5a6fb4f144782e423d7073bce5f0fdfc69
+generated: "2025-07-09T16:09:18.994834346Z"

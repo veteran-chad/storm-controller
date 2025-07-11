@@ -1,0 +1,185 @@
+{{- if eq .Values.supervisor.deploymentMode "daemonset" }}
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: {{ include "storm.supervisor.fullname" . }}
+  namespace: {{ .Release.Namespace | quote }}
+  labels: {{- include "storm.labels" . | nindent 4 }}
+    app.kubernetes.io/component: supervisor
+  {{- if .Values.commonAnnotations }}
+  annotations: {{- include "storm.commonAnnotations" . | nindent 4 }}
+  {{- end }}
+spec:
+  selector:
+    matchLabels: {{- include "storm.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: supervisor
+  {{- if .Values.supervisor.updateStrategy }}
+  updateStrategy: {{- toYaml .Values.supervisor.updateStrategy | nindent 4 }}
+  {{- end }}
+  template:
+    metadata:
+      labels: {{- include "storm.labels" . | nindent 8 }}
+        app.kubernetes.io/component: supervisor
+        {{- if .Values.supervisor.podLabels }}
+        {{- toYaml .Values.supervisor.podLabels | nindent 8 }}
+        {{- end }}
+      annotations:
+        checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}
+        {{- if .Values.supervisor.podAnnotations }}
+        {{- toYaml .Values.supervisor.podAnnotations | nindent 8 }}
+        {{- end }}
+    spec:
+      {{- include "storm.imagePullSecrets" . | nindent 6 }}
+      serviceAccountName: {{ include "storm.serviceAccountName" . }}
+      {{- if .Values.supervisor.hostAliases }}
+      hostAliases: {{- toYaml .Values.supervisor.hostAliases | nindent 8 }}
+      {{- end }}
+      {{- if .Values.supervisor.podSecurityContext.enabled }}
+      securityContext: {{- omit .Values.supervisor.podSecurityContext "enabled" | toYaml | nindent 8 }}
+      {{- end }}
+      {{- if .Values.supervisor.priorityClassName }}
+      priorityClassName: {{ .Values.supervisor.priorityClassName | quote }}
+      {{- end }}
+      {{- if .Values.supervisor.schedulerName }}
+      schedulerName: {{ .Values.supervisor.schedulerName | quote }}
+      {{- end }}
+      {{- if .Values.supervisor.nodeSelector }}
+      nodeSelector: {{- toYaml .Values.supervisor.nodeSelector | nindent 8 }}
+      {{- end }}
+      {{- if .Values.supervisor.tolerations }}
+      tolerations: {{- toYaml .Values.supervisor.tolerations | nindent 8 }}
+      {{- end }}
+      {{- if .Values.supervisor.affinity }}
+      affinity: {{- toYaml .Values.supervisor.affinity | nindent 8 }}
+      {{- end }}
+      {{- if .Values.supervisor.terminationGracePeriodSeconds }}
+      terminationGracePeriodSeconds: {{ .Values.supervisor.terminationGracePeriodSeconds }}
+      {{- end }}
+      initContainers:
+        - name: wait-for-nimbus
+          image: busybox:1.36
+          imagePullPolicy: IfNotPresent
+          command:
+            - sh
+            - -c
+            - |
+              until nc -z {{ include "storm.nimbus.fullname" . }} 6627; do
+                echo "Waiting for Nimbus to be ready..."
+                sleep 5
+              done
+              echo "Nimbus is ready!"
+        {{- if .Values.supervisor.initContainers }}
+        {{- toYaml .Values.supervisor.initContainers | nindent 8 }}
+        {{- end }}
+      containers:
+        - name: supervisor
+          image: {{ include "storm.image" . }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          {{- if .Values.supervisor.containerSecurityContext.enabled }}
+          securityContext: {{- omit .Values.supervisor.containerSecurityContext "enabled" | toYaml | nindent 12 }}
+          {{- end }}
+          {{- if .Values.supervisor.command }}
+          command: {{- toYaml .Values.supervisor.command | nindent 12 }}
+          {{- else }}
+          command:
+            - storm
+            - supervisor
+          {{- end }}
+          {{- if .Values.supervisor.args }}
+          args: {{- toYaml .Values.supervisor.args | nindent 12 }}
+          {{- end }}
+          env:
+            {{- include "storm.commonEnv" . | nindent 12 }}
+            - name: STORM_CONF_DIR
+              value: "/conf"
+            {{- if .Values.supervisor.extraEnvVars }}
+            {{- toYaml .Values.supervisor.extraEnvVars | nindent 12 }}
+            {{- end }}
+          {{- if or .Values.supervisor.extraEnvVarsCM .Values.supervisor.extraEnvVarsSecret }}
+          envFrom:
+            {{- if .Values.supervisor.extraEnvVarsCM }}
+            - configMapRef:
+                name: {{ .Values.supervisor.extraEnvVarsCM }}
+            {{- end }}
+            {{- if .Values.supervisor.extraEnvVarsSecret }}
+            - secretRef:
+                name: {{ .Values.supervisor.extraEnvVarsSecret }}
+            {{- end }}
+          {{- end }}
+          ports:
+            {{- include "storm.containerPorts" "supervisor" | nindent 12 }}
+            {{- range $i := until (int .Values.supervisor.slotsPerSupervisor) }}
+            - name: slot-{{ $i }}
+              containerPort: {{ add 6700 $i }}
+              protocol: TCP
+            {{- end }}
+          {{- if .Values.supervisor.livenessProbe.enabled }}
+          livenessProbe:
+            httpGet:
+              path: /
+              port: http
+            initialDelaySeconds: {{ .Values.supervisor.livenessProbe.initialDelaySeconds }}
+            periodSeconds: {{ .Values.supervisor.livenessProbe.periodSeconds }}
+            timeoutSeconds: {{ .Values.supervisor.livenessProbe.timeoutSeconds }}
+            failureThreshold: {{ .Values.supervisor.livenessProbe.failureThreshold }}
+            successThreshold: {{ .Values.supervisor.livenessProbe.successThreshold }}
+          {{- else if .Values.supervisor.customLivenessProbe }}
+          livenessProbe: {{- toYaml .Values.supervisor.customLivenessProbe | nindent 12 }}
+          {{- end }}
+          {{- if .Values.supervisor.readinessProbe.enabled }}
+          readinessProbe:
+            httpGet:
+              path: /
+              port: http
+            initialDelaySeconds: {{ .Values.supervisor.readinessProbe.initialDelaySeconds }}
+            periodSeconds: {{ .Values.supervisor.readinessProbe.periodSeconds }}
+            timeoutSeconds: {{ .Values.supervisor.readinessProbe.timeoutSeconds }}
+            failureThreshold: {{ .Values.supervisor.readinessProbe.failureThreshold }}
+            successThreshold: {{ .Values.supervisor.readinessProbe.successThreshold }}
+          {{- else if .Values.supervisor.customReadinessProbe }}
+          readinessProbe: {{- toYaml .Values.supervisor.customReadinessProbe | nindent 12 }}
+          {{- end }}
+          {{- if .Values.supervisor.startupProbe.enabled }}
+          startupProbe:
+            httpGet:
+              path: /
+              port: http
+            initialDelaySeconds: {{ .Values.supervisor.startupProbe.initialDelaySeconds }}
+            periodSeconds: {{ .Values.supervisor.startupProbe.periodSeconds }}
+            timeoutSeconds: {{ .Values.supervisor.startupProbe.timeoutSeconds }}
+            failureThreshold: {{ .Values.supervisor.startupProbe.failureThreshold }}
+            successThreshold: {{ .Values.supervisor.startupProbe.successThreshold }}
+          {{- else if .Values.supervisor.customStartupProbe }}
+          startupProbe: {{- toYaml .Values.supervisor.customStartupProbe | nindent 12 }}
+          {{- end }}
+          {{- if .Values.supervisor.lifecycleHooks }}
+          lifecycle: {{- toYaml .Values.supervisor.lifecycleHooks | nindent 12 }}
+          {{- end }}
+          {{- if .Values.supervisor.resources }}
+          resources: {{- toYaml .Values.supervisor.resources | nindent 12 }}
+          {{- end }}
+          volumeMounts:
+            - name: storm-config
+              mountPath: /conf
+            - name: storm-logs
+              mountPath: /logs
+            - name: storm-data
+              mountPath: /storm/data
+            {{- if .Values.supervisor.extraVolumeMounts }}
+            {{- toYaml .Values.supervisor.extraVolumeMounts | nindent 12 }}
+            {{- end }}
+        {{- if .Values.supervisor.sidecars }}
+        {{- toYaml .Values.supervisor.sidecars | nindent 8 }}
+        {{- end }}
+      volumes:
+        - name: storm-config
+          configMap:
+            name: {{ include "storm.configmapName" . }}
+        - name: storm-logs
+          emptyDir: {}
+        - name: storm-data
+          emptyDir: {}
+        {{- if .Values.supervisor.extraVolumes }}
+        {{- toYaml .Values.supervisor.extraVolumes | nindent 8 }}
+        {{- end }}
+{{- end }}

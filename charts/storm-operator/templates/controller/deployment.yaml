@@ -1,0 +1,191 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "storm-shared.fullname" . }}-operator
+  namespace: {{ .Release.Namespace | quote }}
+  labels:
+    {{- include "storm-shared.componentLabels" (dict "component" "controller" "context" .) | nindent 4 }}
+    {{- if .Values.commonLabels }}
+    {{- include "common.tplvalues.render" ( dict "value" .Values.commonLabels "context" $ ) | nindent 4 }}
+    {{- end }}
+  {{- if .Values.commonAnnotations }}
+  annotations: {{- include "common.tplvalues.render" ( dict "value" .Values.commonAnnotations "context" $ ) | nindent 4 }}
+  {{- end }}
+spec:
+  replicas: {{ .Values.operator.replicaCount }}
+  selector:
+    matchLabels: {{- include "storm-shared.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: controller
+  {{- if .Values.operator.updateStrategy }}
+  strategy: {{- toYaml .Values.operator.updateStrategy | nindent 4 }}
+  {{- end }}
+  template:
+    metadata:
+      labels: {{- include "storm-shared.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: controller
+        {{- if .Values.operator.podLabels }}
+        {{- include "common.tplvalues.render" (dict "value" .Values.operator.podLabels "context" $) | nindent 8 }}
+        {{- end }}
+      annotations:
+        checksum/config: {{ include (print $.Template.BasePath "/controller/configmap.yaml") . | sha256sum }}
+        {{- if .Values.operator.podAnnotations }}
+        {{- include "common.tplvalues.render" (dict "value" .Values.operator.podAnnotations "context" $) | nindent 8 }}
+        {{- end }}
+    spec:
+      {{- include "storm-shared.imagePullSecrets" . | nindent 6 }}
+      {{- if .Values.operator.hostAliases }}
+      hostAliases: {{- include "common.tplvalues.render" (dict "value" .Values.operator.hostAliases "context" $) | nindent 8 }}
+      {{- end }}
+      serviceAccountName: {{ include "storm-shared.serviceAccountName" . }}
+      automountServiceAccountToken: {{ .Values.serviceAccount.automountServiceAccountToken }}
+      {{- if .Values.operator.schedulerName }}
+      schedulerName: {{ .Values.operator.schedulerName }}
+      {{- end }}
+      {{- if .Values.operator.topologySpreadConstraints }}
+      topologySpreadConstraints: {{- toYaml .Values.operator.topologySpreadConstraints | nindent 8 }}
+      {{- end }}
+      {{- if .Values.operator.nodeSelector }}
+      nodeSelector: {{- toYaml .Values.operator.nodeSelector | nindent 8 }}
+      {{- end }}
+      {{- if .Values.operator.tolerations }}
+      tolerations: {{- toYaml .Values.operator.tolerations | nindent 8 }}
+      {{- end }}
+      {{- if .Values.operator.affinity }}
+      affinity: {{- toYaml .Values.operator.affinity | nindent 8 }}
+      {{- else }}
+      affinity:
+        {{- if .Values.operator.podAffinityPreset }}
+        podAffinity: {{- include "common.affinities.pods" (dict "type" .Values.operator.podAffinityPreset "component" "controller" "context" $) | nindent 10 }}
+        {{- end }}
+        {{- if .Values.operator.podAntiAffinityPreset }}
+        podAntiAffinity: {{- include "common.affinities.pods" (dict "type" .Values.operator.podAntiAffinityPreset "component" "controller" "context" $) | nindent 10 }}
+        {{- end }}
+        {{- if .Values.operator.nodeAffinityPreset.type }}
+        nodeAffinity: {{- include "common.affinities.nodes" (dict "type" .Values.operator.nodeAffinityPreset.type "key" .Values.operator.nodeAffinityPreset.key "values" .Values.operator.nodeAffinityPreset.values) | nindent 10 }}
+        {{- end }}
+      {{- end }}
+      {{- if .Values.operator.priorityClassName }}
+      priorityClassName: {{ .Values.operator.priorityClassName | quote }}
+      {{- end }}
+      {{- if .Values.operator.terminationGracePeriodSeconds }}
+      terminationGracePeriodSeconds: {{ .Values.operator.terminationGracePeriodSeconds }}
+      {{- end }}
+      {{- include "storm-shared.podSecurityContext" (dict "podSecurityContext" .Values.operator.podSecurityContext) | nindent 6 }}
+      {{- if .Values.operator.initContainers }}
+      initContainers: {{- include "common.tplvalues.render" (dict "value" .Values.operator.initContainers "context" $) | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: controller
+          image: {{ include "storm-shared.images.image" (dict "imageRoot" .Values.operator.image "global" .Values.global) }}
+          imagePullPolicy: {{ include "storm-shared.images.pullPolicy" (dict "imageRoot" .Values.operator.image "global" .Values.global) }}
+          {{- if .Values.operator.command }}
+          command: {{- include "common.tplvalues.render" (dict "value" .Values.operator.command "context" $) | nindent 12 }}
+          {{- end }}
+          {{- if .Values.operator.args }}
+          args: {{- include "common.tplvalues.render" (dict "value" .Values.operator.args "context" $) | nindent 12 }}
+          {{- else }}
+          args:
+            - --operator-namespace={{ .Release.Namespace }}
+            - --storm-namespace={{ .Release.Namespace }}
+            - --leader-elect
+          {{- end }}
+          {{- if .Values.operator.lifecycleHooks }}
+          lifecycle: {{- include "common.tplvalues.render" (dict "value" .Values.operator.lifecycleHooks "context" $) | nindent 12 }}
+          {{- end }}
+          env:
+            - name: OPERATOR_NAMESPACE
+              value: {{ .Release.Namespace | quote }}
+            - name: POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+            {{- if .Values.operator.extraEnvVars }}
+            {{- include "common.tplvalues.render" (dict "value" .Values.operator.extraEnvVars "context" $) | nindent 12 }}
+            {{- end }}
+          {{- if or .Values.operator.extraEnvVarsCM .Values.operator.extraEnvVarsSecret }}
+          envFrom:
+            {{- if .Values.operator.extraEnvVarsCM }}
+            - configMapRef:
+                name: {{ include "common.tplvalues.render" (dict "value" .Values.operator.extraEnvVarsCM "context" $) }}
+            {{- end }}
+            {{- if .Values.operator.extraEnvVarsSecret }}
+            - secretRef:
+                name: {{ include "common.tplvalues.render" (dict "value" .Values.operator.extraEnvVarsSecret "context" $) }}
+            {{- end }}
+          {{- end }}
+          {{- if .Values.operator.resources }}
+          resources: {{- toYaml .Values.operator.resources | nindent 12 }}
+          {{- end }}
+          ports:
+            - name: metrics
+              containerPort: 8080
+              protocol: TCP
+            - name: health
+              containerPort: 8081
+              protocol: TCP
+          {{- if not .Values.operator.customLivenessProbe }}
+          {{- if .Values.operator.livenessProbe.enabled }}
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: health
+            initialDelaySeconds: {{ .Values.operator.livenessProbe.initialDelaySeconds }}
+            periodSeconds: {{ .Values.operator.livenessProbe.periodSeconds }}
+            timeoutSeconds: {{ .Values.operator.livenessProbe.timeoutSeconds }}
+            successThreshold: {{ .Values.operator.livenessProbe.successThreshold }}
+            failureThreshold: {{ .Values.operator.livenessProbe.failureThreshold }}
+          {{- end }}
+          {{- else }}
+          livenessProbe: {{- include "common.tplvalues.render" (dict "value" .Values.operator.customLivenessProbe "context" $) | nindent 12 }}
+          {{- end }}
+          {{- if not .Values.operator.customReadinessProbe }}
+          {{- if .Values.operator.readinessProbe.enabled }}
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: health
+            initialDelaySeconds: {{ .Values.operator.readinessProbe.initialDelaySeconds }}
+            periodSeconds: {{ .Values.operator.readinessProbe.periodSeconds }}
+            timeoutSeconds: {{ .Values.operator.readinessProbe.timeoutSeconds }}
+            successThreshold: {{ .Values.operator.readinessProbe.successThreshold }}
+            failureThreshold: {{ .Values.operator.readinessProbe.failureThreshold }}
+          {{- end }}
+          {{- else }}
+          readinessProbe: {{- include "common.tplvalues.render" (dict "value" .Values.operator.customReadinessProbe "context" $) | nindent 12 }}
+          {{- end }}
+          {{- if not .Values.operator.customStartupProbe }}
+          {{- if .Values.operator.startupProbe.enabled }}
+          startupProbe:
+            httpGet:
+              path: /healthz
+              port: health
+            initialDelaySeconds: {{ .Values.operator.startupProbe.initialDelaySeconds }}
+            periodSeconds: {{ .Values.operator.startupProbe.periodSeconds }}
+            timeoutSeconds: {{ .Values.operator.startupProbe.timeoutSeconds }}
+            successThreshold: {{ .Values.operator.startupProbe.successThreshold }}
+            failureThreshold: {{ .Values.operator.startupProbe.failureThreshold }}
+          {{- end }}
+          {{- else }}
+          startupProbe: {{- include "common.tplvalues.render" (dict "value" .Values.operator.customStartupProbe "context" $) | nindent 12 }}
+          {{- end }}
+          {{- include "storm-shared.containerSecurityContext" (dict "containerSecurityContext" .Values.operator.containerSecurityContext) | nindent 10 }}
+          volumeMounts:
+            - name: config
+              mountPath: /config
+              readOnly: true
+            {{- if .Values.operator.extraVolumeMounts }}
+            {{- include "common.tplvalues.render" (dict "value" .Values.operator.extraVolumeMounts "context" $) | nindent 12 }}
+            {{- end }}
+        {{- if .Values.operator.sidecars }}
+        {{- include "common.tplvalues.render" (dict "value" .Values.operator.sidecars "context" $) | nindent 8 }}
+        {{- end }}
+      volumes:
+        - name: config
+          configMap:
+            name: {{ include "storm-shared.fullname" . }}-operator-config
+        {{- if .Values.operator.extraVolumes }}
+        {{- include "common.tplvalues.render" (dict "value" .Values.operator.extraVolumes "context" $) | nindent 8 }}
+        {{- end }}
+      {{- if .Values.operator.extraPodSpec }}
+      {{- include "common.tplvalues.render" (dict "value" .Values.operator.extraPodSpec "context" $) | nindent 6 }}
+      {{- end }}

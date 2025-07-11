@@ -1,0 +1,124 @@
+# Default values for storm-crd-cluster
+
+## @section Global parameters
+global:
+  # -- Global Docker image registry
+  imageRegistry: ""
+  # -- Global Docker registry secret names as an array
+  imagePullSecrets: []
+  # -- Global StorageClass for Persistent Volume(s)
+  storageClass: ""
+
+## @section Common parameters
+nameOverride: ""
+fullnameOverride: ""
+commonAnnotations: {}
+commonLabels: {}
+
+## @section Storm Cluster parameters
+storm:
+  # -- Storm image configuration
+  image:
+    registry: docker.io
+    repository: storm
+    tag: 2.8.1
+    pullPolicy: IfNotPresent
+  
+  # -- Storm configuration (storm.yaml content)
+  config:
+    storm.log.level: "INFO"
+    topology.message.timeout.secs: "30"
+    supervisor.worker.timeout.secs: "30"
+
+## @section Nimbus parameters
+nimbus:
+  # -- Number of Nimbus replicas
+  replicas: 1
+  # -- Resource requests and limits
+  resources:
+    limits:
+      cpu: 1000m
+      memory: 2Gi
+    requests:
+      cpu: 500m
+      memory: 1Gi
+  # -- Node labels for Nimbus pods assignment
+  nodeSelector: {}
+  # -- Tolerations for Nimbus pods assignment
+  tolerations: []
+
+## @section Supervisor parameters
+supervisor:
+  # -- Number of Supervisor replicas
+  replicas: 1
+  # -- Number of worker slots per supervisor
+  slotsPerSupervisor: 1
+  # -- Resource requests and limits
+  resources:
+    limits:
+      cpu: 2000m
+      memory: 4Gi
+    requests:
+      cpu: 1000m
+      memory: 2Gi
+  # -- Node labels for Supervisor pods assignment
+  nodeSelector: {}
+  # -- Tolerations for Supervisor pods assignment
+  tolerations: []
+
+## @section UI parameters
+ui:
+  # -- Enable Storm UI
+  enabled: true
+  # -- Resource requests and limits
+  resources:
+    limits:
+      cpu: 500m
+      memory: 512Mi
+    requests:
+      cpu: 100m
+      memory: 256Mi
+  # -- Node labels for UI pods assignment
+  nodeSelector: {}
+  # -- Tolerations for UI pods assignment
+  tolerations: []
+
+## @section Zookeeper configuration
+zookeeper:
+  # -- Use external Zookeeper
+  external:
+    enabled: false
+    # -- External Zookeeper servers
+    servers: []
+    # -- Zookeeper root path (defaults to /storm/<cluster-name>)
+    root: ""
+  
+  # Default Zookeeper (from storm-operator)
+  default:
+    # -- Use default Zookeeper from operator namespace
+    enabled: true
+    # -- Operator namespace (where default Zookeeper is deployed)
+    operatorNamespace: "storm-operator"
+    # -- Service name pattern for Zookeeper
+    serviceName: "storm-operator-zookeeper-headless"
+
+## @section Additional settings
+persistence:
+  # -- Enable persistence using Persistent Volume Claims
+  enabled: false
+  # -- Persistent Volume storage class
+  storageClass: ""
+  # -- Persistent Volume size
+  size: 8Gi
+
+monitoring:
+  # -- Enable metrics collection
+  enabled: false
+  # -- Metrics port
+  port: 8080
+
+# -- Additional labels for the StormCluster resource
+additionalLabels: {}
+
+# -- Additional annotations for the StormCluster resource
+additionalAnnotations: {}

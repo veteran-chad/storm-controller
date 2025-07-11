@@ -1,0 +1,45 @@
+# Minimal configuration for Storm Operator
+# This configuration deploys only the operator with basic settings
+# Suitable for development or testing environments
+
+# Operator configuration
+operator:
+  # Single replica for minimal setup
+  replicaCount: 1
+  
+  # Minimal resource allocation
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+
+# Disable Zookeeper - assume external Zookeeper
+zookeeper:
+  enabled: false
+
+# Use default storage class
+persistence:
+  enabled: true
+  size: 1Gi
+
+# Minimal security context
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 1000
+  fsGroup: 1000
+
+# Basic service account
+serviceAccount:
+  create: true
+  automountServiceAccountToken: true
+
+# Install CRDs
+crd:
+  install: true
+
+# Disable PodDisruptionBudget for single replica
+pdb:
+  create: false

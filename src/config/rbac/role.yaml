@@ -1,0 +1,83 @@
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: manager-role
+rules:
+- apiGroups:
+  - ""
+  resources:
+  - configmaps
+  - pods
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - ""
+  resources:
+  - services
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - apps
+  resources:
+  - deployments
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - autoscaling
+  resources:
+  - horizontalpodautoscalers
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - storm.apache.org
+  resources:
+  - stormclusters
+  - stormtopologies
+  - stormworkerpools
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - storm.apache.org
+  resources:
+  - stormclusters/finalizers
+  - stormtopologies/finalizers
+  - stormworkerpools/finalizers
+  verbs:
+  - update
+- apiGroups:
+  - storm.apache.org
+  resources:
+  - stormclusters/status
+  - stormtopologies/status
+  - stormworkerpools/status
+  verbs:
+  - get
+  - patch
+  - update

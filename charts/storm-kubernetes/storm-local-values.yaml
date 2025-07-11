@@ -1,0 +1,28 @@
+# Storm local development values
+
+# Storm cluster configuration
+cluster:
+  enabled: true
+  extraConfig:
+    storm.log.level: "INFO"
+
+# UI configuration
+ui:
+  enabled: true
+  replicaCount: 1
+
+# Nimbus configuration
+nimbus:
+  enabled: true
+  replicaCount: 1
+
+# Supervisor configuration  
+supervisor:
+  enabled: true
+  replicaCount: 1
+  slotsPerSupervisor: 1
+
+# Zookeeper configuration
+zookeeper:
+  enabled: true
+  replicaCount: 3

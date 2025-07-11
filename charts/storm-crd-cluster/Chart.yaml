@@ -1,0 +1,23 @@
+apiVersion: v2
+name: storm-crd-cluster
+description: Deploy Apache Storm cluster using Kubernetes CRDs
+type: application
+version: 0.1.0
+appVersion: "2.8.1"
+kubeVersion: ">=1.23.0-0"
+home: https://storm.apache.org/
+sources:
+  - https://github.com/apache/storm
+maintainers:
+  - name: Apache Storm Community
+    email: dev@storm.apache.org
+keywords:
+  - storm
+  - crd
+  - cluster
+annotations:
+  category: Analytics
+dependencies:
+  - name: storm-shared
+    version: "0.1.0"
+    repository: "oci://registry-1.docker.io/veteranchad"

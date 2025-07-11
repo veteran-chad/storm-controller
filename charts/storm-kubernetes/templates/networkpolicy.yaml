@@ -1,0 +1,74 @@
+{{- if .Values.networkPolicy.enabled -}}
+apiVersion: {{ include "common.capabilities.networkPolicy.apiVersion" . }}
+kind: NetworkPolicy
+metadata:
+  name: {{ include "common.names.fullname" . }}
+  namespace: {{ include "common.names.namespace" . | quote }}
+  labels: {{- include "common.labels.standard" ( dict "customLabels" .Values.commonLabels "context" $ ) | nindent 4 }}
+  {{- if .Values.commonAnnotations }}
+  annotations: {{- include "common.tplvalues.render" ( dict "value" .Values.commonAnnotations "context" $ ) | nindent 4 }}
+  {{- end }}
+spec:
+  podSelector:
+    matchLabels: {{- include "common.labels.matchLabels" ( dict "customLabels" .Values.commonLabels "context" $ ) | nindent 6 }}
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress:
+    # Allow traffic between Storm components
+    - from:
+        - podSelector:
+            matchLabels: {{- include "common.labels.matchLabels" ( dict "customLabels" .Values.commonLabels "context" $ ) | nindent 14 }}
+    # Allow traffic from allowed namespaces
+    {{- if .Values.networkPolicy.allowedNamespaces }}
+    - from:
+        {{- range .Values.networkPolicy.allowedNamespaces }}
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: {{ . }}
+        {{- end }}
+    {{- end }}
+    # Allow external access to UI
+    {{- if and .Values.ui.enabled .Values.networkPolicy.allowExternalUI }}
+    - from: []
+      ports:
+        - protocol: TCP
+          port: {{ .Values.ui.ports.http }}
+    {{- end }}
+    # Custom ingress rules
+    {{- if .Values.networkPolicy.customIngress }}
+    {{- include "common.tplvalues.render" (dict "value" .Values.networkPolicy.customIngress "context" $) | nindent 4 }}
+    {{- end }}
+  egress:
+    # Allow DNS resolution
+    - to:
+        - namespaceSelector: {}
+          podSelector:
+            matchLabels:
+              k8s-app: kube-dns
+      ports:
+        - protocol: UDP
+          port: 53
+    # Allow traffic to Storm components
+    - to:
+        - podSelector:
+            matchLabels: {{- include "common.labels.matchLabels" ( dict "customLabels" .Values.commonLabels "context" $ ) | nindent 14 }}
+    # Allow traffic to Zookeeper
+    {{- if .Values.zookeeper.enabled }}
+    - to:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: zookeeper
+              app.kubernetes.io/instance: {{ .Release.Name }}
+    {{- else if .Values.networkPolicy.allowExternalZookeeper }}
+    # Allow external Zookeeper access
+    - to: []
+      ports:
+        - protocol: TCP
+          port: 2181
+    {{- end }}
+    # Custom egress rules
+    {{- if .Values.networkPolicy.customEgress }}
+    {{- include "common.tplvalues.render" (dict "value" .Values.networkPolicy.customEgress "context" $) | nindent 4 }}
+    {{- end }}
+{{- end -}}

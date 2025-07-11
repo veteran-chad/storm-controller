@@ -1,0 +1,159 @@
+apiVersion: storm.apache.org/v1beta1
+kind: StormCluster
+metadata:
+  name: storm-production
+  namespace: storm-system
+spec:
+  # Image configuration
+  image:
+    repository: apache/storm
+    tag: "2.6.0"
+    pullPolicy: IfNotPresent
+    
+  # Nimbus configuration
+  nimbus:
+    replicas: 3  # HA setup with 3 Nimbus nodes
+    resources:
+      requests:
+        memory: "2Gi"
+        cpu: "1"
+      limits:
+        memory: "4Gi"
+        cpu: "2"
+    persistence:
+      enabled: true
+      size: "10Gi"
+      storageClass: "fast-ssd"
+      accessMode: ReadWriteOnce
+    thrift:
+      port: 6627
+      connectionTimeout: 30
+      maxConnections: 20
+      minIdleConnections: 5
+      maxRetries: 3
+    nodeSelector:
+      storm-role: nimbus
+    tolerations:
+      - key: "storm-nimbus"
+        operator: "Equal"
+        value: "true"
+        effect: "NoSchedule"
+    
+  # Supervisor configuration
+  supervisor:
+    replicas: 5
+    deploymentMode: "deployment"  # or "daemonset"
+    workerSlots: 4  # 4 worker slots per supervisor
+    resources:
+      requests:
+        memory: "4Gi"
+        cpu: "2"
+      limits:
+        memory: "8Gi"
+        cpu: "4"
+    nodeSelector:
+      storm-role: worker
+    tolerations:
+      - key: "storm-worker"
+        operator: "Equal"
+        value: "true"
+        effect: "NoSchedule"
+    
+  # UI configuration
+  ui:
+    enabled: true
+    replicas: 2
+    resources:
+      requests:
+        memory: "512Mi"
+        cpu: "500m"
+      limits:
+        memory: "1Gi"
+        cpu: "1"
+    service:
+      type: LoadBalancer
+      port: 8080
+      annotations:
+        service.beta.kubernetes.io/aws-load-balancer-type: "nlb"
+    ingress:
+      enabled: true
+      className: "nginx"
+      hostname: "storm.example.com"
+      path: "/"
+      pathType: "Prefix"
+      tls: true
+      tlsSecretName: "storm-tls"
+      annotations:
+        cert-manager.io/cluster-issuer: "letsencrypt-prod"
+        nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    auth:
+      enabled: true
+      type: "simple"
+      users:
+        - username: "admin"
+          password: "admin-password"  # This will be stored in a Secret
+        - username: "developer"
+          password: "dev-password"
+    
+  # Zookeeper configuration
+  zookeeper:
+    enabled: true
+    # Using external Zookeeper for production
+    externalServers:
+      - "zookeeper-0.zookeeper-headless.zookeeper.svc.cluster.local:2181"
+      - "zookeeper-1.zookeeper-headless.zookeeper.svc.cluster.local:2181"
+      - "zookeeper-2.zookeeper-headless.zookeeper.svc.cluster.local:2181"
+    chrootPath: "/storm"
+    
+  # Common Storm configuration
+  config:
+    # Topology settings
+    "topology.max.spout.pending": "1000"
+    "topology.message.timeout.secs": "60"
+    "topology.worker.childopts": "-Xmx768m"
+    
+    # Nimbus settings
+    "nimbus.childopts": "-Xmx1024m"
+    "nimbus.task.timeout.secs": "30"
+    "nimbus.supervisor.timeout.secs": "60"
+    
+    # Supervisor settings
+    "supervisor.childopts": "-Xmx256m"
+    "supervisor.worker.timeout.secs": "30"
+    
+    # Performance tuning
+    "storm.messaging.netty.server_worker_threads": "1"
+    "storm.messaging.netty.client_worker_threads": "1"
+    "storm.messaging.netty.buffer_size": "5242880"
+    
+    # Security settings (if needed)
+    # "storm.thrift.transport": "org.apache.storm.security.auth.SimpleTransportPlugin"
+    # "storm.principal.tolocal": "org.apache.storm.security.auth.DefaultPrincipalToLocal"
+    
+  # Metrics configuration
+  metrics:
+    enabled: true
+    port: 7979
+    serviceMonitor: true  # Create ServiceMonitor for Prometheus Operator
+    serviceMonitorLabels:
+      prometheus: "kube-prometheus"
+---
+# Example StormTopology using the cluster
+apiVersion: storm.apache.org/v1beta1
+kind: StormTopology
+metadata:
+  name: word-count-topology
+  namespace: storm-system
+spec:
+  clusterRef: storm-production  # Reference to the cluster above
+  topology:
+    name: word-count
+    jar:
+      url: "https://repo1.maven.org/maven2/org/apache/storm/storm-starter/2.4.0/storm-starter-2.4.0.jar"
+    mainClass: "org.apache.storm.starter.WordCountTopology"
+    args:
+      - "word-count"
+    config:
+      topology.workers: "2"
+      topology.version: "1.0.0"
+  suspend: false

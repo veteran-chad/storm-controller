@@ -1,0 +1,47 @@
+# Basic Storm Topology Example
+apiVersion: storm.apache.org/v1beta1
+kind: StormTopology
+metadata:
+  name: wordcount-topology
+  namespace: default
+spec:
+  # Reference to the StormCluster resource
+  clusterRef: my-storm-cluster
+  
+  # Topology configuration
+  topology:
+    name: wordcount
+    # JAR can be provided via URL
+    jar:
+      url: "https://repo1.maven.org/maven2/org/apache/storm/storm-starter/2.6.0/storm-starter-2.6.0.jar"
+    mainClass: "org.apache.storm.starter.WordCountTopology"
+    args:
+      - "wordcount"
+    # Topology-specific Storm configuration
+    config:
+      topology.workers: 2
+      topology.acker.executors: 1
+      topology.max.spout.pending: 1000
+  
+  # Worker configuration
+  workers:
+    replicas: 2
+    resources:
+      requests:
+        cpu: "500m"
+        memory: "1Gi"
+      limits:
+        cpu: "1"
+        memory: "2Gi"
+    # Enable autoscaling
+    autoscaling:
+      enabled: true
+      minReplicas: 2
+      maxReplicas: 5
+      metrics:
+      - type: cpu
+        target:
+          averageUtilization: 70
+      - type: pending-tuples
+        target:
+          value: "10000"

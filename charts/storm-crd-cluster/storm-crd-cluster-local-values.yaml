@@ -1,0 +1,111 @@
+# Local development configuration for Storm CRD Cluster
+# This creates a Storm cluster optimized for local development
+# Suitable for kind, minikube, or Docker Desktop
+
+# Storm configuration
+storm:
+  image:
+    registry: docker.io
+    repository: storm
+    tag: 2.8.1
+    pullPolicy: IfNotPresent
+  
+  # Local development Storm configuration
+  config:
+    # Logging
+    storm.log.level: "DEBUG"
+    storm.log.dir: "/logs"
+    storm.local.dir: "/storm/data"
+    
+    # Nimbus settings for fast development
+    nimbus.task.timeout.secs: "30"
+    nimbus.supervisor.timeout.secs: "60"
+    nimbus.monitor.freq.secs: "10"
+    nimbus.cleanup.inbox.freq.secs: "600"
+    
+    # Supervisor settings
+    supervisor.worker.start.timeout.secs: "120"
+    supervisor.worker.timeout.secs: "30"
+    supervisor.monitor.frequency.secs: "3"
+    supervisor.heartbeat.frequency.secs: "5"
+    supervisor.enable: "true"
+    supervisor.slots.ports: [6700]
+    
+    # Worker settings - minimal for local
+    worker.childopts: "-Xmx256m"
+    worker.heap.memory.mb: "256"
+    worker.heartbeat.frequency.secs: "1"
+    
+    # Topology settings for development
+    topology.message.timeout.secs: "30"
+    topology.worker.max.heap.size.mb: "256"
+    topology.max.task.parallelism: "10"
+    topology.acker.executors: "1"
+    topology.debug: "false"
+    
+    # Development helpers
+    nimbus.thrift.max_buffer_size: "1048576"
+    storm.thrift.transport: "backtype.storm.security.auth.SimpleTransportPlugin"
+
+# Nimbus - Single instance for local
+nimbus:
+  replicas: 1
+  resources:
+    requests:
+      cpu: 200m
+      memory: 512Mi
+    limits:
+      cpu: 1000m
+      memory: 1Gi
+
+# Supervisor - Single instance for local
+supervisor:
+  replicas: 1
+  slotsPerSupervisor: 1
+  resources:
+    requests:
+      cpu: 200m
+      memory: 512Mi
+    limits:
+      cpu: 1000m
+      memory: 1Gi
+
+# UI - Enabled for development
+ui:
+  enabled: true
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+
+# Use default Zookeeper from operator
+zookeeper:
+  external:
+    enabled: false
+  default:
+    enabled: true
+    operatorNamespace: "storm-system"
+    serviceName: "storm-operator-zookeeper-headless"
+
+# Enable persistence with small volumes
+persistence:
+  enabled: true
+  storageClass: ""  # Use default
+  size: 2Gi
+
+# Disable monitoring for local
+monitoring:
+  enabled: false
+
+# Development labels
+commonLabels:
+  environment: "local"
+  purpose: "development"
+
+# Development annotations
+commonAnnotations:
+  "dev.local/port-forward": "true"
+  "kubectl.kubernetes.io/default-container": "storm"

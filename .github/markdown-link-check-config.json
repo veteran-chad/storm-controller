@@ -1,0 +1,50 @@
+{
+  "ignorePatterns": [
+    {
+      "pattern": "^http://localhost"
+    },
+    {
+      "pattern": "^https://localhost"
+    },
+    {
+      "pattern": "^http://127\\.0\\.0\\.1"
+    },
+    {
+      "pattern": "^https://127\\.0\\.0\\.1"
+    },
+    {
+      "pattern": "^http://storm\\.apache\\.org"
+    },
+    {
+      "pattern": "^https://storm\\.apache\\.org"
+    },
+    {
+      "pattern": "\\{.*\\}"
+    },
+    {
+      "pattern": "^https://hub\\.docker\\.com/settings"
+    },
+    {
+      "pattern": "^https://app\\.codecov\\.io"
+    }
+  ],
+  "replacementPatterns": [
+    {
+      "pattern": "^/",
+      "replacement": "{{BASEURL}}/"
+    }
+  ],
+  "timeout": "20s",
+  "retryOn429": true,
+  "retryCount": 3,
+  "fallbackRetryDelay": "30s",
+  "aliveStatusCodes": [200, 206, 301, 302, 303, 307, 308],
+  "httpHeaders": [
+    {
+      "urls": ["https://github.com", "https://docs.github.com"],
+      "headers": {
+        "Accept": "text/html"
+      }
+    }
+  ]
+}

@@ -1,0 +1,30 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: storm-debug-2
+  namespace: storm-system
+spec:
+  containers:
+  - name: storm
+    image: storm:2.8.1
+    command: ["sleep", "3600"]
+    env:
+    - name: STORM_CONF_DIR
+      value: "/conf"
+    - name: STORM_LOG_DIR
+      value: "/logs"
+    volumeMounts:
+    - name: storm-config
+      mountPath: /conf
+    - name: storm-logs
+      mountPath: /logs
+    - name: storm-data
+      mountPath: /storm/data
+  volumes:
+  - name: storm-config
+    configMap:
+      name: test-cluster-config
+  - name: storm-logs
+    emptyDir: {}
+  - name: storm-data
+    emptyDir: {}

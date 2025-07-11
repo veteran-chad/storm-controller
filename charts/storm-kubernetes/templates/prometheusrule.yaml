@@ -1,0 +1,121 @@
+{{- if and .Values.metrics.enabled .Values.metrics.prometheusRule.enabled }}
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: {{ include "common.names.fullname" . }}
+  namespace: {{ default (include "common.names.namespace" .) .Values.metrics.prometheusRule.namespace | quote }}
+  labels: {{- include "common.labels.standard" ( dict "customLabels" .Values.commonLabels "context" $ ) | nindent 4 }}
+    {{- if .Values.metrics.prometheusRule.labels }}
+    {{- include "common.tplvalues.render" ( dict "value" .Values.metrics.prometheusRule.labels "context" $) | nindent 4 }}
+    {{- end }}
+  {{- if or .Values.metrics.prometheusRule.annotations .Values.commonAnnotations }}
+  annotations:
+    {{- if .Values.commonAnnotations }}
+    {{- include "common.tplvalues.render" ( dict "value" .Values.commonAnnotations "context" $ ) | nindent 4 }}
+    {{- end }}
+    {{- if .Values.metrics.prometheusRule.annotations }}
+    {{- include "common.tplvalues.render" ( dict "value" .Values.metrics.prometheusRule.annotations "context" $ ) | nindent 4 }}
+    {{- end }}
+  {{- end }}
+spec:
+  {{- if .Values.metrics.prometheusRule.rules }}
+  groups:
+    - name: {{ include "common.names.fullname" . }}
+      rules: {{- include "common.tplvalues.render" ( dict "value" .Values.metrics.prometheusRule.rules "context" $ ) | nindent 8 }}
+  {{- else }}
+  groups:
+    - name: {{ include "common.names.fullname" . }}
+      interval: {{ .Values.metrics.prometheusRule.interval | default "30s" }}
+      rules:
+        # Nimbus alerts
+        - alert: StormNimbusDown
+          expr: up{job="{{ include "common.names.fullname" . }}", storm_component="nimbus"} == 0
+          for: 5m
+          labels:
+            severity: critical
+            component: nimbus
+          annotations:
+            summary: "Storm Nimbus instance is down"
+            description: "Storm Nimbus instance {{ "{{ $labels.pod }}" }} in namespace {{ "{{ $labels.namespace }}" }} has been down for more than 5 minutes."
+        
+        # Supervisor alerts
+        - alert: StormSupervisorDown
+          expr: up{job="{{ include "common.names.fullname" . }}", storm_component="supervisor"} == 0
+          for: 5m
+          labels:
+            severity: warning
+            component: supervisor
+          annotations:
+            summary: "Storm Supervisor instance is down"
+            description: "Storm Supervisor instance {{ "{{ $labels.pod }}" }} in namespace {{ "{{ $labels.namespace }}" }} has been down for more than 5 minutes."
+        
+        - alert: StormNoAvailableSlots
+          expr: sum(storm_supervisor_available_slots{job="{{ include "common.names.fullname" . }}"}) < 1
+          for: 10m
+          labels:
+            severity: warning
+            component: supervisor
+          annotations:
+            summary: "Storm cluster has no available slots"
+            description: "Storm cluster in namespace {{ "{{ $labels.namespace }}" }} has no available slots for more than 10 minutes."
+        
+        # UI alerts
+        - alert: StormUIDown
+          expr: up{job="{{ include "common.names.fullname" . }}", storm_component="ui"} == 0
+          for: 5m
+          labels:
+            severity: warning
+            component: ui
+          annotations:
+            summary: "Storm UI instance is down"
+            description: "Storm UI instance {{ "{{ $labels.pod }}" }} in namespace {{ "{{ $labels.namespace }}" }} has been down for more than 5 minutes."
+        
+        # Topology alerts (when topologies are deployed)
+        - alert: StormTopologyLagging
+          expr: storm_topology_lag > 100000
+          for: 5m
+          labels:
+            severity: warning
+            component: topology
+          annotations:
+            summary: "Storm topology is lagging"
+            description: "Storm topology {{ "{{ $labels.topology }}" }} has a lag of {{ "{{ $value }}" }} messages for more than 5 minutes."
+        
+        - alert: StormTopologyHighErrorRate
+          expr: rate(storm_topology_failed[5m]) / rate(storm_topology_emitted[5m]) > 0.05
+          for: 5m
+          labels:
+            severity: warning
+            component: topology
+          annotations:
+            summary: "Storm topology has high error rate"
+            description: "Storm topology {{ "{{ $labels.topology }}" }} has error rate above 5% ({{ "{{ $value | humanizePercentage }}" }}) for more than 5 minutes."
+        
+        # Resource alerts
+        - alert: StormHighMemoryUsage
+          expr: |
+            (
+              container_memory_working_set_bytes{pod=~"{{ include "common.names.fullname" . }}-.*"}
+              / 
+              container_spec_memory_limit_bytes{pod=~"{{ include "common.names.fullname" . }}-.*"}
+            ) > 0.9
+          for: 5m
+          labels:
+            severity: warning
+            component: resource
+          annotations:
+            summary: "Storm component has high memory usage"
+            description: "Storm component {{ "{{ $labels.pod }}" }} is using {{ "{{ $value | humanizePercentage }}" }} of its memory limit."
+        
+        - alert: StormHighCPUUsage
+          expr: |
+            rate(container_cpu_usage_seconds_total{pod=~"{{ include "common.names.fullname" . }}-.*"}[5m]) > 0.8
+          for: 5m
+          labels:
+            severity: warning
+            component: resource
+          annotations:
+            summary: "Storm component has high CPU usage"
+            description: "Storm component {{ "{{ $labels.pod }}" }} is using {{ "{{ $value | humanizePercentage }}" }} CPU for more than 5 minutes."
+  {{- end }}
+{{- end }}

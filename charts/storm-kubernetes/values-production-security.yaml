@@ -1,0 +1,86 @@
+# Production security configuration for Storm Kubernetes
+
+# Enable all security features
+serviceAccount:
+  create: true
+  automountServiceAccountToken: false  # Disable unless needed
+
+rbac:
+  create: true
+
+# Enforce pod security context
+podSecurityContext:
+  enabled: true
+  fsGroup: 1000
+  runAsUser: 1000
+  runAsGroup: 1000
+  runAsNonRoot: true
+  seccompProfile:
+    type: RuntimeDefault
+
+# Enforce container security context
+containerSecurityContext:
+  enabled: true
+  runAsUser: 1000
+  runAsNonRoot: true
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: false  # Storm needs to write logs
+  capabilities:
+    drop:
+      - ALL
+
+# Enable network policies
+networkPolicy:
+  enabled: true
+  allowExternalUI: false  # Restrict UI access
+  allowExternalZookeeper: false  # Use internal Zookeeper
+  allowedNamespaces:
+    - monitoring  # Allow Prometheus access
+    - ingress-nginx  # Allow ingress controller
+
+# Enable PSP for older clusters
+podSecurityPolicy:
+  create: true
+
+# Component-specific security settings
+nimbus:
+  extraEnvVars:
+    - name: STORM_NIMBUS_CHILDOPTS
+      value: "-Xmx1024m -Djava.security.manager=default"
+  
+supervisor:
+  extraEnvVars:
+    - name: STORM_SUPERVISOR_CHILDOPTS
+      value: "-Xmx256m -Djava.security.manager=default"
+    - name: STORM_WORKER_CHILDOPTS
+      value: "-Xmx768m -Djava.security.manager=default"
+
+ui:
+  extraEnvVars:
+    - name: STORM_UI_CHILDOPTS
+      value: "-Xmx768m -Djava.security.manager=default"
+
+# Enable probes for better security
+nimbus:
+  livenessProbe:
+    enabled: true
+  readinessProbe:
+    enabled: true
+  startupProbe:
+    enabled: true
+
+supervisor:
+  livenessProbe:
+    enabled: true
+  readinessProbe:
+    enabled: true
+  startupProbe:
+    enabled: true
+
+ui:
+  livenessProbe:
+    enabled: true
+  readinessProbe:
+    enabled: true
+  startupProbe:
+    enabled: true

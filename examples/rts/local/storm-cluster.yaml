@@ -1,0 +1,69 @@
+apiVersion: storm.apache.org/v1beta1
+kind: StormCluster
+metadata:
+  name: test-cluster
+  namespace: storm-system
+spec:
+  # Storm image configuration
+  image:
+    repository: storm
+    tag: "2.8.1"
+    pullPolicy: IfNotPresent
+  
+  # Image pull secrets
+  imagePullSecrets:
+    - name: acr-pull-secret
+  
+  # Zookeeper configuration
+  zookeeper:
+    servers:
+      - "storm-operator-zookeeper-headless.storm-system.svc.cluster.local"
+  
+  # Nimbus configuration
+  nimbus:
+    replicas: 1
+    resources:
+      requests:
+        memory: "1Gi"
+        cpu: "500m"
+      limits:
+        memory: "2Gi"
+        cpu: "1000m"
+    persistence:
+      enabled: true
+      size: "10Gi"
+      storageClass: ""  # Use default storage class
+  
+  # Supervisor configuration
+  supervisor:
+    replicas: 2
+    slotsPerSupervisor: 2
+    resources:
+      requests:
+        memory: "1Gi"
+        cpu: "500m"
+      limits:
+        memory: "2Gi"
+        cpu: "1000m"
+  
+  # UI configuration
+  ui:
+    replicas: 1
+    resources:
+      requests:
+        memory: "512Mi"
+        cpu: "250m"
+      limits:
+        memory: "1Gi"
+        cpu: "500m"
+  
+  # Storm configuration
+  config:
+    storm.zookeeper.servers: '["storm-operator-zookeeper-headless.storm-system.svc.cluster.local"]'
+    nimbus.seeds: '["test-cluster-nimbus"]'
+    ui.port: "8080"
+    nimbus.thrift.port: "6627"
+    # Local optimizations
+    nimbus.task.launch.secs: "60"
+    nimbus.supervisor.timeout.secs: "60"
+    supervisor.worker.start.timeout.secs: "120"

@@ -1,0 +1,8 @@
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: storm-system
+  labels:
+    app.kubernetes.io/name: storm
+    app.kubernetes.io/component: system

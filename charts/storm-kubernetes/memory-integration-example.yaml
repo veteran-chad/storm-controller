@@ -1,0 +1,104 @@
+# Example of how to integrate memory management into existing templates
+
+# 1. Update supervisor-deployment.yaml to use calculated resources:
+#    (Around line 116 in the containers section)
+
+{{- $memorySettings := include "storm.supervisor.memorySettings" . | fromYaml -}}
+          {{- if .Values.supervisor.resources }}
+          resources: {{- toYaml .Values.supervisor.resources | nindent 12 }}
+          {{- else if eq .Values.supervisor.memoryConfig.mode "auto" }}
+          resources:
+            requests:
+              memory: {{ $memorySettings.containerMemory }}
+              cpu: {{ $memorySettings.containerCpu }}
+            limits:
+              memory: {{ $memorySettings.containerMemory }}
+              cpu: {{ $memorySettings.containerCpu }}
+          {{- else if ne .Values.supervisor.resourcesPreset "none" }}
+          resources: {{- include "common.resources.preset" (dict "type" .Values.supervisor.resourcesPreset) | nindent 12 }}
+          {{- end }}
+
+# 2. Update configmap.yaml to include auto-calculated Storm settings:
+#    (In the supervisor configuration section)
+
+    # Supervisor configuration
+    {{- if .Values.supervisor.enabled }}
+    # Generate supervisor slot ports based on slotsPerSupervisor
+    {{- if .Values.supervisor.slotsPerSupervisor }}
+    supervisor.slots.ports:
+    {{- range $i := until (int .Values.supervisor.slotsPerSupervisor) }}
+      - {{ add 6700 $i }}
+    {{- end }}
+    {{- end }}
+    
+    # Auto-calculated memory settings (if in auto mode)
+    {{- if eq .Values.supervisor.memoryConfig.mode "auto" }}
+    {{- include "storm.supervisor.memoryConfig" . | nindent 4 }}
+    {{- end }}
+    
+    {{- if .Values.supervisor.extraConfig }}
+    {{- range $key, $value := .Values.supervisor.extraConfig }}
+    {{- if and (ne $key "supervisor.slots.ports") (ne $key "supervisor.memory.capacity.mb") (ne $key "supervisor.cpu.capacity") (ne $key "worker.heap.memory.mb") }}
+    {{ $key }}: {{ $value | toJson }}
+    {{- else if eq $.Values.supervisor.memoryConfig.mode "manual" }}
+    # Manual mode - include user-provided memory settings
+    {{ $key }}: {{ $value | toJson }}
+    {{- end }}
+    {{- end }}
+    {{- end }}
+    {{- end }}
+
+# 3. Add validation to the chart (in _helpers.tpl or NOTES.txt):
+
+{{- include "storm.supervisor.validateMemory" . -}}
+
+# 4. Update values.yaml with the new structure:
+
+supervisor:
+  enabled: true
+  replicaCount: 2
+  slotsPerSupervisor: 4
+  
+  ## Memory configuration for supervisors
+  ## @param supervisor.memoryConfig.mode Memory configuration mode: "auto" or "manual"
+  ## @param supervisor.memoryConfig.memoryPerWorker Memory allocated per worker slot
+  ## @param supervisor.memoryConfig.memoryOverheadPercent JVM overhead percentage
+  ## @param supervisor.memoryConfig.cpuPerWorker CPU cores per worker slot
+  memoryConfig:
+    mode: "auto"
+    memoryPerWorker: "1Gi"
+    memoryOverheadPercent: 25
+    cpuPerWorker: "1"
+  
+  ## Manual resource configuration (used when memoryConfig.mode=manual)
+  ## @param supervisor.resources Container resource requests and limits
+  resources: {}
+  
+  ## @param supervisor.extraConfig Additional Storm configuration
+  ## Note: When using auto mode, memory settings are calculated automatically
+  extraConfig: {}
+    # supervisor.memory.capacity.mb: 4096  # Auto-calculated in auto mode
+    # supervisor.cpu.capacity: 400         # Auto-calculated in auto mode
+    # worker.heap.memory.mb: 768          # Auto-calculated in auto mode
+
+# 5. Example NOTES.txt output:
+
+{{- if .Values.supervisor.enabled }}
+{{- $memSettings := include "storm.supervisor.memorySettings" . | fromYaml }}
+
+Storm Supervisor Configuration:
+  Replicas: {{ .Values.supervisor.replicaCount }}
+  Slots per Supervisor: {{ .Values.supervisor.slotsPerSupervisor }}
+  Memory Mode: {{ .Values.supervisor.memoryConfig.mode }}
+  
+  Memory Settings:
+    Container Memory: {{ $memSettings.containerMemory }}
+    Container CPU: {{ $memSettings.containerCpu }}
+    Supervisor Capacity: {{ $memSettings.supervisorCapacityMB }}MB
+    Worker Heap: {{ $memSettings.workerHeapMB }}MB
+    
+  Total Cluster Capacity:
+    Worker Slots: {{ mul .Values.supervisor.replicaCount .Values.supervisor.slotsPerSupervisor }}
+    Total Memory: {{ mul .Values.supervisor.replicaCount $memSettings.supervisorCapacityMB }}MB
+    Total CPU: {{ mul .Values.supervisor.replicaCount $memSettings.supervisorCpuCapacity | div 100.0 }} cores
+{{- end }}

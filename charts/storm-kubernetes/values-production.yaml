@@ -1,0 +1,327 @@
+# Production values for Storm Kubernetes Helm chart
+# This file combines all production-ready features and best practices
+
+## Global configuration
+global:
+  imageRegistry: ""  # Set to your private registry if needed
+  imagePullSecrets: []
+  storageClass: "fast-ssd"  # Use a fast storage class for production
+  security:
+    allowInsecureImages: true  # Required for Storm images
+
+## Common configuration
+nameOverride: ""
+fullnameOverride: ""
+clusterDomain: cluster.local
+commonAnnotations: {}
+commonLabels: {}
+
+## Security configuration
+serviceAccount:
+  create: true
+  name: ""
+  automountServiceAccountToken: true
+  annotations: {}
+  labels: {}
+
+rbac:
+  create: true
+  rules: []
+
+# Pod security context - runs as storm user (UID 1000)
+podSecurityContext:
+  enabled: true
+  fsGroup: 1000
+  runAsUser: 1000
+  runAsGroup: 1000
+  runAsNonRoot: true
+  seccompProfile:
+    type: RuntimeDefault
+
+# Container security context
+containerSecurityContext:
+  enabled: true
+  runAsUser: 1000
+  runAsNonRoot: true
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: false
+  capabilities:
+    drop:
+      - ALL
+
+# Network policies for security
+networkPolicy:
+  enabled: true
+  allowExternalUI: true
+  allowExternalZookeeper: false
+  allowedNamespaces:
+    - storm-system
+    - monitoring
+  customIngress: []
+  customEgress: []
+
+# Storm configuration
+storm:
+  image:
+    registry: docker.io
+    repository: storm
+    tag: latest
+    pullPolicy: IfNotPresent
+    pullSecrets: []
+
+# Nimbus configuration - HA setup with 3 replicas
+nimbus:
+  enabled: true
+  replicaCount: 3  # High availability
+  
+  resources:
+    limits:
+      cpu: 2000m
+      memory: 4Gi
+    requests:
+      cpu: 1000m
+      memory: 2Gi
+  
+  jvmOptions: "-Xms2g -Xmx2g -XX:+UseG1GC -XX:MaxGCPauseMillis=200"
+  
+  service:
+    type: ClusterIP
+    ports:
+      nimbus: 6627
+  
+  # Pod disruption budget for HA
+  pdb:
+    create: true
+    minAvailable: 2  # Always keep at least 2 nimbus instances running
+  
+  # Anti-affinity to spread nimbus pods across nodes
+  podAntiAffinityPreset: hard
+  
+  # Persistence for nimbus data
+  persistence:
+    enabled: true
+    storageClass: "fast-ssd"
+    accessModes:
+      - ReadWriteOnce
+    size: 10Gi
+
+# Supervisor configuration - with autoscaling
+supervisor:
+  enabled: true
+  replicaCount: 5  # Start with 5, HPA will scale as needed
+  
+  # Automatic memory calculation enabled
+  autoMemory:
+    enabled: true
+    containerMemoryFactor: 0.8  # 80% of container memory for JVM
+    jvmMemoryFactor: 0.75      # 75% of JVM memory for workers
+  
+  resources:
+    limits:
+      cpu: 4000m
+      memory: 8Gi
+    requests:
+      cpu: 2000m
+      memory: 4Gi
+  
+  slotsPerSupervisor: 4
+  
+  # Pod disruption budget
+  pdb:
+    create: true
+    maxUnavailable: 1  # Allow only 1 supervisor down at a time
+  
+  # Anti-affinity to spread supervisors across nodes
+  podAntiAffinityPreset: hard
+  
+  # Node affinity to run on worker nodes
+  nodeAffinityPreset:
+    type: hard
+    key: node-role.kubernetes.io/worker
+    values:
+      - "true"
+  
+  ports:
+    http: 8000
+  
+  # Persistence for supervisor logs
+  persistence:
+    enabled: true
+    storageClass: "fast-ssd"
+    accessModes:
+      - ReadWriteOnce
+    size: 50Gi
+
+# UI configuration
+ui:
+  enabled: true
+  replicaCount: 2  # HA for UI
+  
+  resources:
+    limits:
+      cpu: 1000m
+      memory: 2Gi
+    requests:
+      cpu: 500m
+      memory: 1Gi
+  
+  service:
+    type: ClusterIP
+    ports:
+      http: 8080
+  
+  # Ingress with TLS
+  ingress:
+    enabled: true
+    ingressClassName: "nginx"
+    hostname: storm.production.example.com
+    tls: true
+    selfSigned: false
+    
+    annotations:
+      # Nginx configurations
+      nginx.ingress.kubernetes.io/force-ssl-redirect: "true"
+      nginx.ingress.kubernetes.io/ssl-protocols: "TLSv1.2 TLSv1.3"
+      nginx.ingress.kubernetes.io/ssl-ciphers: "ECDHE-ECDSA-AES128-GCM-SHA256,ECDHE-RSA-AES128-GCM-SHA256"
+      
+      # Security headers
+      nginx.ingress.kubernetes.io/configuration-snippet: |
+        more_set_headers "X-Frame-Options: DENY";
+        more_set_headers "X-Content-Type-Options: nosniff";
+        more_set_headers "X-XSS-Protection: 1; mode=block";
+        more_set_headers "Referrer-Policy: strict-origin-when-cross-origin";
+        more_set_headers "Content-Security-Policy: default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline';";
+      
+      # Rate limiting
+      nginx.ingress.kubernetes.io/limit-rps: "100"
+      nginx.ingress.kubernetes.io/limit-connections: "50"
+      
+      # WebSocket support
+      nginx.ingress.kubernetes.io/websocket-services: "storm-ui"
+      nginx.ingress.kubernetes.io/proxy-http-version: "1.1"
+      
+      # cert-manager integration
+      cert-manager.io/cluster-issuer: "letsencrypt-prod"
+  
+  # Pod disruption budget
+  pdb:
+    create: true
+    minAvailable: 1
+
+# Logviewer configuration
+logviewer:
+  enabled: true
+  
+  resources:
+    limits:
+      cpu: 500m
+      memory: 1Gi
+    requests:
+      cpu: 250m
+      memory: 512Mi
+  
+  service:
+    ports:
+      logviewer: 8000
+
+# External Zookeeper for production
+externalZookeeper:
+  enabled: true
+  servers:
+    - zookeeper-0.zookeeper-headless.zookeeper.svc.cluster.local:2181
+    - zookeeper-1.zookeeper-headless.zookeeper.svc.cluster.local:2181
+    - zookeeper-2.zookeeper-headless.zookeeper.svc.cluster.local:2181
+
+# Storm specific configuration
+stormConfig:
+  # Production storm.yaml settings
+  nimbus.seeds: ["nimbus-0", "nimbus-1", "nimbus-2"]
+  nimbus.thrift.port: 6627
+  
+  # Topology settings
+  topology.acker.executors: 4
+  topology.eventlogger.executors: 2
+  topology.max.spout.pending: 1000
+  topology.message.timeout.secs: 60
+  
+  # Worker settings
+  worker.childopts: "-XX:+UseG1GC -XX:MaxGCPauseMillis=100"
+  worker.gc.childopts: ""
+  worker.heap.memory.mb: null  # Calculated automatically
+  
+  # Supervisor settings
+  supervisor.run.worker.as.user: true
+  supervisor.slots.ports: null  # Generated dynamically
+  
+  # Performance tuning
+  storm.messaging.netty.buffer_size: 5242880
+  storm.messaging.netty.max_retries: 100
+  storm.messaging.netty.max_wait_ms: 1000
+  storm.messaging.netty.min_wait_ms: 100
+  
+  # Security
+  storm.thrift.transport: "org.apache.storm.security.auth.SimpleTransportPlugin"
+  storm.principal.tolocal: "org.apache.storm.security.auth.DefaultPrincipalToLocal"
+  storm.group.mapping.service: "org.apache.storm.security.auth.ShellBasedGroupsMapping"
+
+# Monitoring configuration
+metrics:
+  enabled: true
+  
+  exporter:
+    image:
+      repository: python
+      tag: 3.11-alpine
+    port: 9102
+    interval: 30
+    
+    resources:
+      limits:
+        cpu: 200m
+        memory: 256Mi
+      requests:
+        cpu: 100m
+        memory: 128Mi
+  
+  serviceMonitor:
+    enabled: true
+    namespace: ""  # Same namespace as Storm
+    labels:
+      prometheus: kube-prometheus
+    interval: "30s"
+    scrapeTimeout: "10s"
+  
+  prometheusRule:
+    enabled: true
+    namespace: ""  # Same namespace as Storm
+    labels:
+      prometheus: kube-prometheus
+    
+    # Alert rules are defined in the template
+
+# Persistence defaults
+persistence:
+  enabled: true
+  storageClass: "fast-ssd"
+  accessModes:
+    - ReadWriteOnce
+  size: 8Gi
+
+# HPA configuration (requires metrics-server)
+autoscaling:
+  enabled: true
+  minReplicas: 5
+  maxReplicas: 20
+  targetCPUUtilizationPercentage: 70
+  targetMemoryUtilizationPercentage: 80
+
+# Production annotations for all pods
+commonAnnotations:
+  prometheus.io/scrape: "true"
+  prometheus.io/port: "9102"
+  prometheus.io/path: "/metrics"
+
+# Production labels
+commonLabels:
+  environment: production
+  tier: backend

@@ -1,0 +1,25 @@
+{{- if and .Values.nimbus.enabled .Values.nimbus.pdb.create }}
+apiVersion: {{ include "common.capabilities.policy.apiVersion" . }}
+kind: PodDisruptionBudget
+metadata:
+  name: {{ include "common.names.fullname" . }}-nimbus
+  namespace: {{ include "common.names.namespace" . | quote }}
+  labels: {{- include "common.labels.standard" ( dict "customLabels" .Values.commonLabels "context" $ ) | nindent 4 }}
+    app.kubernetes.io/component: nimbus
+  {{- if .Values.commonAnnotations }}
+  annotations: {{- include "common.tplvalues.render" ( dict "value" .Values.commonAnnotations "context" $ ) | nindent 4 }}
+  {{- end }}
+spec:
+  {{- if .Values.nimbus.pdb.minAvailable }}
+  minAvailable: {{ .Values.nimbus.pdb.minAvailable }}
+  {{- end }}
+  {{- if .Values.nimbus.pdb.maxUnavailable }}
+  maxUnavailable: {{ .Values.nimbus.pdb.maxUnavailable }}
+  {{- end }}
+  selector:
+    matchLabels: {{- include "common.labels.matchLabels" ( dict "customLabels" .Values.commonLabels "context" $ ) | nindent 6 }}
+      app.kubernetes.io/component: nimbus
+  {{- if .Values.nimbus.pdb.unhealthyPodEvictionPolicy }}
+  unhealthyPodEvictionPolicy: {{ .Values.nimbus.pdb.unhealthyPodEvictionPolicy }}
+  {{- end }}
+{{- end }}

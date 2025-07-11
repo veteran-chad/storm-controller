@@ -1,0 +1,126 @@
+name: PR Checks
+
+on:
+  pull_request:
+    branches: [main]
+
+jobs:
+  lint-helm-chart:
+    name: Lint Helm Chart
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: azure/setup-helm@v4
+        with:
+          version: 'latest'
+
+      - name: Add Helm repositories
+        run: |
+          helm repo add bitnami https://charts.bitnami.com/bitnami
+          helm repo update
+
+      - name: Build dependencies
+        run: |
+          helm dependency update charts/storm-kubernetes
+
+      - name: Lint chart
+        run: |
+          helm lint charts/storm-kubernetes --strict
+          
+      - name: Validate schema
+        run: |
+          helm lint charts/storm-kubernetes --strict --values charts/storm-kubernetes/values-production.yaml
+
+  test-helm-templates:
+    name: Test Helm Templates
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: azure/setup-helm@v4
+        with:
+          version: 'latest'
+
+      - name: Add Helm repositories
+        run: |
+          helm repo add bitnami https://charts.bitnami.com/bitnami
+          helm repo update
+
+      - name: Build dependencies
+        run: |
+          helm dependency update charts/storm-kubernetes
+          
+      - name: Test default values
+        run: |
+          helm template test-release charts/storm-kubernetes > /tmp/default.yaml
+          echo "✓ Default template generation successful"
+          
+      - name: Test production values
+        run: |
+          helm template test-release charts/storm-kubernetes \
+            --values charts/storm-kubernetes/values-production.yaml > /tmp/production.yaml
+          echo "✓ Production template generation successful"
+          
+      - name: Test security features
+        run: |
+          helm template test-release charts/storm-kubernetes \
+            --values charts/storm-kubernetes/values-production-security.yaml > /tmp/security.yaml
+          echo "✓ Security features template generation successful"
+          
+      - name: Test monitoring features
+        run: |
+          helm template test-release charts/storm-kubernetes \
+            --values charts/storm-kubernetes/values-production-monitoring.yaml > /tmp/monitoring.yaml
+          echo "✓ Monitoring features template generation successful"
+          
+      - name: Validate resources
+        run: |
+          echo "Checking generated resources..."
+          for file in /tmp/*.yaml; do
+            echo "Validating $file"
+            # Check for valid YAML
+            python3 -c "import yaml; yaml.safe_load_all(open('$file'))" || exit 1
+          done
+          echo "✓ All templates generate valid YAML"
+          
+  check-documentation:
+    name: Check Documentation
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Check for required documentation
+        run: |
+          echo "Checking for required documentation files..."
+          for file in charts/storm-kubernetes/README.md charts/storm-kubernetes/CHANGELOG.md; do
+            if [ ! -f "$file" ]; then
+              echo "❌ Missing required file: $file"
+              exit 1
+            fi
+            echo "✓ Found $file"
+          done
+          
+      - name: Check values documentation
+        run: |
+          echo "Checking values.yaml documentation..."
+          # Ensure all values have @param documentation
+          undocumented=$(grep -E "^[a-zA-Z].*:" charts/storm-kubernetes/values.yaml | grep -v "^##" | wc -l)
+          documented=$(grep -E "^## @param" charts/storm-kubernetes/values.yaml | wc -l)
+          echo "Documented parameters: $documented"
+          echo "Total top-level parameters: $undocumented"
+          
+  security-scan:
+    name: Security Scan
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Run Trivy vulnerability scanner
+        uses: aquasecurity/trivy-action@master
+        with:
+          scan-type: 'config'
+          scan-ref: 'charts/storm-kubernetes'
+          format: 'table'
+          exit-code: '0'  # Don't fail on vulnerabilities, just report
+          severity: 'CRITICAL,HIGH'

@@ -1,0 +1,162 @@
+{{- include "storm.validateZookeeper" . }}
+{{- if .Values.supervisor.enabled }}
+{{- include "storm.supervisor.validateMemory" . }}
+{{- end -}}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "common.names.fullname" . }}
+  namespace: {{ include "common.names.namespace" . | quote }}
+  labels: {{- include "common.labels.standard" ( dict "customLabels" .Values.commonLabels "context" $ ) | nindent 4 }}
+  {{- if .Values.commonAnnotations }}
+  annotations: {{- include "common.tplvalues.render" ( dict "value" .Values.commonAnnotations "context" $ ) | nindent 4 }}
+  {{- end }}
+data:
+  storm.yaml: |
+    # Storm configuration
+    
+    # Zookeeper settings
+    {{- if .Values.zookeeper.enabled }}
+    # Using bundled Zookeeper
+    storm.zookeeper.servers:
+      - {{ include "storm.zookeeperHeadlessService" . }}.{{ include "common.names.namespace" . }}.svc.{{ .Values.clusterDomain }}
+    {{- else }}
+    # Using external Zookeeper
+    storm.zookeeper.servers:
+    {{- range .Values.zookeeper.external.servers }}
+      - {{ . | quote }}
+    {{- end }}
+    {{- end }}
+    
+    # Additional Zookeeper configuration
+    {{- if .Values.zookeeper.extraConfig }}
+    {{- range $key, $value := .Values.zookeeper.extraConfig }}
+    {{ $key }}: {{ $value | toJson }}
+    {{- end }}
+    {{- end }}
+    
+    # UI configuration
+    {{- if .Values.ui.enabled }}
+    # Map UI port from values
+    {{- if .Values.ui.ports.http }}
+    ui.port: {{ .Values.ui.ports.http }}
+    {{- end }}
+    {{- if .Values.ui.extraConfig }}
+    {{- range $key, $value := .Values.ui.extraConfig }}
+    {{ $key }}: {{ $value | toJson }}
+    {{- end }}
+    {{- end }}
+    {{- end }}
+    
+    # Nimbus configuration
+    {{- if .Values.nimbus.enabled }}
+    # Set nimbus.seeds to the headless service
+    nimbus.seeds:
+      - {{ include "storm.nimbusSeed" . }}
+    # Map Nimbus thrift port from values
+    {{- if .Values.nimbus.ports.thrift }}
+    nimbus.thrift.port: {{ .Values.nimbus.ports.thrift }}
+    {{- end }}
+    {{- if .Values.nimbus.extraConfig }}
+    {{- range $key, $value := .Values.nimbus.extraConfig }}
+    {{- if and (ne $key "nimbus.seeds") (ne $key "nimbus.thrift.port") }}
+    {{ $key }}: {{ $value | toJson }}
+    {{- end }}
+    {{- end }}
+    {{- end }}
+    {{- end }}
+    
+    # Supervisor configuration
+    {{- if .Values.supervisor.enabled }}
+    # Generate supervisor slot ports based on slotsPerSupervisor
+    {{- if .Values.supervisor.slotsPerSupervisor }}
+    supervisor.slots.ports:
+    {{- range $i := until (int .Values.supervisor.slotsPerSupervisor) }}
+      - {{ add 6700 $i }}
+    {{- end }}
+    {{- end }}
+    
+    # Auto-calculated memory settings (if in auto mode)
+    {{- if eq .Values.supervisor.memoryConfig.mode "auto" }}
+    {{- include "storm.supervisor.memoryConfig" $ | nindent 4 }}
+    {{- end }}
+    
+    {{- if .Values.supervisor.extraConfig }}
+    {{- range $key, $value := .Values.supervisor.extraConfig }}
+    {{- if not (and (eq $.Values.supervisor.memoryConfig.mode "auto") (or (eq $key "supervisor.memory.capacity.mb") (eq $key "supervisor.cpu.capacity") (eq $key "worker.heap.memory.mb"))) }}
+    {{- if ne $key "supervisor.slots.ports" }}
+    {{ $key }}: {{ $value | toJson }}
+    {{- end }}
+    {{- end }}
+    {{- end }}
+    {{- end }}
+    {{- end }}
+    
+    # Cluster configuration
+    {{- if .Values.cluster.enabled }}
+    {{- if .Values.cluster.extraConfig }}
+    {{- range $key, $value := .Values.cluster.extraConfig }}
+    {{ $key }}: {{ $value | toJson }}
+    {{- end }}
+    {{- end }}
+    {{- end }}
+    
+    # Common directory configurations
+    {{- if or .Values.ui.logDir .Values.nimbus.logDir .Values.supervisor.logDir }}
+    # Storm log directory (using the first defined value)
+    storm.log.dir: {{ .Values.nimbus.logDir | default .Values.supervisor.logDir | default .Values.ui.logDir }}
+    {{- end }}
+    {{- if .Values.supervisor.dataDir }}
+    # Storm local directory for supervisor
+    storm.local.dir: {{ .Values.supervisor.dataDir }}
+    {{- end }}
+    
+    # Legacy cluster configuration (deprecated - will be removed)
+    {{- if .Values.clusterConfig }}
+    {{- include "storm.renderClusterConfig" . | nindent 4 }}
+    {{- end }}
+    
+    # Authentication configuration
+    {{- if .Values.auth.enabled }}
+    {{- if .Values.auth.kerberos.enabled }}
+    # Kerberos authentication
+    storm.thrift.transport: "org.apache.storm.security.auth.kerberos.KerberosSaslTransportPlugin"
+    java.security.auth.login.config: "/etc/storm/auth/storm_jaas.conf"
+    java.security.krb5.conf: "/etc/storm/auth/krb5.conf"
+    storm.principal.tolocal: "org.apache.storm.security.auth.KerberosPrincipalToLocal"
+    storm.zookeeper.auth.scheme: "sasl"
+    storm.zookeeper.auth.payload: ""
+    {{- else }}
+    # Simple authentication
+    storm.thrift.transport: "org.apache.storm.security.auth.SimpleTransportPlugin"
+    {{- end }}
+    {{- end }}
+  
+  log4j2.xml: |
+    <?xml version="1.0" encoding="UTF-8"?>
+    <Configuration>
+      <Appenders>
+        <Console name="Console" target="SYSTEM_OUT">
+          <PatternLayout pattern="%d{ISO8601} %p %c{1}: %m%n"/>
+        </Console>
+        <RollingFile name="File" fileName="${sys:storm.log.dir}/${sys:logfile.name}"
+                     filePattern="${sys:storm.log.dir}/${sys:logfile.name}-%d{yyyy-MM-dd}-%i.log.gz">
+          <PatternLayout pattern="%d{ISO8601} %p %c{1}: %m%n"/>
+          <Policies>
+            <TimeBasedTriggeringPolicy />
+            <SizeBasedTriggeringPolicy size="100MB"/>
+          </Policies>
+          <DefaultRolloverStrategy max="9"/>
+        </RollingFile>
+      </Appenders>
+      <Loggers>
+        <Root level="INFO">
+          <AppenderRef ref="Console"/>
+          <AppenderRef ref="File"/>
+        </Root>
+        <Logger name="org.apache.storm" level="INFO" additivity="false">
+          <AppenderRef ref="Console"/>
+          <AppenderRef ref="File"/>
+        </Logger>
+      </Loggers>
+    </Configuration>

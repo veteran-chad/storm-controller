@@ -1,0 +1,61 @@
+apiVersion: storm.apache.org/v1beta1
+kind: StormCluster
+metadata:
+  name: storm-cluster
+  namespace: storm-system
+spec:
+  # Use "create" mode since controller will create all resources
+  managementMode: create
+  
+  # Storm image configuration
+  image:
+    registry: docker.io
+    repository: storm
+    tag: "2.8.1"
+    pullPolicy: IfNotPresent
+  
+  # Nimbus configuration
+  nimbus:
+    replicas: 1
+    resources:
+      requests:
+        cpu: 500m
+        memory: 1Gi
+      limits:
+        cpu: 2000m
+        memory: 2Gi
+  
+  # Supervisor configuration
+  supervisor:
+    replicas: 1
+    workerSlots: 1
+    resources:
+      requests:
+        cpu: 1000m
+        memory: 2Gi
+      limits:
+        cpu: 2000m
+        memory: 4Gi
+  
+  # UI configuration
+  ui:
+    enabled: true
+    service:
+      port: 8080
+  
+  # Zookeeper configuration (reference existing Zookeeper deployed by Helm)
+  zookeeper:
+    externalServers:
+      - "storm-cluster-zookeeper-0.storm-cluster-zookeeper-headless.storm-system.svc.cluster.local:2181"
+      - "storm-cluster-zookeeper-1.storm-cluster-zookeeper-headless.storm-system.svc.cluster.local:2181"
+      - "storm-cluster-zookeeper-2.storm-cluster-zookeeper-headless.storm-system.svc.cluster.local:2181"
+    chrootPath: "/storm"
+  
+  # Storm configuration
+  config:
+    "storm.zookeeper.session.timeout": "20000"
+    "storm.zookeeper.connection.timeout": "15000"
+    "nimbus.task.timeout.secs": "30"
+    "nimbus.supervisor.timeout.secs": "60"
+    "supervisor.worker.timeout.secs": "30"
+    "topology.message.timeout.secs": "30"

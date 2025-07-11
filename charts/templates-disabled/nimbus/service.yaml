@@ -1,0 +1,79 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "storm.nimbus.fullname" . }}
+  namespace: {{ .Release.Namespace | quote }}
+  labels: {{- include "storm.labels" . | nindent 4 }}
+    app.kubernetes.io/component: nimbus
+  {{- if or .Values.nimbus.service.annotations .Values.commonAnnotations }}
+  annotations:
+    {{- if .Values.nimbus.service.annotations }}
+    {{- toYaml .Values.nimbus.service.annotations | nindent 4 }}
+    {{- end }}
+    {{- if .Values.commonAnnotations }}
+    {{- include "storm.commonAnnotations" . | nindent 4 }}
+    {{- end }}
+  {{- end }}
+spec:
+  type: {{ .Values.nimbus.service.type }}
+  {{- if and .Values.nimbus.service.clusterIP (eq .Values.nimbus.service.type "ClusterIP") }}
+  clusterIP: {{ .Values.nimbus.service.clusterIP }}
+  {{- end }}
+  {{- if and .Values.nimbus.service.loadBalancerIP (eq .Values.nimbus.service.type "LoadBalancer") }}
+  loadBalancerIP: {{ .Values.nimbus.service.loadBalancerIP }}
+  {{- end }}
+  {{- if and (eq .Values.nimbus.service.type "LoadBalancer") .Values.nimbus.service.loadBalancerSourceRanges }}
+  loadBalancerSourceRanges: {{- toYaml .Values.nimbus.service.loadBalancerSourceRanges | nindent 4 }}
+  {{- end }}
+  {{- if or (eq .Values.nimbus.service.type "LoadBalancer") (eq .Values.nimbus.service.type "NodePort") }}
+  externalTrafficPolicy: {{ .Values.nimbus.service.externalTrafficPolicy | quote }}
+  {{- end }}
+  {{- if .Values.nimbus.service.sessionAffinity }}
+  sessionAffinity: {{ .Values.nimbus.service.sessionAffinity }}
+  {{- end }}
+  {{- if .Values.nimbus.service.sessionAffinityConfig }}
+  sessionAffinityConfig: {{- toYaml .Values.nimbus.service.sessionAffinityConfig | nindent 4 }}
+  {{- end }}
+  ports:
+    - name: thrift
+      port: {{ .Values.nimbus.service.ports.thrift }}
+      targetPort: thrift
+      protocol: TCP
+      {{- if and (or (eq .Values.nimbus.service.type "NodePort") (eq .Values.nimbus.service.type "LoadBalancer")) .Values.nimbus.service.nodePorts.thrift }}
+      nodePort: {{ .Values.nimbus.service.nodePorts.thrift }}
+      {{- else if eq .Values.nimbus.service.type "ClusterIP" }}
+      nodePort: null
+      {{- end }}
+    {{- if .Values.nimbus.service.extraPorts }}
+    {{- toYaml .Values.nimbus.service.extraPorts | nindent 4 }}
+    {{- end }}
+  selector: {{- include "storm.selectorLabels" . | nindent 4 }}
+    app.kubernetes.io/component: nimbus
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "storm.nimbus.headless.serviceName" . }}
+  namespace: {{ .Release.Namespace | quote }}
+  labels: {{- include "storm.labels" . | nindent 4 }}
+    app.kubernetes.io/component: nimbus
+  {{- if or (and .Values.nimbus.service.headless .Values.nimbus.service.headless.annotations) .Values.commonAnnotations }}
+  annotations:
+    {{- if and .Values.nimbus.service.headless .Values.nimbus.service.headless.annotations }}
+    {{- toYaml .Values.nimbus.service.headless.annotations | nindent 4 }}
+    {{- end }}
+    {{- if .Values.commonAnnotations }}
+    {{- include "storm.commonAnnotations" . | nindent 4 }}
+    {{- end }}
+  {{- end }}
+spec:
+  type: ClusterIP
+  clusterIP: None
+  publishNotReadyAddresses: true
+  ports:
+    - name: thrift
+      port: {{ .Values.nimbus.service.ports.thrift }}
+      targetPort: thrift
+      protocol: TCP
+  selector: {{- include "storm.selectorLabels" . | nindent 4 }}
+    app.kubernetes.io/component: nimbus

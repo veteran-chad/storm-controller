@@ -1,0 +1,28 @@
+apiVersion: storm.apache.org/v1beta1
+kind: StormTopology
+metadata:
+  name: custom-topology
+  namespace: storm-system
+spec:
+  clusterRef: test-cluster
+  topology:
+    name: my-custom-topology
+    jar:
+      container:
+        # Example: Your custom image with topology JAR
+        image: myregistry/my-storm-topology:v1.0.0
+        path: /app/my-topology.jar
+        extractionMode: initContainer
+        # Optional: if your image requires authentication
+        imagePullSecrets:
+          - name: myregistry-secret
+    mainClass: "com.example.MyTopology"
+    args:
+      - "--config"
+      - "production"
+    config:
+      topology.version: "1.0.0"
+      topology.workers: "4"
+      topology.acker.executors: "2"
+      topology.max.spout.pending: "5000"
+      custom.config.param: "value123"

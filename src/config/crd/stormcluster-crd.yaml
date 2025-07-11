@@ -1,0 +1,142 @@
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  name: stormclusters.storm.apache.org
+spec:
+  group: storm.apache.org
+  names:
+    kind: StormCluster
+    listKind: StormClusterList
+    plural: stormclusters
+    singular: stormcluster
+    shortNames:
+    - sc
+  scope: Namespaced
+  versions:
+  - name: v1alpha1
+    served: true
+    storage: true
+    subresources:
+      status: {}
+    schema:
+      openAPIV3Schema:
+        description: StormCluster is the Schema for the stormclusters API
+        type: object
+        properties:
+          apiVersion:
+            description: 'APIVersion defines the versioned schema of this representation of an object.'
+            type: string
+          kind:
+            description: 'Kind is a string value representing the REST resource this object represents.'
+            type: string
+          metadata:
+            type: object
+          spec:
+            description: StormClusterSpec defines the desired state of StormCluster
+            type: object
+            properties:
+              nimbusService:
+                description: NimbusService is the service name of the Nimbus component
+                type: string
+              nimbusPort:
+                description: NimbusPort is the Thrift port of Nimbus
+                type: integer
+                format: int32
+                default: 6627
+              uiService:
+                description: UIService is the service name of the Storm UI
+                type: string
+              uiPort:
+                description: UIPort is the HTTP port of Storm UI
+                type: integer
+                format: int32
+                default: 8080
+              restApiEnabled:
+                description: RestAPIEnabled indicates if REST API is available
+                type: boolean
+                default: true
+              config:
+                description: Config contains additional Storm configuration
+                type: object
+                additionalProperties:
+                  type: string
+            required:
+            - nimbusService
+          status:
+            description: StormClusterStatus defines the observed state of StormCluster
+            type: object
+            properties:
+              state:
+                description: State represents the current state of the cluster
+                type: string
+                enum:
+                - Unknown
+                - Healthy
+                - Degraded
+                - Unavailable
+              nimbusLeader:
+                description: NimbusLeader is the current Nimbus leader
+                type: string
+              nimbusNodes:
+                description: NimbusNodes is the list of all Nimbus nodes
+                type: array
+                items:
+                  type: string
+              supervisorCount:
+                description: SupervisorCount is the number of active supervisors
+                type: integer
+                format: int32
+              totalSlots:
+                description: TotalSlots is the total number of worker slots
+                type: integer
+                format: int32
+              usedSlots:
+                description: UsedSlots is the number of used worker slots
+                type: integer
+                format: int32
+              freeSlots:
+                description: FreeSlots is the number of free worker slots
+                type: integer
+                format: int32
+              topologyCount:
+                description: TopologyCount is the number of running topologies
+                type: integer
+                format: int32
+              lastUpdateTime:
+                description: LastUpdateTime is the last time the cluster status was updated
+                type: string
+                format: date-time
+              conditions:
+                description: Conditions represent the latest available observations
+                type: array
+                items:
+                  type: object
+                  properties:
+                    type:
+                      type: string
+                    status:
+                      type: string
+                    reason:
+                      type: string
+                    message:
+                      type: string
+                    lastTransitionTime:
+                      type: string
+                      format: date-time
+    additionalPrinterColumns:
+    - name: State
+      type: string
+      jsonPath: .status.state
+    - name: Supervisors
+      type: integer
+      jsonPath: .status.supervisorCount
+    - name: Slots
+      type: string
+      jsonPath: .status.usedSlots
+      description: Used/Total slots
+    - name: Topologies
+      type: integer
+      jsonPath: .status.topologyCount
+    - name: Age
+      type: date
+      jsonPath: .metadata.creationTimestamp

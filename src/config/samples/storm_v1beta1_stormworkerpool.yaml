@@ -1,0 +1,152 @@
+apiVersion: storm.apache.org/v1beta1
+kind: StormWorkerPool
+metadata:
+  name: word-count-workers
+  namespace: storm-system
+spec:
+  # Reference to the topology this pool serves
+  topologyRef: word-count-topology
+  
+  # Number of worker replicas (when not using autoscaling)
+  replicas: 3
+  
+  # Custom image for workers (optional, inherits from cluster if not specified)
+  # image:
+  #   repository: myregistry/storm-worker
+  #   tag: "custom-2.6.0"
+  
+  # Worker configuration
+  workerConfig:
+    worker.heap.memory.mb: "768"
+    worker.childopts: "-Xmx768m -XX:+HeapDumpOnOutOfMemoryError"
+    
+  # JVM options for workers
+  jvmOpts:
+    - "-Xmx768m"
+    - "-XX:+UseG1GC"
+    - "-XX:MaxGCPauseMillis=100"
+    
+  # Port configuration
+  ports:
+    start: 6700
+    count: 4  # 4 worker slots per pod
+    
+  # Pod template customization
+  template:
+    metadata:
+      labels:
+        app: word-count
+        tier: worker
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "7979"
+    spec:
+      containers:
+        - name: worker
+          resources:
+            requests:
+              memory: "1Gi"
+              cpu: "1"
+            limits:
+              memory: "2Gi"
+              cpu: "2"
+          env:
+            - name: WORKER_ID
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+      nodeSelector:
+        workload-type: storm-worker
+      tolerations:
+        - key: storm-worker
+          operator: Equal
+          value: "true"
+          effect: NoSchedule
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              podAffinityTerm:
+                labelSelector:
+                  matchExpressions:
+                    - key: workerpool
+                      operator: In
+                      values:
+                        - word-count-workers
+                topologyKey: kubernetes.io/hostname
+  
+  # Autoscaling configuration
+  autoscaling:
+    enabled: true
+    minReplicas: 2
+    maxReplicas: 10
+    targetCPUUtilizationPercentage: 70
+    targetMemoryUtilizationPercentage: 80
+    customMetrics:
+      - name: storm_topology_pending_tuples
+        type: pods
+        targetAverageValue: "1000"  # Scale up when avg pending tuples > 1000
+---
+# Example: Worker pool with custom container and volumes
+apiVersion: storm.apache.org/v1beta1
+kind: StormWorkerPool
+metadata:
+  name: ml-topology-workers
+  namespace: storm-system
+spec:
+  topologyRef: ml-processing-topology
+  replicas: 5
+  
+  # Custom configuration for ML workload
+  workerConfig:
+    worker.heap.memory.mb: "4096"
+    topology.worker.max.heap.size.mb: "4096"
+    
+  template:
+    spec:
+      containers:
+        - name: worker
+          resources:
+            requests:
+              memory: "4Gi"
+              cpu: "2"
+              nvidia.com/gpu: "1"  # GPU support
+            limits:
+              memory: "8Gi"
+              cpu: "4"
+              nvidia.com/gpu: "1"
+          volumeMounts:
+            - name: ml-models
+              mountPath: /models
+              readOnly: true
+            - name: scratch
+              mountPath: /scratch
+      volumes:
+        - name: ml-models
+          persistentVolumeClaim:
+            claimName: ml-models-pvc
+        - name: scratch
+          emptyDir:
+            sizeLimit: 10Gi
+      nodeSelector:
+        node.kubernetes.io/gpu: "true"
+---
+# Example: Simple worker pool without autoscaling
+apiVersion: storm.apache.org/v1beta1
+kind: StormWorkerPool
+metadata:
+  name: basic-workers
+  namespace: default
+spec:
+  topologyRef: my-topology
+  replicas: 2
+  
+  # Minimal configuration
+  template:
+    spec:
+      containers:
+        - name: worker
+          resources:
+            requests:
+              memory: "512Mi"
+              cpu: "500m"

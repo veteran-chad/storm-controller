@@ -1,0 +1,34 @@
+CHART NAME: {{ .Chart.Name }}
+CHART VERSION: {{ .Chart.Version }}
+APP VERSION: {{ .Chart.AppVersion }}
+
+** Please be patient while the chart is being deployed **
+
+Storm configuration has been created successfully.
+
+ConfigMap Name: {{ include "common.names.fullname" . }}
+Namespace: {{ include "common.names.namespace" . }}
+
+To get more information about your release, try:
+
+  $ kubectl describe configmap {{ include "common.names.fullname" . }} -n {{ include "common.names.namespace" . }}
+
+{{- if .Values.supervisor.enabled }}
+{{- $memSettings := include "storm.supervisor.memorySettings" $ | fromYaml }}
+
+Storm Supervisor Configuration:
+  Replicas: {{ .Values.supervisor.replicaCount }}
+  Slots per Supervisor: {{ .Values.supervisor.slotsPerSupervisor }}
+  Memory Mode: {{ .Values.supervisor.memoryConfig.mode }}
+  
+  Memory Settings:
+    Container Memory: {{ $memSettings.containerMemory }}
+    Container CPU: {{ $memSettings.containerCpu }}
+    Supervisor Capacity: {{ $memSettings.supervisorCapacityMB }}MB
+    Worker Heap: {{ $memSettings.workerHeapMB }}MB
+    
+  Total Cluster Capacity:
+    Worker Slots: {{ mul .Values.supervisor.replicaCount .Values.supervisor.slotsPerSupervisor }}
+    Total Memory: {{ mul .Values.supervisor.replicaCount $memSettings.supervisorCapacityMB }}MB
+    Total CPU: {{ div (mul .Values.supervisor.replicaCount $memSettings.supervisorCpuCapacity) 100.0 }} cores
+{{- end }}

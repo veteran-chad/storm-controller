@@ -1,0 +1,25 @@
+{{- if and .Values.supervisor.enabled .Values.supervisor.pdb.create }}
+apiVersion: {{ include "common.capabilities.policy.apiVersion" . }}
+kind: PodDisruptionBudget
+metadata:
+  name: {{ include "common.names.fullname" . }}-supervisor
+  namespace: {{ include "common.names.namespace" . | quote }}
+  labels: {{- include "common.labels.standard" ( dict "customLabels" .Values.commonLabels "context" $ ) | nindent 4 }}
+    app.kubernetes.io/component: supervisor
+  {{- if .Values.commonAnnotations }}
+  annotations: {{- include "common.tplvalues.render" ( dict "value" .Values.commonAnnotations "context" $ ) | nindent 4 }}
+  {{- end }}
+spec:
+  {{- if .Values.supervisor.pdb.minAvailable }}
+  minAvailable: {{ .Values.supervisor.pdb.minAvailable }}
+  {{- end }}
+  {{- if .Values.supervisor.pdb.maxUnavailable }}
+  maxUnavailable: {{ .Values.supervisor.pdb.maxUnavailable }}
+  {{- end }}
+  selector:
+    matchLabels: {{- include "common.labels.matchLabels" ( dict "customLabels" .Values.commonLabels "context" $ ) | nindent 6 }}
+      app.kubernetes.io/component: supervisor
+  {{- if .Values.supervisor.pdb.unhealthyPodEvictionPolicy }}
+  unhealthyPodEvictionPolicy: {{ .Values.supervisor.pdb.unhealthyPodEvictionPolicy }}
+  {{- end }}
+{{- end }}
