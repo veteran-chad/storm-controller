@@ -7,109 +7,13 @@ on:
 
 env:
   REGISTRY: docker.io
-  IMAGE_NAME: veteranchad/storm-controller
-  GO_VERSION: '1.23'
 
 jobs:
-
-  build-container-images:
-    name: Build Multi-Platform Images
+  release-helm-chart:
+    name: Release Storm Kubernetes Helm Chart
     runs-on: ubuntu-latest
     permissions:
-      contents: read
-      packages: write
-    strategy:
-      matrix:
-        storm-version: ["2.8.1"]
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Set up QEMU
-        uses: docker/setup-qemu-action@v3
-
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-
-      - name: Log in to Docker Hub
-        uses: docker/login-action@v3
-        with:
-          registry: ${{ env.REGISTRY }}
-          username: ${{ secrets.DOCKERHUB_USERNAME }}
-          password: ${{ secrets.DOCKERHUB_TOKEN }}
-
-
-      - name: Determine version
-        id: version
-        run: |
-          VERSION=${GITHUB_REF#refs/tags/}
-          echo "version=$VERSION" >> $GITHUB_OUTPUT
-          echo "storm_tag=$VERSION-storm${{ matrix.storm-version }}" >> $GITHUB_OUTPUT
-
-      - name: Build and push controller image
-        uses: docker/build-push-action@v5
-        with:
-          context: src
-          platforms: linux/amd64,linux/arm64
-          push: true
-          build-args: |
-            STORM_VERSION=${{ matrix.storm-version }}
-          tags: |
-            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.version.outputs.storm_tag }}
-            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:storm${{ matrix.storm-version }}
-          # GitHub Actions cache disabled due to intermittent 502 errors
-          # See KNOWN_ISSUES.md for details
-          # cache-from: type=gha,scope=buildkit
-          # cache-to: type=gha,mode=max,scope=buildkit
-
-  build-default-image:
-    name: Build Default Image
-    runs-on: ubuntu-latest
-    needs: [build-container-images]
-    permissions:
-      contents: read
-      packages: write
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Set up QEMU
-        uses: docker/setup-qemu-action@v3
-
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-
-      - name: Log in to Docker Hub
-        uses: docker/login-action@v3
-        with:
-          registry: ${{ env.REGISTRY }}
-          username: ${{ secrets.DOCKERHUB_USERNAME }}
-          password: ${{ secrets.DOCKERHUB_TOKEN }}
-
-
-      - name: Determine version
-        id: version
-        run: |
-          VERSION=${GITHUB_REF#refs/tags/}
-          echo "version=$VERSION" >> $GITHUB_OUTPUT
-
-      - name: Build and push controller image (default)
-        uses: docker/build-push-action@v5
-        with:
-          context: src
-          platforms: linux/amd64,linux/arm64
-          push: true
-          tags: |
-            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.version.outputs.version }}
-            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
-          # GitHub Actions cache disabled due to intermittent 502 errors
-          # See KNOWN_ISSUES.md for details
-          # cache-from: type=gha,scope=buildkit
-          # cache-to: type=gha,mode=max,scope=buildkit
-
-  release-helm-charts:
-    name: Release Helm Charts
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
+      contents: write
       packages: write
     steps:
       - uses: actions/checkout@v4
@@ -123,33 +27,26 @@ jobs:
           helm repo add bitnami https://charts.bitnami.com/bitnami
           helm repo update
 
-      - name: Update chart versions
-        run: |
-          VERSION=${GITHUB_REF#refs/tags/v}
-          APP_VERSION=${GITHUB_REF#refs/tags/}
-          
-          for chart in storm-operator storm-crd-cluster storm-kubernetes storm-shared; do
-            sed -i "s/version: .*/version: ${VERSION}/" charts/$chart/Chart.yaml
-            sed -i "s/appVersion: .*/appVersion: ${APP_VERSION}/" charts/$chart/Chart.yaml
-          done
-
       - name: Log in to Docker Hub Registry for Helm
         run: |
           echo ${{ secrets.DOCKERHUB_TOKEN }} | helm registry login registry-1.docker.io --username ${{ secrets.DOCKERHUB_USERNAME }} --password-stdin
 
       - name: Build dependencies
         run: |
-          # Update dependencies to ensure Chart.lock is in sync after version changes
-          helm dependency update charts/storm-operator
           helm dependency update charts/storm-kubernetes
-          helm dependency update charts/storm-crd-cluster
 
-      - name: Package charts
+      - name: Update chart version
+        run: |
+          VERSION=${GITHUB_REF#refs/tags/v}
+          APP_VERSION=${GITHUB_REF#refs/tags/}
+          
+          sed -i "s/version: .*/version: ${VERSION}/" charts/storm-kubernetes/Chart.yaml
+          sed -i "s/appVersion: .*/appVersion: \"${APP_VERSION}\"/" charts/storm-kubernetes/Chart.yaml
+
+      - name: Package chart
         run: |
           mkdir -p .release
-          for chart in storm-operator storm-crd-cluster storm-kubernetes storm-shared; do
-            helm package charts/$chart --destination .release
-          done
+          helm package charts/storm-kubernetes --destination .release
 
       - name: Create chart index
         run: |
@@ -163,21 +60,16 @@ jobs:
             .release/*.tgz
             .release/index.yaml
 
-      - name: Log in to Docker Hub Registry
-        run: |
-          echo ${{ secrets.DOCKERHUB_TOKEN }} | helm registry login registry-1.docker.io --username ${{ secrets.DOCKERHUB_USERNAME }} --password-stdin
-
       - name: Push to OCI registry
         run: |
           for chart in .release/*.tgz; do
             helm push $chart oci://registry-1.docker.io/veteranchad
           done
 
-
   create-release:
     name: Create GitHub Release
     runs-on: ubuntu-latest
-    needs: [build-default-image, release-helm-charts]
+    needs: [release-helm-chart]
     permissions:
       contents: write
     steps:
@@ -197,49 +89,49 @@ jobs:
           PREV_TAG=$(git describe --tags --abbrev=0 HEAD^ 2>/dev/null || echo "")
           
           cat > release-notes.md << 'EOF'
-          ## Storm Controller ${VERSION}
+          ## Storm Kubernetes Helm Chart ${VERSION}
           
           ### Installation
           
-          #### Using Helm (Recommended)
+          #### Using Helm Repository
           
           ```bash
           # Add the Helm repository
-          helm repo add storm-controller https://github.com/${{ github.repository }}/releases/download/${VERSION}
+          helm repo add storm-kubernetes https://github.com/${{ github.repository }}/releases/download/${VERSION}
           helm repo update
           
-          # Install the Storm Operator
-          helm install storm-operator storm-controller/storm-operator \
-            --namespace storm-operator --create-namespace
-          
-          # Deploy a Storm cluster using CRDs
-          helm install my-cluster storm-controller/storm-crd-cluster \
-            --namespace storm-prod --create-namespace
+          # Install Storm on Kubernetes
+          helm install my-storm storm-kubernetes/storm-kubernetes \
+            --namespace storm-system --create-namespace
           ```
           
           #### Using OCI Registry
           
           ```bash
-          # Install Storm Operator
-          helm install storm-operator oci://registry-1.docker.io/veteranchad/storm-operator \
+          helm install my-storm oci://registry-1.docker.io/veteranchad/storm-kubernetes \
             --version ${VERSION#v} \
-            --namespace storm-operator --create-namespace
+            --namespace storm-system --create-namespace
           ```
           
-          ### Container Images
+          ### Production Deployment
           
-          Controller images with Storm 2.8.1:
-          - `docker.io/veteranchad/storm-controller:${VERSION}` (Storm 2.8.1)
-          - `docker.io/veteranchad/storm-controller:storm2.8.1`
+          ```bash
+          # Deploy with all production features enabled
+          helm install storm-prod oci://registry-1.docker.io/veteranchad/storm-kubernetes \
+            --version ${VERSION#v} \
+            --namespace storm-production --create-namespace \
+            --values https://raw.githubusercontent.com/${{ github.repository }}/${VERSION}/charts/storm-kubernetes/values-production.yaml
+          ```
           
-          ### Helm Charts
+          ### Features in this Release
           
-          | Chart | Version | Description |
-          |-------|---------|-------------|
-          | storm-operator | ${VERSION#v} | Storm Operator with optional Zookeeper |
-          | storm-crd-cluster | ${VERSION#v} | Deploy Storm cluster via CRD |
-          | storm-kubernetes | ${VERSION#v} | Traditional Helm deployment |
-          | storm-shared | ${VERSION#v} | Shared templates and helpers |
+          - **High Availability**: Multi-Nimbus setup with Zookeeper
+          - **Security**: RBAC, Pod Security Contexts, Network Policies
+          - **Monitoring**: Prometheus metrics, ServiceMonitor, Grafana dashboards
+          - **Autoscaling**: HPA support for supervisors
+          - **Ingress**: TLS support with cert-manager integration
+          - **Authentication**: Kerberos/SASL support
+          - **Memory Management**: Automatic JVM and worker memory calculation
           
           ### What's Changed
           
@@ -248,47 +140,50 @@ jobs:
           if [ -n "$PREV_TAG" ]; then
             echo "#### Commits since $PREV_TAG" >> release-notes.md
             echo "" >> release-notes.md
-            git log --pretty=format:"- %s (%an)" ${PREV_TAG}..HEAD >> release-notes.md
+            git log --pretty=format:"- %s (%an)" ${PREV_TAG}..HEAD -- charts/storm-kubernetes >> release-notes.md
           else
             echo "#### All Commits" >> release-notes.md
             echo "" >> release-notes.md
-            git log --pretty=format:"- %s (%an)" --max-count=20 >> release-notes.md
+            git log --pretty=format:"- %s (%an)" --max-count=20 -- charts/storm-kubernetes >> release-notes.md
           fi
           
           cat >> release-notes.md << 'EOF'
           
-          ### Upgrading
+          ### Configuration Examples
           
-          #### From v0.x to ${VERSION}
+          #### Enable Security Features
+          ```bash
+          helm install my-storm storm-kubernetes/storm-kubernetes \
+            --set serviceAccount.create=true \
+            --set rbac.create=true \
+            --set networkPolicy.enabled=true \
+            --set podSecurityContext.enabled=true
+          ```
           
-          1. Update CRDs:
-             ```bash
-             kubectl apply -f https://github.com/${{ github.repository }}/releases/download/${VERSION}/storm-crds.yaml
-             ```
+          #### Enable Monitoring
+          ```bash
+          helm install my-storm storm-kubernetes/storm-kubernetes \
+            --set metrics.enabled=true \
+            --set metrics.serviceMonitor.enabled=true \
+            --set metrics.prometheusRule.enabled=true
+          ```
           
-          2. Upgrade the operator:
-             ```bash
-             helm upgrade storm-operator storm-controller/storm-operator \
-               --namespace storm-operator \
-               --version ${VERSION#v}
-             ```
+          #### Enable Autoscaling
+          ```bash
+          helm install my-storm storm-kubernetes/storm-kubernetes \
+            --set supervisor.hpa.enabled=true \
+            --set supervisor.hpa.minReplicas=3 \
+            --set supervisor.hpa.maxReplicas=20
+          ```
           
           ### Documentation
           
-          - [Getting Started](https://github.com/${{ github.repository }}/blob/${VERSION}/README.md)
-          - [Helm Chart Documentation](https://github.com/${{ github.repository }}/tree/${VERSION}/charts)
-          - [Monitoring Guide](https://github.com/${{ github.repository }}/blob/${VERSION}/monitoring/README.md)
-          - [Examples](https://github.com/${{ github.repository }}/tree/${VERSION}/examples)
+          - [README](https://github.com/${{ github.repository }}/blob/${VERSION}/charts/storm-kubernetes/README.md)
+          - [Production Guide](https://github.com/${{ github.repository }}/blob/${VERSION}/charts/storm-kubernetes/PRODUCTION.md)
+          - [Values Documentation](https://github.com/${{ github.repository }}/blob/${VERSION}/charts/storm-kubernetes/values.yaml)
+          - [Examples](https://github.com/${{ github.repository }}/tree/${VERSION}/charts/storm-kubernetes/values-production*.yaml)
           
           EOF
-
-      - name: Create CRD manifest
-        working-directory: src
-        run: |
-          make manifests
-          cp config/crd/bases/*.yaml ../artifacts/
-          cd ../artifacts
-          cat storm.apache.org_*.yaml > storm-crds.yaml
 
       - name: Prepare release assets
         run: |
@@ -306,4 +201,3 @@ jobs:
           files: |
             artifacts/*.tgz
             artifacts/index.yaml
-            artifacts/storm-crds.yaml

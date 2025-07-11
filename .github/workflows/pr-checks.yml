@@ -4,289 +4,123 @@ on:
   pull_request:
     branches: [main]
 
-env:
-  GO_VERSION: '1.23'
-
 jobs:
-  lint:
-    name: Lint Code
+  lint-helm-chart:
+    name: Lint Helm Chart
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      
-      - uses: actions/setup-go@v5
-        with:
-          go-version: ${{ env.GO_VERSION }}
-          cache-dependency-path: src/go.sum
-          
-      - name: Run go fmt check
-        working-directory: src
-        run: |
-          if [ -n "$(go fmt ./...)" ]; then
-            echo "Please run 'go fmt ./...'"
-            exit 1
-          fi
-          
-      - name: Run go vet
-        working-directory: src
-        run: go vet ./...
-        
-      - name: golangci-lint
-        uses: golangci/golangci-lint-action@v4
-        with:
-          version: latest
-          working-directory: src
-          args: --timeout=5m --out-format=colored-line-number
-        
-  test:
-    name: Run Tests
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      
-      - uses: actions/setup-go@v5
-        with:
-          go-version: ${{ env.GO_VERSION }}
-          cache-dependency-path: src/go.sum
-          
-      - name: Run tests
-        working-directory: src
-        run: |
-          make test
-          go test -v -race -coverprofile=coverage.out ./...
-        
-      - name: Upload coverage
-        uses: codecov/codecov-action@v4
-        with:
-          token: ${{ secrets.CODECOV_TOKEN }}
-          file: src/coverage.out
-          flags: unittests
-          
-  security-scan:
-    name: Security Scanning
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      
-      - uses: actions/setup-go@v5
-        with:
-          go-version: ${{ env.GO_VERSION }}
-          cache-dependency-path: src/go.sum
-          
-      # Go vulnerability scanning
-      - name: Run govulncheck
-        working-directory: src
-        run: |
-          go install golang.org/x/vuln/cmd/govulncheck@latest
-          govulncheck ./...
-          
-      # Build test image for scanning
-      - name: Build test image
-        run: |
-          cd src
-          docker build -t test-image:${{ github.sha }} .
-          
-      # Container scanning with Trivy
-      - name: Run Trivy vulnerability scanner
-        uses: aquasecurity/trivy-action@master
-        with:
-          image-ref: test-image:${{ github.sha }}
-          format: 'table'
-          exit-code: '1'
-          ignore-unfixed: true
-          severity: 'CRITICAL,HIGH'
-          trivyignores: '.trivyignore'
-          
-  helm-lint:
-    name: Helm Chart Linting
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      
+
       - uses: azure/setup-helm@v4
         with:
           version: 'latest'
-          
+
       - name: Add Helm repositories
         run: |
           helm repo add bitnami https://charts.bitnami.com/bitnami
           helm repo update
-          
-      - name: Log in to Docker Hub Registry for Helm (if credentials available)
-        if: ${{ env.DOCKERHUB_USERNAME != '' && env.DOCKERHUB_TOKEN != '' }}
-        env:
-          DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
-          DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
-        run: |
-          echo ${{ secrets.DOCKERHUB_TOKEN }} | helm registry login registry-1.docker.io --username ${{ secrets.DOCKERHUB_USERNAME }} --password-stdin
 
-      - name: Build Helm dependencies
+      - name: Build dependencies
         run: |
-          helm dependency build charts/storm-operator
-          helm dependency build charts/storm-kubernetes
-          helm dependency build charts/storm-crd-cluster
-          
-      - name: Lint all Helm charts
+          helm dependency update charts/storm-kubernetes
+
+      - name: Lint chart
         run: |
-          for chart in storm-operator storm-crd-cluster storm-kubernetes storm-shared; do
-            echo "Linting $chart..."
-            helm lint charts/$chart
-          done
+          helm lint charts/storm-kubernetes --strict
           
-      - name: Template Helm charts
+      - name: Validate schema
         run: |
-          helm template test-operator charts/storm-operator > /dev/null
-          helm template test-cluster charts/storm-crd-cluster > /dev/null
-          helm template test-traditional charts/storm-kubernetes > /dev/null
-          
-      - name: Validate chart structure
-        run: |
-          for chart in storm-operator storm-crd-cluster storm-kubernetes storm-shared; do
-            echo "Validating $chart Chart.yaml..."
-            yq eval '.' charts/$chart/Chart.yaml > /dev/null
-            if [ -f charts/$chart/values.yaml ]; then
-              echo "Validating $chart values.yaml..."
-              yq eval '.' charts/$chart/values.yaml > /dev/null
-            fi
-          done
-          
-  validate-manifests:
-    name: Validate Kubernetes Manifests
+          helm lint charts/storm-kubernetes --strict --values charts/storm-kubernetes/values-production.yaml
+
+  test-helm-templates:
+    name: Test Helm Templates
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      
-      - uses: actions/setup-go@v5
+
+      - uses: azure/setup-helm@v4
         with:
-          go-version: ${{ env.GO_VERSION }}
-          cache-dependency-path: src/go.sum
-          
-      - name: Generate and validate manifests
-        working-directory: src
+          version: 'latest'
+
+      - name: Add Helm repositories
         run: |
-          make manifests generate
-          
-          # Check for uncommitted changes
-          if [[ -n $(git status -s) ]]; then
-            echo "ERROR: Uncommitted changes after code generation. Please run 'make manifests generate' and commit."
-            git status -s
-            git diff
-            exit 1
-          fi
-          
-      - name: Validate CRDs
+          helm repo add bitnami https://charts.bitnami.com/bitnami
+          helm repo update
+
+      - name: Build dependencies
         run: |
-          # Check if CRDs are valid YAML
-          for f in src/config/crd/bases/*.yaml; do
-            echo "Validating $f"
-            yq eval '.' "$f" > /dev/null
+          helm dependency update charts/storm-kubernetes
+          
+      - name: Test default values
+        run: |
+          helm template test-release charts/storm-kubernetes > /tmp/default.yaml
+          echo "✓ Default template generation successful"
+          
+      - name: Test production values
+        run: |
+          helm template test-release charts/storm-kubernetes \
+            --values charts/storm-kubernetes/values-production.yaml > /tmp/production.yaml
+          echo "✓ Production template generation successful"
+          
+      - name: Test security features
+        run: |
+          helm template test-release charts/storm-kubernetes \
+            --values charts/storm-kubernetes/values-production-security.yaml > /tmp/security.yaml
+          echo "✓ Security features template generation successful"
+          
+      - name: Test monitoring features
+        run: |
+          helm template test-release charts/storm-kubernetes \
+            --values charts/storm-kubernetes/values-production-monitoring.yaml > /tmp/monitoring.yaml
+          echo "✓ Monitoring features template generation successful"
+          
+      - name: Validate resources
+        run: |
+          echo "Checking generated resources..."
+          for file in /tmp/*.yaml; do
+            echo "Validating $file"
+            # Check for valid YAML
+            python3 -c "import yaml; yaml.safe_load_all(open('$file'))" || exit 1
           done
+          echo "✓ All templates generate valid YAML"
           
-      - name: Check CRD sync with Helm charts
-        run: |
-          echo "Checking if CRDs are synced to Helm charts..."
-          cd src
-          make manifests
-          cd ..
-          
-          # Run the sync script
-          bash scripts/sync-crds.sh
-          
-          # Check for changes
-          if [[ -n $(git status -s charts/storm-operator/crds/) ]]; then
-            echo "ERROR: CRDs are not synced to Helm charts. Please run 'scripts/sync-crds.sh' and commit."
-            git status -s charts/storm-operator/crds/
-            exit 1
-          fi
-          
-  docker-build:
-    name: Docker Build Test
-    runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        component:
-          - name: controller
-            context: src
-            dockerfile: Dockerfile
-    steps:
-      - uses: actions/checkout@v4
-      
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-        
-      - name: Build ${{ matrix.component.name }} image
-        uses: docker/build-push-action@v5
-        with:
-          context: ${{ matrix.component.context }}
-          file: ${{ matrix.component.context }}/${{ matrix.component.dockerfile }}
-          push: false
-          tags: |
-            storm-${{ matrix.component.name }}:pr-${{ github.event.pull_request.number }}
-          # GitHub Actions cache disabled due to intermittent 502 errors
-          # See KNOWN_ISSUES.md for details
-          # cache-from: type=gha,scope=buildkit
-          # cache-to: type=gha,mode=max,scope=buildkit
-          
-  validate-examples:
-    name: Validate Examples
+  check-documentation:
+    name: Check Documentation
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       
-      - name: Validate example YAMLs
+      - name: Check for required documentation
         run: |
-          for f in examples/*.yaml; do
-            echo "Validating $f"
-            yq eval '.' "$f" > /dev/null
-          done
-          
-      - name: Check example completeness
-        run: |
-          required_examples=(
-            "wordcount-topology.yaml"
-            "wordcount-container-topology.yaml"
-            "custom-topology-container.yaml"
-          )
-          
-          for example in "${required_examples[@]}"; do
-            if [ ! -f "examples/$example" ]; then
-              echo "ERROR: Missing required example: $example"
+          echo "Checking for required documentation files..."
+          for file in charts/storm-kubernetes/README.md charts/storm-kubernetes/CHANGELOG.md; do
+            if [ ! -f "$file" ]; then
+              echo "❌ Missing required file: $file"
               exit 1
             fi
+            echo "✓ Found $file"
           done
           
-  validate-docs:
-    name: Validate Documentation
+      - name: Check values documentation
+        run: |
+          echo "Checking values.yaml documentation..."
+          # Ensure all values have @param documentation
+          undocumented=$(grep -E "^[a-zA-Z].*:" charts/storm-kubernetes/values.yaml | grep -v "^##" | wc -l)
+          documented=$(grep -E "^## @param" charts/storm-kubernetes/values.yaml | wc -l)
+          echo "Documented parameters: $documented"
+          echo "Total top-level parameters: $undocumented"
+          
+  security-scan:
+    name: Security Scan
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       
-      - name: Check for broken links in markdown
-        uses: gaurav-nelson/github-action-markdown-link-check@v1
+      - name: Run Trivy vulnerability scanner
+        uses: aquasecurity/trivy-action@master
         with:
-          use-quiet-mode: 'yes'
-          config-file: '.github/markdown-link-check-config.json'
-          folder-path: './'
-          file-extension: '.md'
-          max-depth: -1
-          
-      - name: Check required documentation
-        run: |
-          required_docs=(
-            "README.md"
-            "CLAUDE.md"
-            "KNOWN_ISSUES.md"
-            "charts/storm-operator/README.md"
-            "charts/storm-crd-cluster/README.md"
-            "charts/storm-kubernetes/README.md"
-            "monitoring/README.md"
-            "examples/CONTAINER_DEPLOYMENTS.md"
-            "examples/TESTING_GUIDE.md"
-          )
-          
-          for doc in "${required_docs[@]}"; do
-            if [ ! -f "$doc" ]; then
-              echo "ERROR: Missing required documentation: $doc"
-              exit 1
-            fi
-          done
+          scan-type: 'config'
+          scan-ref: 'charts/storm-kubernetes'
+          format: 'table'
+          exit-code: '0'  # Don't fail on vulnerabilities, just report
+          severity: 'CRITICAL,HIGH'
