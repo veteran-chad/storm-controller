@@ -1081,6 +1081,11 @@ tests:
 
 ## @section Metrics parameters
 ## @param metrics.enabled Enable metrics
+## @param metrics.serviceName Service name for metrics
+## @param metrics.serviceVersion Service version for metrics
+## @param metrics.environment Deployment environment for metrics
+## @param metrics.prometheus.enabled Add prometheus.io annotations to metrics service
+## @param metrics.prometheus.path Path for Prometheus to scrape metrics
 ## @param metrics.serviceMonitor.enabled Create ServiceMonitor resource for scraping metrics using Prometheus Operator
 ## @param metrics.serviceMonitor.namespace Namespace for the ServiceMonitor resource (defaults to Release namespace)
 ## @param metrics.serviceMonitor.interval Interval at which metrics should be scraped
@@ -1094,6 +1099,20 @@ tests:
 ## @param metrics.serviceMonitor.annotations Additional annotations for the ServiceMonitor
 metrics:
   enabled: false
+  serviceName: "storm-metrics"
+  serviceVersion: "1.0.0"
+  environment: "production"
+  prometheus:
+    ## @param metrics.prometheus.scrape Enable Prometheus scraping annotations
+    scrape: true
+    ## @param metrics.prometheus.path Path for Prometheus to scrape metrics
+    path: "/metrics"
+  ## @param metrics.otel.enabled Enable OpenTelemetry environment variables
+  otel:
+    enabled: false
+  ## @param metrics.datadog.enabled Enable Datadog integration
+  datadog:
+    enabled: false
   ## @param metrics.exporter.image.registry Metrics exporter image registry
   ## @param metrics.exporter.image.repository Metrics exporter image repository
   ## @param metrics.exporter.image.tag Metrics exporter image tag
@@ -1105,11 +1124,17 @@ metrics:
   ## @param metrics.exporter.resourcesPreset Resources preset for metrics exporter
   ## @param metrics.exporter.podLabels Extra labels for metrics exporter pods
   ## @param metrics.exporter.podAnnotations Annotations for metrics exporter pods
+  ## @param metrics.exporter.logLevel Log level for metrics exporter (DEBUG, INFO, WARNING, ERROR)
+  ## @param metrics.exporter.windows Time windows to collect metrics for (in seconds)
+  ## @param metrics.exporter.enableDetailedMetrics Enable detailed topology metrics (increases load on Storm UI)
+  ## @param metrics.exporter.enableComponentMetrics Enable component-level metrics for bolts and spouts
+  ## @param metrics.exporter.nodeSelector Node labels for metrics exporter pods assignment
+  ## @param metrics.exporter.tolerations Tolerations for metrics exporter pods assignment
   exporter:
     image:
       registry: docker.io
-      repository: busybox
-      tag: latest
+      repository: python
+      tag: "3.9-alpine"
       digest: ""
       pullPolicy: IfNotPresent
     port: 9090
@@ -1118,6 +1143,12 @@ metrics:
     resourcesPreset: "nano"
     podLabels: {}
     podAnnotations: {}
+    logLevel: "INFO"
+    windows: ["600", "10800", "86400", ":all-time"]
+    enableDetailedMetrics: true
+    enableComponentMetrics: true
+    nodeSelector: {}
+    tolerations: []
   serviceMonitor:
     enabled: false
     namespace: ""

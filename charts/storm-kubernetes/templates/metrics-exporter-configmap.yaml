@@ -1,0 +1,485 @@
+{{- if .Values.metrics.enabled }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "common.names.fullname" . }}-metrics-exporter
+  namespace: {{ include "common.names.namespace" . | quote }}
+  labels: {{- include "common.labels.standard" ( dict "customLabels" .Values.commonLabels "context" $ ) | nindent 4 }}
+    app.kubernetes.io/component: metrics-exporter
+  {{- if .Values.commonAnnotations }}
+  annotations: {{- include "common.tplvalues.render" ( dict "value" .Values.commonAnnotations "context" $ ) | nindent 4 }}
+  {{- end }}
+data:
+  storm-metrics-collector.py: |
+    #!/usr/bin/env python3
+    """
+    Storm Metrics Collector for Prometheus
+    Collects metrics from Storm UI API and exposes them in Prometheus format
+    """
+    
+    import time
+    import json
+    import logging
+    import urllib.request
+    import urllib.error
+    from http.server import HTTPServer, BaseHTTPRequestHandler
+    from typing import List, Dict, Any, Optional
+    
+    logging.basicConfig(level=logging.{{ .Values.metrics.exporter.logLevel | upper }}, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+    logger = logging.getLogger(__name__)
+    
+    
+    class Metric:
+        """Represents a Prometheus metric"""
+        def __init__(self, name: str, value: float, labels: Dict[str, str] = None, help_text: str = "", metric_type: str = "gauge"):
+            self.name = name
+            self.value = value
+            self.labels = labels or {}
+            self.help_text = help_text
+            self.metric_type = metric_type
+        
+        def to_prometheus(self) -> str:
+            """Convert to Prometheus exposition format"""
+            label_str = ""
+            if self.labels:
+                label_parts = [f'{k}="{v}"' for k, v in self.labels.items()]
+                label_str = "{" + ",".join(label_parts) + "}"
+            return f"{self.name}{label_str} {self.value}"
+    
+    
+    class StormMetricsCollector:
+        """Collects metrics from Storm UI API"""
+        
+        def __init__(self, storm_ui_url: str = "http://localhost:8080", timeout: int = 10):
+            self.storm_ui_url = storm_ui_url.rstrip('/')
+            self.timeout = timeout
+            self.windows = {{ .Values.metrics.exporter.windows | toJson }}
+            
+        def _fetch_json(self, path: str) -> Optional[Dict[str, Any]]:
+            """Fetch JSON from Storm API endpoint"""
+            url = f"{self.storm_ui_url}{path}"
+            try:
+                logger.debug(f"Fetching {url}")
+                with urllib.request.urlopen(url, timeout=self.timeout) as response:
+                    return json.loads(response.read())
+            except urllib.error.URLError as e:
+                logger.error(f"Failed to fetch {url}: {e}")
+                return None
+            except json.JSONDecodeError as e:
+                logger.error(f"Failed to parse JSON from {url}: {e}")
+                return None
+        
+        def _safe_float(self, value: Any, default: float = 0.0) -> float:
+            """Safely convert value to float"""
+            if value is None:
+                return default
+            try:
+                return float(value)
+            except (ValueError, TypeError):
+                return default
+        
+        def _safe_get(self, data: Dict[str, Any], path: str, default: Any = None) -> Any:
+            """Safely get nested value from dict"""
+            keys = path.split('.')
+            value = data
+            for key in keys:
+                if isinstance(value, dict):
+                    value = value.get(key)
+                else:
+                    return default
+                if value is None:
+                    return default
+            return value
+        
+        def collect_cluster_metrics(self) -> List[Metric]:
+            """Collect cluster-level metrics"""
+            metrics = []
+            data = self._fetch_json("/api/v1/cluster/summary")
+            if not data:
+                return metrics
+            
+            # Basic cluster metrics
+            metrics.extend([
+                Metric("storm_cluster_executors_total", self._safe_float(data.get("executorsTotal")), 
+                       help_text="Total number of executors"),
+                Metric("storm_cluster_slots_total", self._safe_float(data.get("slotsTotal")), 
+                       help_text="Total number of worker slots"),
+                Metric("storm_cluster_slots_used", self._safe_float(data.get("slotsUsed")), 
+                       help_text="Number of used worker slots"),
+                Metric("storm_cluster_slots_free", self._safe_float(data.get("slotsFree")), 
+                       help_text="Number of free worker slots"),
+                Metric("storm_cluster_topologies_total", self._safe_float(data.get("topologies")), 
+                       help_text="Total number of topologies"),
+                Metric("storm_cluster_tasks_total", self._safe_float(data.get("tasksTotal")), 
+                       help_text="Total number of tasks"),
+                Metric("storm_cluster_supervisors_total", self._safe_float(data.get("supervisors")), 
+                       help_text="Total number of supervisors"),
+                Metric("storm_cluster_memory_total_mb", self._safe_float(data.get("totalMem")), 
+                       help_text="Total memory in MB"),
+                Metric("storm_cluster_memory_available_mb", self._safe_float(data.get("availMem")), 
+                       help_text="Available memory in MB"),
+                Metric("storm_cluster_memory_assigned_percent", self._safe_float(data.get("memAssignedPercentUtil", "0").rstrip('%')), 
+                       help_text="Percentage of memory assigned"),
+                Metric("storm_cluster_cpu_total", self._safe_float(data.get("totalCpu")), 
+                       help_text="Total CPU capacity"),
+                Metric("storm_cluster_cpu_available", self._safe_float(data.get("availCpu")), 
+                       help_text="Available CPU capacity"),
+                Metric("storm_cluster_cpu_assigned_percent", self._safe_float(data.get("cpuAssignedPercentUtil", "0").rstrip('%')), 
+                       help_text="Percentage of CPU assigned"),
+                Metric("storm_cluster_fragmented_memory_mb", self._safe_float(data.get("fragmentedMem")), 
+                       help_text="Fragmented memory in MB"),
+                Metric("storm_cluster_fragmented_cpu", self._safe_float(data.get("fragmentedCpu")), 
+                       help_text="Fragmented CPU"),
+            ])
+            
+            # Storm version metric
+            version = data.get("stormVersion", "unknown")
+            metrics.append(Metric("storm_version_info", 1, {"version": version}, 
+                                help_text="Storm cluster version"))
+            
+            return metrics
+        
+        def collect_nimbus_metrics(self) -> List[Metric]:
+            """Collect Nimbus metrics"""
+            metrics = []
+            data = self._fetch_json("/api/v1/nimbus/summary")
+            if not data:
+                return metrics
+            
+            nimbuses = data.get("nimbuses", [])
+            
+            # Count by status
+            status_counts = {"Leader": 0, "Follower": 0, "Offline": 0, "Dead": 0}
+            
+            for nimbus in nimbuses:
+                host = nimbus.get("host", "unknown")
+                status = nimbus.get("status", "Unknown")
+                uptime = nimbus.get("uptimeSeconds", 0)
+                
+                # Individual nimbus metrics
+                metrics.append(Metric("storm_nimbus_uptime_seconds", self._safe_float(uptime), 
+                                    {"host": host}, help_text="Nimbus uptime in seconds"))
+                
+                # Status metric
+                is_leader = 1 if status == "Leader" else 0
+                metrics.append(Metric("storm_nimbus_leader", is_leader, {"host": host}, 
+                                    help_text="Whether this Nimbus is the leader"))
+                
+                # Status label metric
+                metrics.append(Metric("storm_nimbus_status", 1, {"host": host, "status": status}, 
+                                    help_text="Nimbus status"))
+                
+                # Count by status
+                if status in status_counts:
+                    status_counts[status] += 1
+            
+            # Summary metrics
+            metrics.extend([
+                Metric("storm_nimbus_num_leaders", status_counts["Leader"], 
+                       help_text="Number of leader Nimbus instances"),
+                Metric("storm_nimbus_num_followers", status_counts["Follower"], 
+                       help_text="Number of follower Nimbus instances"),
+                Metric("storm_nimbus_num_offline", status_counts["Offline"], 
+                       help_text="Number of offline Nimbus instances"),
+                Metric("storm_nimbus_num_dead", status_counts["Dead"], 
+                       help_text="Number of dead Nimbus instances"),
+            ])
+            
+            return metrics
+        
+        def collect_supervisor_metrics(self) -> List[Metric]:
+            """Collect Supervisor metrics"""
+            metrics = []
+            data = self._fetch_json("/api/v1/supervisor/summary")
+            if not data:
+                return metrics
+            
+            supervisors = data.get("supervisors", [])
+            
+            for supervisor in supervisors:
+                host = supervisor.get("id", supervisor.get("host", "unknown"))
+                labels = {"host": host}
+                
+                metrics.extend([
+                    Metric("storm_supervisor_slots_total", self._safe_float(supervisor.get("slotsTotal")), 
+                           labels, help_text="Total supervisor slots"),
+                    Metric("storm_supervisor_slots_used", self._safe_float(supervisor.get("slotsUsed")), 
+                           labels, help_text="Used supervisor slots"),
+                    Metric("storm_supervisor_memory_total_mb", self._safe_float(supervisor.get("totalMem")), 
+                           labels, help_text="Total supervisor memory in MB"),
+                    Metric("storm_supervisor_memory_used_mb", self._safe_float(supervisor.get("usedMem")), 
+                           labels, help_text="Used supervisor memory in MB"),
+                    Metric("storm_supervisor_cpu_total", self._safe_float(supervisor.get("totalCpu")), 
+                           labels, help_text="Total supervisor CPU"),
+                    Metric("storm_supervisor_cpu_used", self._safe_float(supervisor.get("usedCpu")), 
+                           labels, help_text="Used supervisor CPU"),
+                    Metric("storm_supervisor_num_workers", self._safe_float(supervisor.get("numWorkers")), 
+                           labels, help_text="Number of workers"),
+                    Metric("storm_supervisor_uptime_seconds", self._safe_float(supervisor.get("uptimeSeconds")), 
+                           labels, help_text="Supervisor uptime in seconds"),
+                ])
+            
+            return metrics
+        
+        def collect_topology_metrics(self) -> List[Metric]:
+            """Collect topology metrics"""
+            metrics = []
+            summary_data = self._fetch_json("/api/v1/topology/summary")
+            if not summary_data:
+                return metrics
+            
+            topologies = summary_data.get("topologies", [])
+            
+            for topology in topologies:
+                topology_id = topology.get("id")
+                topology_name = topology.get("name", topology_id)
+                status = topology.get("status", "UNKNOWN")
+                
+                # Summary metrics
+                labels = {"topology": topology_name, "status": status}
+                metrics.extend([
+                    Metric("storm_topology_num_tasks", self._safe_float(topology.get("tasksTotal")), 
+                           labels, help_text="Number of tasks"),
+                    Metric("storm_topology_num_workers", self._safe_float(topology.get("workersTotal")), 
+                           labels, help_text="Number of workers"),
+                    Metric("storm_topology_num_executors", self._safe_float(topology.get("executorsTotal")), 
+                           labels, help_text="Number of executors"),
+                    Metric("storm_topology_uptime_seconds", self._safe_float(topology.get("uptimeSeconds")), 
+                           labels, help_text="Topology uptime in seconds"),
+                    Metric("storm_topology_assigned_memory_mb", self._safe_float(topology.get("assignedMemOnHeap")), 
+                           {"topology": topology_name}, help_text="Assigned memory in MB"),
+                    Metric("storm_topology_assigned_cpu", self._safe_float(topology.get("assignedCpu")), 
+                           {"topology": topology_name}, help_text="Assigned CPU"),
+                ])
+                
+                {{- if .Values.metrics.exporter.enableDetailedMetrics }}
+                # Get detailed topology metrics
+                detail_data = self._fetch_json(f"/api/v1/topology/{topology_id}")
+                if detail_data:
+                    # Topology version (from configuration or topology info)
+                    version = detail_data.get("configuration", {}).get("topology.version", "unknown")
+                    metrics.append(Metric("storm_topology_version_info", 1, 
+                                        {"topology": topology_name, "version": version}, 
+                                        help_text="Topology version"))
+                    
+                    # Topology stats by window
+                    topology_stats = detail_data.get("topologyStats", [])
+                    for stat in topology_stats:
+                        window = stat.get("window", "")
+                        window_clean = window.replace(" ", "").replace(":", "")
+                        labels = {"topology": topology_name, "window": window_clean}
+                        
+                        metrics.extend([
+                            Metric("storm_topology_acked", self._safe_float(stat.get("acked")), 
+                                   labels, help_text="Number of acked tuples"),
+                            Metric("storm_topology_emitted", self._safe_float(stat.get("emitted")), 
+                                   labels, help_text="Number of emitted tuples"),
+                            Metric("storm_topology_transferred", self._safe_float(stat.get("transferred")), 
+                                   labels, help_text="Number of transferred tuples"),
+                            Metric("storm_topology_failed", self._safe_float(stat.get("failed")), 
+                                   labels, help_text="Number of failed tuples"),
+                            Metric("storm_topology_complete_latency_ms", self._safe_float(stat.get("completeLatency", "0").rstrip('ms')), 
+                                   labels, help_text="Complete latency in milliseconds"),
+                        ])
+                    
+                    {{- if .Values.metrics.exporter.enableComponentMetrics }}
+                    # Component metrics (spouts and bolts)
+                    metrics.extend(self._collect_component_metrics(detail_data, topology_name))
+                    {{- end }}
+                {{- end }}
+            
+            return metrics
+        
+        {{- if .Values.metrics.exporter.enableComponentMetrics }}
+        def _collect_component_metrics(self, topology_data: Dict[str, Any], topology_name: str) -> List[Metric]:
+            """Collect component-level metrics for a topology"""
+            metrics = []
+            
+            # Spout metrics
+            spouts = topology_data.get("spouts", [])
+            for spout in spouts:
+                component_id = spout.get("id", spout.get("spoutId", "unknown"))
+                
+                # Basic metrics
+                labels = {"topology": topology_name, "component": component_id}
+                metrics.extend([
+                    Metric("storm_spout_executors", self._safe_float(spout.get("executors")), 
+                           labels, help_text="Number of spout executors"),
+                    Metric("storm_spout_tasks", self._safe_float(spout.get("tasks")), 
+                           labels, help_text="Number of spout tasks"),
+                ])
+                
+                # Stats by window
+                spout_stats = spout.get("spoutStats", [])
+                for stat in spout_stats:
+                    window = stat.get("window", "")
+                    window_clean = window.replace(" ", "").replace(":", "")
+                    stat_labels = {**labels, "window": window_clean, "stream": "default"}
+                    
+                    metrics.extend([
+                        Metric("storm_spout_emitted", self._safe_float(stat.get("emitted")), 
+                               stat_labels, help_text="Spout emitted tuples"),
+                        Metric("storm_spout_transferred", self._safe_float(stat.get("transferred")), 
+                               stat_labels, help_text="Spout transferred tuples"),
+                        Metric("storm_spout_acked", self._safe_float(stat.get("acked")), 
+                               stat_labels, help_text="Spout acked tuples"),
+                        Metric("storm_spout_failed", self._safe_float(stat.get("failed")), 
+                               stat_labels, help_text="Spout failed tuples"),
+                        Metric("storm_spout_complete_latency_ms", self._safe_float(stat.get("completeLatency", "0").rstrip('ms')), 
+                               stat_labels, help_text="Spout complete latency in milliseconds"),
+                    ])
+            
+            # Bolt metrics
+            bolts = topology_data.get("bolts", [])
+            for bolt in bolts:
+                component_id = bolt.get("id", bolt.get("boltId", "unknown"))
+                
+                # Basic metrics
+                labels = {"topology": topology_name, "component": component_id}
+                metrics.extend([
+                    Metric("storm_bolt_executors", self._safe_float(bolt.get("executors")), 
+                           labels, help_text="Number of bolt executors"),
+                    Metric("storm_bolt_tasks", self._safe_float(bolt.get("tasks")), 
+                           labels, help_text="Number of bolt tasks"),
+                ])
+                
+                # Stats by window
+                bolt_stats = bolt.get("boltStats", [])
+                for stat in bolt_stats:
+                    window = stat.get("window", "")
+                    window_clean = window.replace(" ", "").replace(":", "")
+                    stat_labels = {**labels, "window": window_clean, "stream": "default"}
+                    
+                    metrics.extend([
+                        Metric("storm_bolt_emitted", self._safe_float(stat.get("emitted")), 
+                               stat_labels, help_text="Bolt emitted tuples"),
+                        Metric("storm_bolt_transferred", self._safe_float(stat.get("transferred")), 
+                               stat_labels, help_text="Bolt transferred tuples"),
+                        Metric("storm_bolt_executed", self._safe_float(stat.get("executed")), 
+                               stat_labels, help_text="Bolt executed tuples"),
+                        Metric("storm_bolt_acked", self._safe_float(stat.get("acked")), 
+                               stat_labels, help_text="Bolt acked tuples"),
+                        Metric("storm_bolt_failed", self._safe_float(stat.get("failed")), 
+                               stat_labels, help_text="Bolt failed tuples"),
+                        Metric("storm_bolt_process_latency_ms", self._safe_float(stat.get("processLatency", "0").rstrip('ms')), 
+                               stat_labels, help_text="Bolt process latency in milliseconds"),
+                        Metric("storm_bolt_execute_latency_ms", self._safe_float(stat.get("executeLatency", "0").rstrip('ms')), 
+                               stat_labels, help_text="Bolt execute latency in milliseconds"),
+                        Metric("storm_bolt_capacity", self._safe_float(stat.get("capacity")), 
+                               stat_labels, help_text="Bolt capacity (0-1)"),
+                    ])
+            
+            return metrics
+        {{- end }}
+        
+        def collect_all_metrics(self) -> List[Metric]:
+            """Collect all Storm metrics"""
+            start_time = time.time()
+            all_metrics = []
+            
+            # Collect metrics from all sources
+            all_metrics.extend(self.collect_cluster_metrics())
+            all_metrics.extend(self.collect_nimbus_metrics())
+            all_metrics.extend(self.collect_supervisor_metrics())
+            all_metrics.extend(self.collect_topology_metrics())
+            
+            # Add collection duration metric
+            duration = time.time() - start_time
+            all_metrics.append(Metric("storm_metrics_collection_duration_seconds", duration, 
+                                    help_text="Time taken to collect all metrics"))
+            
+            # Add collector health metric
+            all_metrics.append(Metric("storm_metrics_collector_up", 1, 
+                                    help_text="Storm metrics collector is running"))
+            
+            return all_metrics
+    
+    
+    class MetricsHandler(BaseHTTPRequestHandler):
+        """HTTP handler for Prometheus metrics endpoint"""
+        
+        def __init__(self, *args, collector: StormMetricsCollector = None, **kwargs):
+            self.collector = collector
+            super().__init__(*args, **kwargs)
+        
+        def do_GET(self):
+            """Handle GET requests"""
+            if self.path == '/metrics':
+                try:
+                    # Collect metrics
+                    metrics = self.collector.collect_all_metrics()
+                    
+                    # Group metrics by name for proper Prometheus format
+                    metrics_by_name = {}
+                    for metric in metrics:
+                        if metric.name not in metrics_by_name:
+                            metrics_by_name[metric.name] = {
+                                'help_text': metric.help_text,
+                                'metric_type': metric.metric_type,
+                                'samples': []
+                            }
+                        metrics_by_name[metric.name]['samples'].append(metric)
+                    
+                    # Convert to Prometheus format
+                    lines = []
+                    for metric_name, metric_data in sorted(metrics_by_name.items()):
+                        # Add HELP and TYPE lines once per metric name
+                        if metric_data['help_text']:
+                            lines.append(f"# HELP {metric_name} {metric_data['help_text']}")
+                        lines.append(f"# TYPE {metric_name} {metric_data['metric_type']}")
+                        
+                        # Add all samples for this metric
+                        for sample in metric_data['samples']:
+                            lines.append(sample.to_prometheus())
+                    
+                    # Send response
+                    content = '\n'.join(lines) + '\n'
+                    self.send_response(200)
+                    self.send_header('Content-Type', 'text/plain; version=0.0.4; charset=utf-8')
+                    self.end_headers()
+                    self.wfile.write(content.encode())
+                    
+                except Exception as e:
+                    logger.error(f"Error generating metrics: {e}")
+                    self.send_error(500, str(e))
+            else:
+                self.send_error(404)
+        
+        def log_message(self, format, *args):
+            """Suppress access logs"""
+            pass
+    
+    
+    def main():
+        """Main entry point"""
+        import os
+        
+        # Configuration from environment
+        storm_ui_url = os.environ.get('STORM_UI_URL', 'http://{{ include "common.names.fullname" . }}-ui:{{ .Values.ui.ports.http }}')
+        metrics_port = int(os.environ.get('METRICS_PORT', '{{ .Values.metrics.exporter.port }}'))
+        log_level = os.environ.get('LOG_LEVEL', '{{ .Values.metrics.exporter.logLevel }}')
+        
+        # Set logging level
+        logging.getLogger().setLevel(getattr(logging, log_level.upper()))
+        
+        # Create collector
+        collector = StormMetricsCollector(storm_ui_url)
+        
+        # Create HTTP server
+        handler_class = lambda *args, **kwargs: MetricsHandler(*args, collector=collector, **kwargs)
+        server = HTTPServer(('0.0.0.0', metrics_port), handler_class)
+        
+        logger.info(f"Starting Storm metrics exporter on port {metrics_port}")
+        logger.info(f"Collecting metrics from Storm UI at {storm_ui_url}")
+        logger.info("Metrics available at /metrics")
+        
+        try:
+            server.serve_forever()
+        except KeyboardInterrupt:
+            logger.info("Shutting down metrics exporter")
+            server.shutdown()
+    
+    
+    if __name__ == '__main__':
+        main()
+{{- end }}
