@@ -99,11 +99,9 @@ spec:
           command: {{- include "common.tplvalues.render" (dict "value" .Values.ui.command "context" $) | nindent 12 }}
           {{- else }}
           command:
-            - /bin/bash
-            - -c
-            - |
-              mkdir -p {{ .Values.ui.logDir }}
-              storm ui
+            - /opt/storm/scripts/docker-entrypoint.sh
+            - storm
+            - ui
           {{- end }}
           {{- if .Values.ui.args }}
           args: {{- include "common.tplvalues.render" (dict "value" .Values.ui.args "context" $) | nindent 12 }}
@@ -111,10 +109,14 @@ spec:
           {{- if .Values.containerSecurityContext.enabled }}
           securityContext: {{- omit .Values.containerSecurityContext "enabled" | toYaml | nindent 12 }}
           {{- end }}
-          {{- if .Values.ui.extraEnvVars }}
           env:
+            {{- if .Values.ui.extraEnvVars }}
             {{- include "common.tplvalues.render" (dict "value" .Values.ui.extraEnvVars "context" $) | nindent 12 }}
-          {{- end }}
+            {{- end }}
+            {{- if .Values.metrics.jmx.enabled }}
+            - name: JAVA_TOOL_OPTIONS
+              value: "-Dcom.sun.management.jmxremote -Dcom.sun.management.jmxremote.authenticate=false -Dcom.sun.management.jmxremote.ssl=false -Dcom.sun.management.jmxremote.local.only=false -Dcom.sun.management.jmxremote.port={{ .Values.metrics.jmx.ports.ui }} -Dcom.sun.management.jmxremote.rmi.port={{ .Values.metrics.jmx.ports.ui }}"
+            {{- end }}
           envFrom:
             - configMapRef:
                 name: {{ include "common.names.fullname" . }}-env
@@ -135,6 +137,11 @@ spec:
             - name: http
               containerPort: {{ .Values.ui.ports.http }}
               protocol: TCP
+            {{- if .Values.metrics.jmx.enabled }}
+            - name: jmx
+              containerPort: {{ .Values.metrics.jmx.ports.ui }}
+              protocol: TCP
+            {{- end }}
           {{- if .Values.ui.customLivenessProbe }}
           livenessProbe: {{- include "common.tplvalues.render" (dict "value" .Values.ui.customLivenessProbe "context" $) | nindent 12 }}
           {{- else if .Values.ui.livenessProbe.enabled }}
@@ -187,6 +194,37 @@ spec:
             {{- if .Values.ui.extraVolumeMounts }}
             {{- include "common.tplvalues.render" (dict "value" .Values.ui.extraVolumeMounts "context" $) | nindent 12 }}
             {{- end }}
+        {{- if .Values.metrics.jmx.enabled }}
+        - name: jmx-exporter
+          image: {{ include "common.images.image" (dict "imageRoot" .Values.metrics.jmx.image "global" .Values.global) }}
+          imagePullPolicy: {{ .Values.metrics.jmx.image.pullPolicy }}
+          {{- if .Values.containerSecurityContext.enabled }}
+          securityContext: {{- omit .Values.containerSecurityContext "enabled" | toYaml | nindent 12 }}
+          {{- end }}
+          command:
+            - java
+            - -jar
+            - /opt/bitnami/jmx-exporter/jmx_prometheus_httpserver.jar
+            - "{{ .Values.metrics.jmx.port }}"
+            - /etc/jmx-exporter/config.yaml
+          ports:
+            - name: metrics
+              containerPort: {{ .Values.metrics.jmx.port }}
+              protocol: TCP
+          {{- if .Values.metrics.jmx.resources }}
+          resources: {{- toYaml .Values.metrics.jmx.resources | nindent 12 }}
+          {{- else if ne .Values.metrics.jmx.resourcesPreset "none" }}
+          resources: {{- include "common.resources.preset" (dict "type" .Values.metrics.jmx.resourcesPreset) | nindent 12 }}
+          {{- end }}
+          volumeMounts:
+            - name: jmx-config
+              mountPath: /etc/jmx-exporter
+          env:
+            - name: JMX_EXPORTER_HOST
+              value: "127.0.0.1"
+            - name: JMX_EXPORTER_PORT
+              value: "{{ .Values.metrics.jmx.ports.ui }}"
+        {{- end }}
         {{- if .Values.ui.sidecars }}
         {{- include "common.tplvalues.render" ( dict "value" .Values.ui.sidecars "context" $) | nindent 8 }}
         {{- end }}
@@ -198,6 +236,11 @@ spec:
         {{- end }}
         - name: logs
           emptyDir: {}
+        {{- if .Values.metrics.jmx.enabled }}
+        - name: jmx-config
+          configMap:
+            name: {{ include "common.names.fullname" . }}-jmx-config-ui
+        {{- end }}
         {{- if .Values.ui.extraVolumes }}
         {{- include "common.tplvalues.render" (dict "value" .Values.ui.extraVolumes "context" $) | nindent 8 }}
         {{- end }}

@@ -47,11 +47,25 @@ def env_to_storm_config(env_prefix="STORM_"):
         # Remove prefix and convert to lowercase
         config_key = key[len(env_prefix):].lower()
         
+        # Skip Kubernetes service discovery variables
+        if config_key.startswith('test_'):
+            continue
+            
         # Replace double underscores with dots
         config_key = config_key.replace('__', '.')
         
-        # Parse the value
-        parsed_value = parse_value(value)
+        # Parse the value - special handling for known array fields
+        if config_key in ['storm.zookeeper.servers', 'nimbus.seeds', 'supervisor.slots.ports']:
+            # Always treat these as arrays, even if single value
+            if ',' in value:
+                parsed_value = [item.strip() for item in value.split(',') if item.strip()]
+            else:
+                parsed_value = [value] if value else []
+            # For supervisor.slots.ports, convert to integers
+            if config_key == 'supervisor.slots.ports':
+                parsed_value = [int(port) for port in parsed_value]
+        else:
+            parsed_value = parse_value(value)
         
         # Store as a flat key-value pair
         configs.append((config_key, parsed_value))
@@ -98,29 +112,14 @@ def parse_single_value(value):
     return value
 
 def get_nested_value(config, key_path):
-    """Get a value from nested dictionary using dot notation."""
-    keys = key_path.split('.')
-    current = config
-    
-    for k in keys:
-        if isinstance(current, dict) and k in current:
-            current = current[k]
-        else:
-            return None
-    
-    return current
+    """Get a value using flat dot notation (not nested)."""
+    # Storm uses flat keys with dots, not nested structure
+    return config.get(key_path, None)
 
 def set_nested_value(config, key, value):
-    """Set a value in nested dictionary using dot notation."""
-    keys = key.split('.')
-    current = config
-    
-    for k in keys[:-1]:
-        if k not in current:
-            current[k] = {}
-        current = current[k]
-    
-    current[keys[-1]] = value
+    """Set a value using flat dot notation (not nested)."""
+    # Storm expects flat keys with dots, not nested structure
+    config[key] = value
 
 
 def main():

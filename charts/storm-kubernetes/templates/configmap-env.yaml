@@ -14,6 +14,16 @@ data:
   STORM_DATA_DIR: {{ .Values.supervisor.dataDir | default "/data" | quote }}
   # LOG_FORMAT is now set per-component via extraEnvVars
   
+  # Zookeeper configuration
+  {{- if not .Values.zookeeper.enabled }}
+  STORM_STORM__ZOOKEEPER__SERVERS: {{ .Values.zookeeper.external.servers | join "," | quote }}
+  {{- else }}
+  STORM_STORM__ZOOKEEPER__SERVERS: "{{ include "storm.zookeeperHeadlessService" . }}"
+  {{- end }}
+  
+  # Nimbus seeds configuration
+  STORM_NIMBUS__SEEDS: {{ include "storm.nimbusSeed" . | quote }}
+  
   # Cluster-wide Storm configuration as environment variables
   {{- if .Values.cluster.extraConfig }}
   {{- range $key, $value := .Values.cluster.extraConfig }}
@@ -81,6 +91,15 @@ data:
   {{- end -}}
   {{- $totalCpu := mulf $cpuCores (float64 $slots) -}}
   STORM_SUPERVISOR__MEMORY__CAPACITY__MB: {{ $totalWorkerMemoryMB | quote }}
-  STORM_SUPERVISOR__CPU__CAPACITY: {{ mul $totalCpu 100 | quote }}
+  STORM_SUPERVISOR__CPU__CAPACITY: {{ mulf $totalCpu 100 | printf "%.0f" | quote }}
   STORM_WORKER__HEAP__MEMORY__MB: {{ $heapMemoryMB | quote }}
+  {{- end }}
+  
+  # JMX configuration for metrics collection
+  {{- if .Values.metrics.jmx.enabled }}
+  # Worker JMX ports configuration
+  {{- if .Values.supervisor.slotsPerSupervisor }}
+  {{- $workerOffset := .Values.metrics.jmx.ports.workerOffset }}
+  STORM_WORKER__CHILDOPTS: "-Dcom.sun.management.jmxremote -Dcom.sun.management.jmxremote.authenticate=false -Dcom.sun.management.jmxremote.ssl=false -Dcom.sun.management.jmxremote.local.only=false -Dcom.sun.management.jmxremote.rmi.port=%ID%-{{ $workerOffset }} -Dcom.sun.management.jmxremote.port=%ID%-{{ $workerOffset }}"
+  {{- end }}
   {{- end }}

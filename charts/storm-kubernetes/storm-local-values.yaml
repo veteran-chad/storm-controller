@@ -1,6 +1,10 @@
 # Storm local development values
 # Optimized for local development with minimal resources
 
+# Global image override for local development
+global:
+  imageRegistry: ""
+
 # Storm cluster configuration
 cluster:
   enabled: true
@@ -14,6 +18,11 @@ cluster:
 ui:
   enabled: true
   replicaCount: 1
+  # Override image for local development
+  image:
+    repository: storm-controller
+    tag: local
+    pullPolicy: Never
   # Use text logging for local development (easier to read)
   extraEnvVars:
     - name: LOG_FORMAT
@@ -26,6 +35,11 @@ ui:
 nimbus:
   enabled: true
   replicaCount: 1
+  # Override image for local development
+  image:
+    repository: storm-controller
+    tag: local
+    pullPolicy: Never
   # Use text logging for local development
   extraEnvVars:
     - name: LOG_FORMAT
@@ -40,7 +54,12 @@ nimbus:
 supervisor:
   enabled: true
   replicaCount: 1
-  slotsPerSupervisor: 1
+  # Override image for local development
+  image:
+    repository: storm-controller
+    tag: local
+    pullPolicy: Never
+  slotsPerSupervisor: 4
   
   # Memory configuration - using auto mode for simplicity
   memoryConfig:

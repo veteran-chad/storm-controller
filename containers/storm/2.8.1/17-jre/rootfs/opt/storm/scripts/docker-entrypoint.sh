@@ -9,22 +9,21 @@ if [ "$1" = 'storm' -a "$(id -u)" = '0' ]; then
     exec gosu storm "$0" "$@"
 fi
 
-# Generate the config only if it doesn't exist
+# Don't create a default config - let the Python script generate it completely
+# This avoids type conflicts when environment variables override arrays
 CONFIG="$STORM_CONF_DIR/storm.yaml"
-if [ ! -f "$CONFIG" ]; then
-    cat << EOF > "$CONFIG"
-storm.zookeeper.servers: [zookeeper]
-nimbus.seeds: [nimbus]
-storm.log.dir: "$STORM_LOG_DIR"
-storm.local.dir: "$STORM_DATA_DIR"
-EOF
-fi
 
 # Apply configuration from environment variables
 echo "[$(date -u '+%Y-%m-%d %H:%M:%S UTC')] Applying Storm configuration from environment variables..."
 if ! storm-config-from-env.py; then
     echo "[$(date -u '+%Y-%m-%d %H:%M:%S UTC')] ERROR: Failed to apply Storm configuration from environment variables" >&2
     exit 1
+fi
+
+# Create symlink to Storm's expected config location
+if [ -f "$CONFIG" ]; then
+    echo "[$(date -u '+%Y-%m-%d %H:%M:%S UTC')] Creating symlink from $CONFIG to /apache-storm/conf/storm.yaml"
+    ln -sf "$CONFIG" /apache-storm/conf/storm.yaml
 fi
 
 # Apply logging configuration

@@ -99,11 +99,11 @@ spec:
           command: {{- include "common.tplvalues.render" (dict "value" .Values.supervisor.command "context" $) | nindent 12 }}
           {{- else }}
           command:
-            - /bin/bash
+            - /opt/storm/scripts/docker-entrypoint.sh
+            - storm
+            - supervisor
             - -c
-            - |
-              mkdir -p {{ .Values.supervisor.logDir }}
-              storm supervisor -c storm.local.hostname=$(SUPERVISOR_IP)
+            - storm.local.hostname=$(SUPERVISOR_IP)
           {{- end }}
           {{- if .Values.supervisor.args }}
           args: {{- include "common.tplvalues.render" (dict "value" .Values.supervisor.args "context" $) | nindent 12 }}
@@ -118,6 +118,10 @@ spec:
                   fieldPath: status.podIP
             {{- if .Values.supervisor.extraEnvVars }}
             {{- include "common.tplvalues.render" (dict "value" .Values.supervisor.extraEnvVars "context" $) | nindent 12 }}
+            {{- end }}
+            {{- if .Values.metrics.jmx.enabled }}
+            - name: JAVA_TOOL_OPTIONS
+              value: "-Dcom.sun.management.jmxremote -Dcom.sun.management.jmxremote.authenticate=false -Dcom.sun.management.jmxremote.ssl=false -Dcom.sun.management.jmxremote.local.only=false -Dcom.sun.management.jmxremote.port={{ .Values.metrics.jmx.ports.supervisor }} -Dcom.sun.management.jmxremote.rmi.port={{ .Values.metrics.jmx.ports.supervisor }}"
             {{- end }}
           envFrom:
             - configMapRef:
@@ -148,6 +152,11 @@ spec:
             - name: http
               containerPort: {{ .Values.supervisor.ports.http }}
               protocol: TCP
+            {{- if .Values.metrics.jmx.enabled }}
+            - name: jmx
+              containerPort: {{ .Values.metrics.jmx.ports.supervisor }}
+              protocol: TCP
+            {{- end }}
             {{- range $i := until (int .Values.supervisor.slotsPerSupervisor) }}
             - name: slot-{{ $i }}
               containerPort: {{ add 6700 $i }}
@@ -212,6 +221,37 @@ spec:
             {{- if .Values.supervisor.extraVolumeMounts }}
             {{- include "common.tplvalues.render" (dict "value" .Values.supervisor.extraVolumeMounts "context" $) | nindent 12 }}
             {{- end }}
+        {{- if .Values.metrics.jmx.enabled }}
+        - name: jmx-exporter
+          image: {{ include "common.images.image" (dict "imageRoot" .Values.metrics.jmx.image "global" .Values.global) }}
+          imagePullPolicy: {{ .Values.metrics.jmx.image.pullPolicy }}
+          {{- if .Values.containerSecurityContext.enabled }}
+          securityContext: {{- omit .Values.containerSecurityContext "enabled" | toYaml | nindent 12 }}
+          {{- end }}
+          command:
+            - java
+            - -jar
+            - /opt/bitnami/jmx-exporter/jmx_prometheus_httpserver.jar
+            - "{{ .Values.metrics.jmx.port }}"
+            - /etc/jmx-exporter/config.yaml
+          ports:
+            - name: metrics
+              containerPort: {{ .Values.metrics.jmx.port }}
+              protocol: TCP
+          {{- if .Values.metrics.jmx.resources }}
+          resources: {{- toYaml .Values.metrics.jmx.resources | nindent 12 }}
+          {{- else if ne .Values.metrics.jmx.resourcesPreset "none" }}
+          resources: {{- include "common.resources.preset" (dict "type" .Values.metrics.jmx.resourcesPreset) | nindent 12 }}
+          {{- end }}
+          volumeMounts:
+            - name: jmx-config
+              mountPath: /etc/jmx-exporter
+          env:
+            - name: JMX_EXPORTER_HOST
+              value: "127.0.0.1"
+            - name: JMX_EXPORTER_PORT
+              value: "{{ .Values.metrics.jmx.ports.supervisor }}"
+        {{- end }}
         {{- if .Values.supervisor.sidecars }}
         {{- include "common.tplvalues.render" ( dict "value" .Values.supervisor.sidecars "context" $) | nindent 8 }}
         {{- end }}
@@ -225,6 +265,11 @@ spec:
           emptyDir: {}
         - name: data
           emptyDir: {}
+        {{- if .Values.metrics.jmx.enabled }}
+        - name: jmx-config
+          configMap:
+            name: {{ include "common.names.fullname" . }}-jmx-config-supervisor
+        {{- end }}
         {{- if .Values.supervisor.extraVolumes }}
         {{- include "common.tplvalues.render" (dict "value" .Values.supervisor.extraVolumes "context" $) | nindent 8 }}
         {{- end }}
