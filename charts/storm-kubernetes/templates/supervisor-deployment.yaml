@@ -112,10 +112,6 @@ spec:
           securityContext: {{- omit .Values.containerSecurityContext "enabled" | toYaml | nindent 12 }}
           {{- end }}
           env:
-            - name: STORM_CONF_DIR
-              value: /conf
-            - name: STORM_LOG_DIR
-              value: {{ .Values.supervisor.logDir }}
             - name: SUPERVISOR_IP
               valueFrom:
                 fieldRef:
@@ -123,8 +119,9 @@ spec:
             {{- if .Values.supervisor.extraEnvVars }}
             {{- include "common.tplvalues.render" (dict "value" .Values.supervisor.extraEnvVars "context" $) | nindent 12 }}
             {{- end }}
-          {{- if or .Values.supervisor.extraEnvVarsCM .Values.supervisor.extraEnvVarsSecret }}
           envFrom:
+            - configMapRef:
+                name: {{ include "common.names.fullname" . }}-env
             {{- if .Values.supervisor.extraEnvVarsCM }}
             - configMapRef:
                 name: {{ include "common.tplvalues.render" (dict "value" .Values.supervisor.extraEnvVarsCM "context" $) }}
@@ -133,7 +130,6 @@ spec:
             - secretRef:
                 name: {{ include "common.tplvalues.render" (dict "value" .Values.supervisor.extraEnvVarsSecret "context" $) }}
             {{- end }}
-          {{- end }}
           {{- if .Values.supervisor.resources }}
           resources: {{- toYaml .Values.supervisor.resources | nindent 12 }}
           {{- else if eq .Values.supervisor.memoryConfig.mode "auto" }}
@@ -205,8 +201,10 @@ spec:
           lifecycle: {{- include "common.tplvalues.render" (dict "value" .Values.supervisor.lifecycleHooks "context" $) | nindent 12 }}
           {{- end }}
           volumeMounts:
+            {{- if .Values.cluster.stormYaml }}
             - name: config
               mountPath: /conf
+            {{- end }}
             - name: logs
               mountPath: {{ .Values.supervisor.logDir }}
             - name: data
@@ -218,9 +216,11 @@ spec:
         {{- include "common.tplvalues.render" ( dict "value" .Values.supervisor.sidecars "context" $) | nindent 8 }}
         {{- end }}
       volumes:
+        {{- if .Values.cluster.stormYaml }}
         - name: config
           configMap:
             name: {{ include "common.names.fullname" . }}
+        {{- end }}
         - name: logs
           emptyDir: {}
         - name: data

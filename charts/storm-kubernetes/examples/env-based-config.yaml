@@ -1,0 +1,60 @@
+# Example: Environment variable-based Storm configuration
+# This example shows how to configure Storm using environment variables
+# stored in a ConfigMap, without creating a storm.yaml file
+
+# Updated image tags to use new Storm container
+nimbus:
+  image:
+    tag: 2.8.1-17-jre
+  extraConfig:
+    nimbus.childopts: "-Xmx2048m"
+    nimbus.task.timeout.secs: 45
+    nimbus.supervisor.timeout.secs: 60
+  extraEnvVars:
+    - name: LOG_FORMAT
+      value: "json"
+
+supervisor:
+  image:
+    tag: 2.8.1-17-jre
+  replicaCount: 3
+  slotsPerSupervisor: 4
+  memoryConfig:
+    mode: "auto"
+    memoryPerWorker: "2Gi"
+    cpuPerWorker: "1"
+  extraConfig:
+    supervisor.childopts: "-Xmx512m"
+    supervisor.worker.timeout.secs: 30
+  extraEnvVars:
+    - name: LOG_FORMAT
+      value: "json"
+
+ui:
+  image:
+    tag: 2.8.1-17-jre
+  extraConfig:
+    ui.childopts: "-Xmx1024m"
+  extraEnvVars:
+    - name: LOG_FORMAT
+      value: "json"
+
+# Cluster-wide Storm configuration
+cluster:
+  extraConfig:
+    storm.log.level: "INFO"
+    topology.workers: 2
+    topology.acker.executors: 1
+    topology.max.spout.pending: 1000
+    topology.message.timeout.secs: 60
+    storm.messaging.netty.buffer_size: 5242880
+    # Any Storm configuration can be set here
+    # It will be converted to STORM_<KEY> environment variables
+    # with dots replaced by double underscores
+
+# Benefits of this approach:
+# 1. All configuration is in environment variables via ConfigMap
+# 2. ConfigMap can be updated without pod restarts (for new pods)
+# 3. No storm.yaml file to manage
+# 4. Easy to see all configuration in one place
+# 5. Compatible with GitOps practices

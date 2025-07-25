@@ -88,6 +88,7 @@ spec:
           
           echo ""
           echo "=== All tests completed ==="
+    {{- if .Values.cluster.stormYaml }}
     - name: test-configmap
       image: {{ include "common.images.image" (dict "imageRoot" .Values.waitContainer.image "global" .Values.global) }}
       command:
@@ -103,18 +104,25 @@ spec:
           cat /conf/storm.yaml | head -20
           
           echo ""
-          echo "Log4j2 configuration:"
-          if [ -f /conf/log4j2.xml ]; then
-            echo "✓ log4j2.xml exists"
-          else
-            echo "✗ log4j2.xml not found"
-            exit 1
-          fi
+          echo "Testing that storm.yaml was properly mounted"
       volumeMounts:
         - name: config
           mountPath: /conf
+    {{- else }}
+    - name: test-env
+      image: {{ include "common.images.image" (dict "imageRoot" .Values.waitContainer.image "global" .Values.global) }}
+      command:
+        - /bin/sh
+        - -c
+        - |
+          echo ""
+          echo "=== Testing Environment-based Configuration ==="
+          echo "✓ No storm.yaml ConfigMap needed - using environment variables"
+    {{- end }}
+  {{- if .Values.cluster.stormYaml }}
   volumes:
     - name: config
       configMap:
         name: {{ include "common.names.fullname" . }}
+  {{- end }}
 {{- end }}

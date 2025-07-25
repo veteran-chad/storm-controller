@@ -109,16 +109,13 @@ spec:
           {{- if .Values.containerSecurityContext.enabled }}
           securityContext: {{- omit .Values.containerSecurityContext "enabled" | toYaml | nindent 12 }}
           {{- end }}
+          {{- if .Values.nimbus.extraEnvVars }}
           env:
-            - name: STORM_CONF_DIR
-              value: /conf
-            - name: STORM_LOG_DIR
-              value: {{ .Values.nimbus.logDir }}
-            {{- if .Values.nimbus.extraEnvVars }}
             {{- include "common.tplvalues.render" (dict "value" .Values.nimbus.extraEnvVars "context" $) | nindent 12 }}
-            {{- end }}
-          {{- if or .Values.nimbus.extraEnvVarsCM .Values.nimbus.extraEnvVarsSecret }}
+          {{- end }}
           envFrom:
+            - configMapRef:
+                name: {{ include "common.names.fullname" . }}-env
             {{- if .Values.nimbus.extraEnvVarsCM }}
             - configMapRef:
                 name: {{ include "common.tplvalues.render" (dict "value" .Values.nimbus.extraEnvVarsCM "context" $) }}
@@ -127,7 +124,6 @@ spec:
             - secretRef:
                 name: {{ include "common.tplvalues.render" (dict "value" .Values.nimbus.extraEnvVarsSecret "context" $) }}
             {{- end }}
-          {{- end }}
           {{- if .Values.nimbus.resources }}
           resources: {{- toYaml .Values.nimbus.resources | nindent 12 }}
           {{- else if ne .Values.nimbus.resourcesPreset "none" }}
@@ -177,8 +173,10 @@ spec:
           lifecycle: {{- include "common.tplvalues.render" (dict "value" .Values.nimbus.lifecycleHooks "context" $) | nindent 12 }}
           {{- end }}
           volumeMounts:
+            {{- if .Values.cluster.stormYaml }}
             - name: config
               mountPath: /conf
+            {{- end }}
             - name: logs
               mountPath: {{ .Values.nimbus.logDir }}
             {{- if .Values.nimbus.persistence.enabled }}
@@ -202,9 +200,11 @@ spec:
         {{- include "common.tplvalues.render" ( dict "value" .Values.nimbus.sidecars "context" $) | nindent 8 }}
         {{- end }}
       volumes:
+        {{- if .Values.cluster.stormYaml }}
         - name: config
           configMap:
             name: {{ include "common.names.fullname" . }}
+        {{- end }}
         - name: logs
           emptyDir: {}
         {{- if .Values.auth.enabled }}

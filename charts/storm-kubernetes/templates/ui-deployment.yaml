@@ -111,16 +111,13 @@ spec:
           {{- if .Values.containerSecurityContext.enabled }}
           securityContext: {{- omit .Values.containerSecurityContext "enabled" | toYaml | nindent 12 }}
           {{- end }}
+          {{- if .Values.ui.extraEnvVars }}
           env:
-            - name: STORM_CONF_DIR
-              value: /conf
-            - name: STORM_LOG_DIR
-              value: {{ .Values.ui.logDir }}
-            {{- if .Values.ui.extraEnvVars }}
             {{- include "common.tplvalues.render" (dict "value" .Values.ui.extraEnvVars "context" $) | nindent 12 }}
-            {{- end }}
-          {{- if or .Values.ui.extraEnvVarsCM .Values.ui.extraEnvVarsSecret }}
+          {{- end }}
           envFrom:
+            - configMapRef:
+                name: {{ include "common.names.fullname" . }}-env
             {{- if .Values.ui.extraEnvVarsCM }}
             - configMapRef:
                 name: {{ include "common.tplvalues.render" (dict "value" .Values.ui.extraEnvVarsCM "context" $) }}
@@ -129,7 +126,6 @@ spec:
             - secretRef:
                 name: {{ include "common.tplvalues.render" (dict "value" .Values.ui.extraEnvVarsSecret "context" $) }}
             {{- end }}
-          {{- end }}
           {{- if .Values.ui.resources }}
           resources: {{- toYaml .Values.ui.resources | nindent 12 }}
           {{- else if ne .Values.ui.resourcesPreset "none" }}
@@ -182,8 +178,10 @@ spec:
           lifecycle: {{- include "common.tplvalues.render" (dict "value" .Values.ui.lifecycleHooks "context" $) | nindent 12 }}
           {{- end }}
           volumeMounts:
+            {{- if .Values.cluster.stormYaml }}
             - name: config
               mountPath: /conf
+            {{- end }}
             - name: logs
               mountPath: {{ .Values.ui.logDir }}
             {{- if .Values.ui.extraVolumeMounts }}
@@ -193,9 +191,11 @@ spec:
         {{- include "common.tplvalues.render" ( dict "value" .Values.ui.sidecars "context" $) | nindent 8 }}
         {{- end }}
       volumes:
+        {{- if .Values.cluster.stormYaml }}
         - name: config
           configMap:
             name: {{ include "common.names.fullname" . }}
+        {{- end }}
         - name: logs
           emptyDir: {}
         {{- if .Values.ui.extraVolumes }}

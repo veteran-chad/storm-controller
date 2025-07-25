@@ -1,0 +1,101 @@
+# Example: Custom storm.yaml configuration
+# This example shows how to provide a complete storm.yaml file
+# for cases where you need specific formatting or complex structures
+
+# Updated image tags to use new Storm container
+nimbus:
+  image:
+    tag: 2.8.1-17-jre
+  extraEnvVars:
+    - name: LOG_FORMAT
+      value: "json"
+
+supervisor:
+  image:
+    tag: 2.8.1-17-jre
+  extraEnvVars:
+    - name: LOG_FORMAT
+      value: "json"
+
+ui:
+  image:
+    tag: 2.8.1-17-jre
+  extraEnvVars:
+    - name: LOG_FORMAT
+      value: "json"
+
+cluster:
+  # Provide a complete storm.yaml that will be mounted at /conf/storm.yaml
+  stormYaml: |
+    # Zookeeper configuration
+    storm.zookeeper.servers:
+      - "zookeeper-0.zookeeper-headless"
+      - "zookeeper-1.zookeeper-headless"
+      - "zookeeper-2.zookeeper-headless"
+    storm.zookeeper.port: 2181
+    storm.zookeeper.root: "/storm"
+    storm.zookeeper.session.timeout: 20000
+    storm.zookeeper.connection.timeout: 15000
+    storm.zookeeper.retry.times: 5
+    storm.zookeeper.retry.interval: 1000
+    
+    # Nimbus configuration
+    nimbus.seeds:
+      - "nimbus-0.nimbus-headless"
+      - "nimbus-1.nimbus-headless"
+      - "nimbus-2.nimbus-headless"
+    nimbus.thrift.port: 6627
+    nimbus.childopts: "-Xmx2048m -XX:+UseG1GC"
+    
+    # Supervisor configuration
+    supervisor.slots.ports:
+      - 6700
+      - 6701
+      - 6702
+      - 6703
+    supervisor.childopts: "-Xmx512m"
+    supervisor.memory.capacity.mb: 8192
+    supervisor.cpu.capacity: 400
+    
+    # Worker configuration
+    worker.childopts: "-Xmx%HEAP-MEM%m -XX:+UseG1GC"
+    worker.heap.memory.mb: 1536
+    
+    # UI configuration
+    ui.port: 8080
+    ui.childopts: "-Xmx1024m"
+    
+    # Storm directories
+    storm.local.dir: "/storm/data"
+    storm.log.dir: "/apache-storm/logs"
+    
+    # Topology configuration
+    topology.acker.executors: 1
+    topology.workers: 2
+    topology.max.spout.pending: 1000
+    topology.message.timeout.secs: 60
+    topology.debug: false
+    
+    # Advanced configurations
+    storm.messaging.netty.buffer_size: 5242880
+    storm.messaging.netty.max_retries: 30
+    storm.messaging.netty.min_wait_ms: 100
+    storm.messaging.netty.max_wait_ms: 1000
+    
+    # Metrics configuration
+    topology.metrics.consumer.register:
+      - class: "org.apache.storm.metric.LoggingMetricsConsumer"
+        parallelism.hint: 1
+    
+  # These configurations will still be added as environment variables
+  # in addition to the storm.yaml file
+  extraConfig:
+    # These override or supplement the storm.yaml
+    storm.log.level: "INFO"
+    # Any additional dynamic configuration
+
+# When to use this approach:
+# 1. Migrating existing Storm clusters with complex storm.yaml files
+# 2. Need specific YAML formatting or structure (like nested lists)
+# 3. Want to maintain storm.yaml in version control as-is
+# 4. Have configurations that don't translate well to environment variables

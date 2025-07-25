@@ -114,14 +114,29 @@ waitContainer:
 ## @param cluster.enabled Enable cluster-wide Storm configuration
 cluster:
   enabled: true
-  ## @param cluster.logFormat Log format for Storm components (text or json)
+  ## @param cluster.logFormat [deprecated] Log format is now controlled via LOG_FORMAT environment variable (see extraEnvVars)
+  ## @deprecated Use extraEnvVars to set LOG_FORMAT=json for JSON logging
+  ## This value is no longer used and will be removed in a future release
   logFormat: "text"
+  ## @param cluster.stormYaml Custom storm.yaml configuration
+  ## If provided, this will be mounted as /conf/storm.yaml in all Storm containers
+  ## Example:
+  ## stormYaml: |
+  ##   storm.zookeeper.servers:
+  ##     - "zookeeper"
+  ##   nimbus.seeds:
+  ##     - "nimbus"
+  ##   storm.log.dir: "/logs"
+  ##   storm.local.dir: "/data"
+  ##   ui.port: 8080
+  stormYaml: ""
   ## @param cluster.extraConfig Extra cluster-wide Storm configuration
+  ## NOTE: These values are now converted to STORM_ environment variables
+  ## Example: topology.workers becomes STORM_TOPOLOGY__WORKERS
   ## eg.:
   ## extraConfig:
   ##   storm.cluster.mode: "distributed"
   ##   storm.local.dir: "storm-local"
-  ##   storm.log.dir: "/storm/logs"
   ##   storm.thrift.transport: "org.apache.storm.security.auth.SimpleTransportPlugin"
   ##   storm.messaging.transport: "org.apache.storm.messaging.netty.Context"
   ##   topology.acker.executors: null
@@ -148,7 +163,7 @@ ui:
   image:
     registry: docker.io
     repository: storm
-    tag: 2.8.1
+    tag: 2.8.1-17-jre
     digest: ""
     pullPolicy: IfNotPresent
     pullSecrets: []
@@ -189,6 +204,10 @@ ui:
   ## @param ui.extraEnvVars Array with extra environment variables to add to UI nodes
   ## @param ui.extraEnvVarsCM Name of existing ConfigMap containing extra env vars for UI nodes
   ## @param ui.extraEnvVarsSecret Name of existing Secret containing extra env vars for UI nodes
+  ## Example:
+  ## extraEnvVars:
+  ##   - name: LOG_FORMAT
+  ##     value: "json"  # Options: text, json, or custom format name
   extraEnvVars: []
   extraEnvVarsCM: ""
   extraEnvVarsSecret: ""
@@ -294,6 +313,8 @@ ui:
   command: []
   args: []
   ## @param ui.extraConfig Extra configuration for Storm UI
+  ## NOTE: These values are now converted to STORM_ environment variables
+  ## Example: ui.port becomes STORM_UI__PORT
   ## eg.:
   ## extraConfig:
   ##   ui.host: 0.0.0.0
@@ -369,7 +390,7 @@ nimbus:
   image:
     registry: docker.io
     repository: storm
-    tag: 2.8.1
+    tag: 2.8.1-17-jre
     digest: ""
     pullPolicy: IfNotPresent
     pullSecrets: []
@@ -432,6 +453,10 @@ nimbus:
   ## @param nimbus.extraEnvVars Array with extra environment variables to add to Nimbus nodes
   ## @param nimbus.extraEnvVarsCM Name of existing ConfigMap containing extra env vars for Nimbus nodes
   ## @param nimbus.extraEnvVarsSecret Name of existing Secret containing extra env vars for Nimbus nodes
+  ## Example:
+  ## extraEnvVars:
+  ##   - name: LOG_FORMAT
+  ##     value: "json"  # Options: text, json, or custom format name
   extraEnvVars: []
   extraEnvVarsCM: ""
   extraEnvVarsSecret: ""
@@ -531,6 +556,8 @@ nimbus:
   command: []
   args: []
   ## @param nimbus.extraConfig Extra configuration for Storm Nimbus
+  ## NOTE: These values are now converted to STORM_ environment variables
+  ## Example: nimbus.childopts becomes STORM_NIMBUS__CHILDOPTS
   ## eg.:
   ## extraConfig:
   ##   nimbus.seeds: ["localhost"]
@@ -594,7 +621,7 @@ supervisor:
   image:
     registry: docker.io
     repository: storm
-    tag: 2.8.1
+    tag: 2.8.1-17-jre
     digest: ""
     pullPolicy: IfNotPresent
     pullSecrets: []
@@ -637,6 +664,10 @@ supervisor:
   ## @param supervisor.extraEnvVars Array with extra environment variables to add to Supervisor nodes
   ## @param supervisor.extraEnvVarsCM Name of existing ConfigMap containing extra env vars for Supervisor nodes
   ## @param supervisor.extraEnvVarsSecret Name of existing Secret containing extra env vars for Supervisor nodes
+  ## Example:
+  ## extraEnvVars:
+  ##   - name: LOG_FORMAT
+  ##     value: "json"  # Options: text, json, or custom format name
   extraEnvVars: []
   extraEnvVarsCM: ""
   extraEnvVarsSecret: ""
@@ -736,9 +767,12 @@ supervisor:
   command: []
   args: []
   ## @param supervisor.extraConfig Extra configuration for Storm Supervisor
+  ## NOTE: These values are now converted to STORM_ environment variables
+  ## Example: supervisor.childopts becomes STORM_SUPERVISOR__CHILDOPTS
+  ## IMPORTANT: supervisor.slots.ports is automatically generated from slotsPerSupervisor
+  ## IMPORTANT: Memory settings are auto-calculated when memoryConfig.mode is "auto"
   ## eg.:
   ## extraConfig:
-  ##   supervisor.slots.ports: [6700, 6701, 6702, 6703]
   ##   supervisor.childopts: "-Xmx256m"
   ##   supervisor.run.worker.as.user: false
   ##   supervisor.worker.start.timeout.secs: 120
@@ -746,8 +780,6 @@ supervisor:
   ##   supervisor.worker.shutdown.sleep.secs: 3
   ##   supervisor.monitor.frequency.secs: 3
   ##   supervisor.heartbeat.frequency.secs: 5
-  ##   supervisor.memory.capacity.mb: 4096.0
-  ##   supervisor.cpu.capacity: 400.0
   ##   supervisor.thrift.port: 6628
   ##   supervisor.blobstore.class: "org.apache.storm.blobstore.NimbusBlobStore"
   ##   supervisor.blobstore.download.thread.count: 5
@@ -819,8 +851,9 @@ zookeeper:
 
 
 ## @section Storm Cluster Configuration (Deprecated)
-## @deprecated Use cluster.extraConfig instead. This section will be removed in a future release.
-## Complete Storm cluster configuration with all available options and defaults from defaults.yaml
+## @deprecated This entire section is no longer used. Use cluster.extraConfig, nimbus.extraConfig, 
+## supervisor.extraConfig, and ui.extraConfig instead. This section will be removed in a future release.
+## All configuration is now handled through environment variables in the configmap-env.yaml
 # clusterConfig:
 #   ## Core Storm Configuration
 #   java.library.path: "/usr/local/lib:/opt/local/lib:/usr/lib:/usr/lib64"

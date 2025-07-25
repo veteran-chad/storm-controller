@@ -261,33 +261,74 @@ supervisor:
     worker.heap.memory.mb: 768
 ```
 
-### Logging Configuration
+### Storm Configuration
 
-The chart supports both text and JSON logging formats:
+The chart supports two configuration methods:
+
+#### 1. Environment Variables (Recommended)
+
+All Storm configuration is automatically converted to environment variables and stored in a ConfigMap for easy updates:
+
+```yaml
+# Cluster-wide configuration
+cluster:
+  extraConfig:
+    storm.log.level: "INFO"
+    topology.workers: 2
+
+# Component-specific configuration
+nimbus:
+  extraConfig:
+    nimbus.childopts: "-Xmx2048m"
+    nimbus.task.timeout.secs: 30
+```
+
+These are converted to environment variables (e.g., `STORM_NIMBUS__CHILDOPTS`) and stored in the `<release>-env` ConfigMap.
+
+#### 2. Custom storm.yaml (Optional)
+
+For complex configurations or when migrating existing storm.yaml files:
 
 ```yaml
 cluster:
-  # Log format: "text" or "json"
-  logFormat: "json"  # Enable JSON logging for better log aggregation
-  
-  # Extra Storm configuration
-  extraConfig:
-    storm.log4j2.conf.dir: "/conf"
+  stormYaml: |
+    storm.zookeeper.servers:
+      - "zookeeper"
+    nimbus.seeds:
+      - "nimbus"
+    storm.log.dir: "/logs"
+    storm.local.dir: "/data"
+    ui.port: 8080
+    # Any other Storm configuration...
+```
 
-# When using Datadog with JSON logs
+This creates a ConfigMap with your storm.yaml that is mounted at `/conf/storm.yaml` in all containers.
+
+### Logging Configuration
+
+The new Storm container supports flexible logging through the `LOG_FORMAT` environment variable:
+
+```yaml
+# Set logging format per component
+ui:
+  extraEnvVars:
+    - name: LOG_FORMAT
+      value: "json"  # Options: text, json, or custom format
+
+# JSON logging includes structured fields for better observability:
+# - service, environment, version (from container metadata)
+# - hostname/pod (Kubernetes pod name)
+# - topology (for worker logs)
+# - worker_port (for worker logs)
+```
+
+When using Datadog:
+```yaml
 metrics:
   datadog:
     enabled: true
     scrapeLogs: true  # Automatically adds Datadog log annotations
 ```
-
-When JSON logging is enabled, logs include structured fields:
-- `service`: From DD_SERVICE environment variable
-- `environment`: From DD_ENV environment variable  
-- `version`: From DD_VERSION environment variable
-- `hostname`/`pod`: Pod name
-- `topology`: Storm topology ID (for worker logs)
-- `worker_port`: Worker port (for worker logs)
 
 ### External Zookeeper
 

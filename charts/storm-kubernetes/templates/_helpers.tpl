@@ -35,30 +35,6 @@ Since all resources are in the same namespace, we can use the simple service nam
 {{- end -}}
 {{- end -}}
 
-{{/*
-Render cluster configuration with proper precedence
-This helper filters out configuration keys that are managed by specific sections (zookeeper, ui, nimbus, supervisor, etc.)
-to avoid duplication. Section-specific configs take precedence over clusterConfig.
-*/}}
-{{- define "storm.renderClusterConfig" -}}
-{{- if .Values.clusterConfig }}
-{{- range $key, $value := .Values.clusterConfig }}
-{{- if and (ne $key "storm.zookeeper.servers") (ne $key "nimbus.seeds") }}
-{{- if not (and $.Values.zookeeper.extraConfig (hasKey $.Values.zookeeper.extraConfig $key)) }}
-{{- if not (and $.Values.ui.enabled $.Values.ui.extraConfig (hasKey $.Values.ui.extraConfig $key)) }}
-{{- if not (and $.Values.nimbus.enabled $.Values.nimbus.extraConfig (hasKey $.Values.nimbus.extraConfig $key)) }}
-{{- if not (and $.Values.supervisor.enabled $.Values.supervisor.extraConfig (hasKey $.Values.supervisor.extraConfig $key)) }}
-{{- if not (and $.Values.cluster.enabled $.Values.cluster.extraConfig (hasKey $.Values.cluster.extraConfig $key)) }}
-{{ $key }}: {{ $value | toJson }}
-{{- end }}
-{{- end }}
-{{- end }}
-{{- end }}
-{{- end }}
-{{- end }}
-{{- end }}
-{{- end }}
-{{- end -}}
 
 {{/*
 Create the name of the service account to use
@@ -91,4 +67,44 @@ tags.datadoghq.com/env: {{ .Values.metrics.environment | quote }}
 tags.datadoghq.com/service: {{ .Values.metrics.serviceName | quote }}
 tags.datadoghq.com/version: {{ .Values.metrics.serviceVersion | quote }}
 {{- end -}}
+{{- end -}}
+
+
+
+{{/*
+Validate supervisor memory configuration
+*/}}
+{{- define "storm.supervisor.validateMemory" -}}
+{{- if eq .Values.supervisor.memoryConfig.mode "auto" -}}
+{{- if not .Values.supervisor.memoryConfig.memoryPerWorker -}}
+{{- fail "supervisor.memoryConfig.memoryPerWorker is required when mode is 'auto'" -}}
+{{- end -}}
+{{- end -}}
+{{- end -}}
+
+{{/*
+Calculate supervisor memory settings for container resources
+*/}}
+{{- define "storm.supervisor.memorySettings" -}}
+{{- $memoryPerWorker := .Values.supervisor.memoryConfig.memoryPerWorker | toString -}}
+{{- $slots := .Values.supervisor.slotsPerSupervisor -}}
+{{- $overheadPercent := .Values.supervisor.memoryConfig.memoryOverheadPercent -}}
+{{- $cpuPerWorker := .Values.supervisor.memoryConfig.cpuPerWorker | toString -}}
+{{- $workerMemoryMB := 0 -}}
+{{- if hasSuffix "Gi" $memoryPerWorker -}}
+{{- $workerMemoryMB = trimSuffix "Gi" $memoryPerWorker | float64 | mul 1024 | int -}}
+{{- else if hasSuffix "Mi" $memoryPerWorker -}}
+{{- $workerMemoryMB = trimSuffix "Mi" $memoryPerWorker | int -}}
+{{- end -}}
+{{- $totalWorkerMemoryMB := mul $workerMemoryMB $slots -}}
+{{- $containerMemoryMB := div (mul $totalWorkerMemoryMB (add 100 $overheadPercent)) 100 -}}
+{{- $cpuCores := 1.0 -}}
+{{- if hasSuffix "m" $cpuPerWorker -}}
+{{- $cpuCores = trimSuffix "m" $cpuPerWorker | float64 | div 1000 -}}
+{{- else -}}
+{{- $cpuCores = $cpuPerWorker | float64 -}}
+{{- end -}}
+{{- $totalCpu := mulf $cpuCores (float64 $slots) -}}
+containerMemory: {{ printf "%dMi" $containerMemoryMB }}
+containerCpu: {{ printf "%.2f" $totalCpu }}
 {{- end -}}

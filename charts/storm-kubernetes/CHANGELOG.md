@@ -1,5 +1,27 @@
 # Changelog
 
+## [0.4.0] - Environment Variable Configuration
+
+### Added
+- **Environment Variable ConfigMap**: All Storm configuration is now managed through environment variables
+- **Optional storm.yaml**: Support for custom storm.yaml via `cluster.stormYaml` option
+- **Per-Component LOG_FORMAT**: Set logging format individually for each component
+- **Migration Guide**: Comprehensive documentation for updating from previous versions
+
+### Changed
+- **Configuration Method**: Moved from inline environment variables to centralized ConfigMap
+- **Image Tags**: Updated to use new Storm container version `2.8.1-17-jre`
+- **Log Configuration**: Removed log4j2 XML from helm chart (now handled by container)
+
+### Deprecated
+- **cluster.logFormat**: Use component-level `extraEnvVars` with `LOG_FORMAT` instead
+- **clusterConfig section**: Use `cluster.extraConfig` and component-specific `extraConfig` instead
+- **Helper Functions**: Removed unused template helpers (renderClusterConfig, configToEnv, memoryConfig)
+
+### Removed
+- **Log4j2 ConfigMap entries**: No longer needed with new container
+- **Unused helper functions**: Cleaned up template helpers that are no longer used
+
 ## [0.3.0] - Memory Management and Enhanced Features
 
 ### Added
