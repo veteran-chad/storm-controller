@@ -141,9 +141,19 @@ data:
       <appenders>
         <!-- Console appender for Kubernetes logging -->
         <Console name="Console" target="SYSTEM_OUT">
+          {{- if eq .Values.cluster.logFormat "json" }}
+          <JsonLayout compact="true" eventEol="true" locationInfo="true" includeTimeMillis="true">
+            <KeyValuePair key="service" value="${env:DD_SERVICE:-storm}"/>
+            <KeyValuePair key="environment" value="${env:DD_ENV:-default}"/>
+            <KeyValuePair key="version" value="${env:DD_VERSION:-unknown}"/>
+            <KeyValuePair key="hostname" value="${env:HOSTNAME:-unknown}"/>
+            <KeyValuePair key="pod" value="${env:HOSTNAME:-unknown}"/>
+          </JsonLayout>
+          {{- else }}
           <PatternLayout charset="UTF-8">
             <pattern>${pattern}</pattern>
           </PatternLayout>
+          {{- end }}
         </Console>
         
         <RollingFile name="A1"
@@ -224,9 +234,21 @@ data:
       <appenders>
         <!-- Console appender for Kubernetes logging -->
         <Console name="Console" target="SYSTEM_OUT">
+          {{- if eq .Values.cluster.logFormat "json" }}
+          <JsonLayout compact="true" eventEol="true" locationInfo="true" includeTimeMillis="true">
+            <KeyValuePair key="service" value="${env:DD_SERVICE:-storm}"/>
+            <KeyValuePair key="environment" value="${env:DD_ENV:-default}"/>
+            <KeyValuePair key="version" value="${env:DD_VERSION:-unknown}"/>
+            <KeyValuePair key="hostname" value="${env:HOSTNAME:-unknown}"/>
+            <KeyValuePair key="pod" value="${env:HOSTNAME:-unknown}"/>
+            <KeyValuePair key="topology" value="${sys:storm.id:-unknown}"/>
+            <KeyValuePair key="worker_port" value="${sys:worker.port:-unknown}"/>
+          </JsonLayout>
+          {{- else }}
           <PatternLayout charset="UTF-8">
             <pattern>${pattern}</pattern>
           </PatternLayout>
+          {{- end }}
         </Console>
         
         <RollingFile name="A1"

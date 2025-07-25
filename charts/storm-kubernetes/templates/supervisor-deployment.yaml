@@ -6,8 +6,14 @@ metadata:
   namespace: {{ include "common.names.namespace" . | quote }}
   labels: {{- include "common.labels.standard" ( dict "customLabels" .Values.commonLabels "context" $ ) | nindent 4 }}
     app.kubernetes.io/component: supervisor
-  {{- if .Values.commonAnnotations }}
-  annotations: {{- include "common.tplvalues.render" ( dict "value" .Values.commonAnnotations "context" $ ) | nindent 4 }}
+  {{- if or .Values.commonAnnotations .Values.supervisor.annotations }}
+  annotations:
+    {{- if .Values.commonAnnotations }}
+    {{- include "common.tplvalues.render" ( dict "value" .Values.commonAnnotations "context" $ ) | nindent 4 }}
+    {{- end }}
+    {{- if .Values.supervisor.annotations }}
+    {{- include "common.tplvalues.render" ( dict "value" .Values.supervisor.annotations "context" $ ) | nindent 4 }}
+    {{- end }}
   {{- end }}
 spec:
   replicas: {{ .Values.supervisor.replicaCount }}
@@ -21,11 +27,13 @@ spec:
     metadata:
       annotations:
         checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}
+        {{- include "storm.datadogLogAnnotations" (dict "root" $ "component" "supervisor") | nindent 8 }}
         {{- if .Values.supervisor.podAnnotations }}
         {{- include "common.tplvalues.render" (dict "value" .Values.supervisor.podAnnotations "context" $) | nindent 8 }}
         {{- end }}
       labels: {{- include "common.labels.standard" ( dict "customLabels" .Values.commonLabels "context" $ ) | nindent 8 }}
         app.kubernetes.io/component: supervisor
+        {{- include "storm.datadogLabels" . | nindent 8 }}
         {{- if .Values.supervisor.podLabels }}
         {{- include "common.tplvalues.render" (dict "value" .Values.supervisor.podLabels "context" $) | nindent 8 }}
         {{- end }}
@@ -95,7 +103,7 @@ spec:
             - -c
             - |
               mkdir -p {{ .Values.supervisor.logDir }}
-              storm supervisor
+              storm supervisor -c storm.local.hostname=$(SUPERVISOR_IP)
           {{- end }}
           {{- if .Values.supervisor.args }}
           args: {{- include "common.tplvalues.render" (dict "value" .Values.supervisor.args "context" $) | nindent 12 }}
@@ -108,6 +116,10 @@ spec:
               value: /conf
             - name: STORM_LOG_DIR
               value: {{ .Values.supervisor.logDir }}
+            - name: SUPERVISOR_IP
+              valueFrom:
+                fieldRef:
+                  fieldPath: status.podIP
             {{- if .Values.supervisor.extraEnvVars }}
             {{- include "common.tplvalues.render" (dict "value" .Values.supervisor.extraEnvVars "context" $) | nindent 12 }}
             {{- end }}

@@ -26,6 +26,14 @@ nimbus:
 supervisor:
   # Multiple supervisors for workload distribution
   replicaCount: 3
+  
+  # Memory configuration for proper resource allocation
+  memoryConfig:
+    mode: "auto"
+    memoryPerWorker: "1Gi"       # 1GB per worker slot
+    memoryOverheadPercent: 25    # 25% JVM overhead
+    cpuPerWorker: "1"            # 1 CPU per worker
+  
   pdb:
     create: true
     # Allow up to 1 supervisor to be unavailable

@@ -6,8 +6,14 @@ metadata:
   namespace: {{ include "common.names.namespace" . | quote }}
   labels: {{- include "common.labels.standard" ( dict "customLabels" .Values.commonLabels "context" $ ) | nindent 4 }}
     app.kubernetes.io/component: nimbus
-  {{- if .Values.commonAnnotations }}
-  annotations: {{- include "common.tplvalues.render" ( dict "value" .Values.commonAnnotations "context" $ ) | nindent 4 }}
+  {{- if or .Values.commonAnnotations .Values.nimbus.annotations }}
+  annotations:
+    {{- if .Values.commonAnnotations }}
+    {{- include "common.tplvalues.render" ( dict "value" .Values.commonAnnotations "context" $ ) | nindent 4 }}
+    {{- end }}
+    {{- if .Values.nimbus.annotations }}
+    {{- include "common.tplvalues.render" ( dict "value" .Values.nimbus.annotations "context" $ ) | nindent 4 }}
+    {{- end }}
   {{- end }}
 spec:
   replicas: {{ .Values.nimbus.replicaCount }}
@@ -22,11 +28,13 @@ spec:
     metadata:
       annotations:
         checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}
+        {{- include "storm.datadogLogAnnotations" (dict "root" $ "component" "nimbus") | nindent 8 }}
         {{- if .Values.nimbus.podAnnotations }}
         {{- include "common.tplvalues.render" (dict "value" .Values.nimbus.podAnnotations "context" $) | nindent 8 }}
         {{- end }}
       labels: {{- include "common.labels.standard" ( dict "customLabels" .Values.commonLabels "context" $ ) | nindent 8 }}
         app.kubernetes.io/component: nimbus
+        {{- include "storm.datadogLabels" . | nindent 8 }}
         {{- if .Values.nimbus.podLabels }}
         {{- include "common.tplvalues.render" (dict "value" .Values.nimbus.podLabels "context" $) | nindent 8 }}
         {{- end }}

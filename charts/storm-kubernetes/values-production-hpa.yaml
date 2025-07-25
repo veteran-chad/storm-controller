@@ -8,14 +8,26 @@ supervisor:
   # Initial replica count (HPA will adjust this)
   replicaCount: 5
   
-  # Resource configuration is REQUIRED for HPA
-  resources:
-    requests:
-      cpu: 2000m      # 2 CPU cores per supervisor
-      memory: 4Gi     # 4GB memory per supervisor
-    limits:
-      cpu: 4000m      # 4 CPU cores max
-      memory: 8Gi     # 8GB memory max
+  # Memory configuration mode
+  memoryConfig:
+    mode: "auto"
+    memoryPerWorker: "1Gi"      # 1GB per worker slot
+    memoryOverheadPercent: 25   # 25% JVM overhead
+    cpuPerWorker: "1"           # 1 CPU per worker
+  
+  # Number of worker slots per supervisor
+  slotsPerSupervisor: 4
+  
+  # Resources are auto-calculated in auto mode
+  # With 4 slots @ 1Gi each + 25% overhead = 5Gi container memory
+  # For manual mode, specify resources directly:
+  # resources:
+  #   requests:
+  #     cpu: 4          # 4 CPU cores (1 per worker)
+  #     memory: 5Gi     # 5GB memory total
+  #   limits:
+  #     cpu: 4
+  #     memory: 5Gi
   
   # HPA configuration
   hpa:

@@ -70,3 +70,25 @@ Create the name of the service account to use
 {{- default "default" .Values.serviceAccount.name -}}
 {{- end -}}
 {{- end -}}
+
+{{/*
+Datadog log collection annotations
+*/}}
+{{- define "storm.datadogLogAnnotations" -}}
+{{- $root := .root -}}
+{{- $component := .component -}}
+{{- if and $root.Values.metrics.datadog.enabled $root.Values.metrics.datadog.scrapeLogs -}}
+ad.datadoghq.com/{{ $component }}.logs: '[{"source": "storm", "service": "{{ $root.Values.metrics.serviceName }}-{{ $component }}"}]'
+{{- end -}}
+{{- end -}}
+
+{{/*
+Datadog pod labels
+*/}}
+{{- define "storm.datadogLabels" -}}
+{{- if .Values.metrics.datadog.enabled -}}
+tags.datadoghq.com/env: {{ .Values.metrics.environment | quote }}
+tags.datadoghq.com/service: {{ .Values.metrics.serviceName | quote }}
+tags.datadoghq.com/version: {{ .Values.metrics.serviceVersion | quote }}
+{{- end -}}
+{{- end -}}

@@ -49,6 +49,13 @@ nimbus:
       value: "-Xmx1024m -Djava.security.manager=default"
   
 supervisor:
+  # Memory configuration - using auto mode with security constraints
+  memoryConfig:
+    mode: "auto"
+    memoryPerWorker: "768Mi"     # Match the old STORM_WORKER_CHILDOPTS
+    memoryOverheadPercent: 25    # 25% JVM overhead
+    cpuPerWorker: "1"            # 1 CPU per worker
+  
   extraEnvVars:
     - name: STORM_SUPERVISOR_CHILDOPTS
       value: "-Xmx256m -Djava.security.manager=default"

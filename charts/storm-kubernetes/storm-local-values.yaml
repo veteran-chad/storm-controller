@@ -21,6 +21,13 @@ supervisor:
   enabled: true
   replicaCount: 1
   slotsPerSupervisor: 1
+  
+  # Memory configuration - using auto mode for simplicity
+  memoryConfig:
+    mode: "auto"
+    memoryPerWorker: "1Gi"      # 1GB per worker for local dev
+    memoryOverheadPercent: 25    # 25% JVM overhead
+    cpuPerWorker: "0.5"          # 0.5 CPU per worker for local dev
 
 # Zookeeper configuration
 zookeeper:

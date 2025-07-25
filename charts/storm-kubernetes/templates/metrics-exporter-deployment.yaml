@@ -23,6 +23,7 @@ spec:
     metadata:
       annotations:
         checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}
+        {{- include "storm.datadogLogAnnotations" (dict "root" $ "component" "metrics-exporter") | nindent 8 }}
         {{- if .Values.metrics.exporter.podAnnotations }}
         {{- include "common.tplvalues.render" (dict "value" .Values.metrics.exporter.podAnnotations "context" $) | nindent 8 }}
         {{- end }}

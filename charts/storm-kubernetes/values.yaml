@@ -114,6 +114,8 @@ waitContainer:
 ## @param cluster.enabled Enable cluster-wide Storm configuration
 cluster:
   enabled: true
+  ## @param cluster.logFormat Log format for Storm components (text or json)
+  logFormat: "text"
   ## @param cluster.extraConfig Extra cluster-wide Storm configuration
   ## eg.:
   ## extraConfig:
@@ -749,6 +751,7 @@ supervisor:
   ##   supervisor.thrift.port: 6628
   ##   supervisor.blobstore.class: "org.apache.storm.blobstore.NimbusBlobStore"
   ##   supervisor.blobstore.download.thread.count: 5
+  ##   storm.local.hostname: "${STORM_LOCAL_HOSTNAME}"
   extraConfig: {}
   ## @param supervisor.pdb.create Enable PodDisruptionBudget for Supervisor
   ## @param supervisor.pdb.minAvailable Minimum available Supervisor instances
@@ -1101,7 +1104,7 @@ metrics:
   enabled: false
   serviceName: "storm-metrics"
   serviceVersion: "1.0.0"
-  environment: "production"
+  environment: "local"
   prometheus:
     ## @param metrics.prometheus.scrape Enable Prometheus scraping annotations
     scrape: true
@@ -1113,6 +1116,8 @@ metrics:
   ## @param metrics.datadog.enabled Enable Datadog integration
   datadog:
     enabled: false
+    ## @param metrics.datadog.scrapeLogs Enable Datadog log collection annotations
+    scrapeLogs: false
   ## @param metrics.exporter.image.registry Metrics exporter image registry
   ## @param metrics.exporter.image.repository Metrics exporter image repository
   ## @param metrics.exporter.image.tag Metrics exporter image tag

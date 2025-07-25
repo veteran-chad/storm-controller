@@ -110,21 +110,20 @@ supervisor:
   enabled: true
   replicaCount: 5  # Start with 5, HPA will scale as needed
   
-  # Automatic memory calculation enabled
-  autoMemory:
-    enabled: true
-    containerMemoryFactor: 0.8  # 80% of container memory for JVM
-    jvmMemoryFactor: 0.75      # 75% of JVM memory for workers
+  # Memory configuration - automatic mode
+  memoryConfig:
+    mode: "auto"
+    memoryPerWorker: "2Gi"      # 2GB per worker slot
+    memoryOverheadPercent: 25   # 25% JVM overhead
+    cpuPerWorker: "1"           # 1 CPU per worker
   
-  resources:
-    limits:
-      cpu: 4000m
-      memory: 8Gi
-    requests:
-      cpu: 2000m
-      memory: 4Gi
-  
+  # Number of worker slots per supervisor
   slotsPerSupervisor: 4
+  
+  # Resources are auto-calculated in auto mode:
+  # Container memory = 4 workers × 2Gi × 1.25 = 10Gi
+  # Container CPU = 4 workers × 1 = 4
+  # For manual override, change memoryConfig.mode to "manual" and specify resources
   
   # Pod disruption budget
   pdb:

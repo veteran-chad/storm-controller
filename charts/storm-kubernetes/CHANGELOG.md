@@ -1,5 +1,36 @@
 # Changelog
 
+## [0.3.0] - Memory Management and Enhanced Features
+
+### Added
+
+#### Memory Configuration System
+- **Auto Mode**: Automatic calculation of container resources based on worker requirements
+- **Manual Mode**: Full control over memory settings for advanced users
+- **Memory Helpers**: Template functions for consistent memory allocation
+- **Validation**: Built-in checks to prevent memory misconfiguration
+
+#### Enhanced Monitoring
+- **Datadog Integration**: Full support with unified service tagging
+- **Log Annotations**: Automatic log collection annotations for Datadog
+- **JSON Logging**: Structured logging support for better log aggregation
+- **Environment Variables**: DD_ENV, DD_SERVICE, DD_VERSION injection
+
+#### Supervisor Improvements
+- **Dynamic Pod IP**: Supervisors use pod IP for storm.local.hostname
+- **Flexible Scaling**: Support for 1 worker per supervisor configurations
+- **Resource Validation**: Automatic validation of memory settings
+
+### Changed
+- **Memory Configuration**: Replaced `autoMemory` with `memoryConfig` system
+- **Default Supervisor Count**: Changed from 3 to 1 for development environments
+- **HPA Configuration**: Updated to support new memory configuration
+
+### Fixed
+- **Supervisor Connection Issues**: Fixed "getLeader failed" errors
+- **Assignment Synchronization**: Resolved getSupervisorAssignments failures
+- **Helm Context**: Fixed template context passing for Datadog annotations
+
 ## [0.2.0] - Production Readiness Release
 
 ### Added
