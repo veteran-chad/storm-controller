@@ -1,0 +1,2 @@
+# This directory is for custom storm.yaml configuration
+# Users can bind mount their storm.yaml file here to override all configuration

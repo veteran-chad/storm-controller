@@ -1,0 +1,99 @@
+# Development environment values for storm-kubernetes
+# Cluster: hds-k8s-rtsps-dev-scus-aks
+
+# Storm cluster configuration
+cluster:
+  enabled: true
+  extraConfig:
+    storm.daemon.metrics.reporter.plugins:
+      - "org.apache.storm.daemon.metrics.reporters.JmxPreparableReporter"
+    storm.log4j2.conf.dir: "/conf"
+
+# UI configuration - 1 instance, no ingress
+ui:
+  enabled: true
+  replicaCount: 1
+  ingress:
+    enabled: false
+  nodeSelector:
+    node: storm
+  tolerations:
+  - key: "type"
+    operator: "Equal"
+    value: "storm"
+    effect: "NoSchedule"
+
+# Nimbus configuration - 3 nodes for development
+nimbus:
+  enabled: true
+  replicaCount: 3
+  nodeSelector:
+    node: storm
+  tolerations:
+  - key: "type"
+    operator: "Equal"
+    value: "storm"
+    effect: "NoSchedule"
+
+# Supervisor configuration - 1 node for development
+supervisor:
+  enabled: true
+  replicaCount: 8
+  nodeSelector:
+    node: storm
+  tolerations:
+  - key: "type"
+    operator: "Equal"
+    value: "storm"
+    effect: "NoSchedule"
+
+# Zookeeper configuration - 3 nodes for development
+zookeeper:
+  enabled: true
+  replicaCount: 3
+  # Bitnami presets are named "nano", "micro", "small", "medium", "large",
+  # "xlarge" and "2xlarge".
+  # See https://github.com/bitnami/charts/blob/main/bitnami/common/templates/_resources.tpl
+  resourcesPreset: "large"
+
+  nodeSelector:
+    node: storm
+  tolerations:
+  - key: "type"
+    operator: "Equal"
+    value: "storm"
+    effect: "NoSchedule"
+
+metrics:
+  enabled: true
+  environment: "rts-ienergy-qa"
+  datadog:
+    enabled: true
+    scrapeLogs: true
+  exporter:
+    image:
+      repository: python
+      tag: latest
+    port: 9090
+    logLevel: "INFO"
+    enableDetailedMetrics: true
+    enableComponentMetrics: true
+    nodeSelector:
+      node: storm
+    tolerations:
+    - key: "type"
+      operator: "Equal"
+      value: "storm"
+      effect: "NoSchedule"
+  otel:
+    enabled: true
+  
+
+# The data PVC should be at least 2Gi to ensure that there is enough space for
+# the topologies during deployment.
+persistence:
+  data:
+    size: 2Gi
+
+  logs:
+    size: 2Gi
